@@ -23,7 +23,7 @@ phase-closing tasks) are appended with `PENDING` rows and matching task files.
 | GS-020 | COMPLETED | Added the idempotent account-scoped growth schema, typed CRUD, deterministic profile defaults, and content workflow invariants | VALIDATION OK; typecheck; 37 test files and 178 tests; production build; isolated growth store and profile default tests; git diff --check | 2026-09-04 |
 | GS-021 | COMPLETED | Migrated legacy goal suggestions and proposals into account-scoped interventions and content items with compatibility projection and idempotent writes | VALIDATION OK; typecheck; 38 test files and 183 tests; production build; migration mapping, idempotency, projection, dedupe, and goal-detachment tests; git diff --check | 2026-09-04 |
 | GS-022 | COMPLETED | Added validated account-scoped Growth CRUD APIs, profile-only workspace discovery, live overview summaries, and typed client fetchers | VALIDATION OK; typecheck; 40 test files and 196 tests; production build; Growth route account-scope and validation tests; profile normalization tests; git diff --check | 2026-09-04 |
-| GS-023 | PENDING | — | — | — |
+| GS-023 | COMPLETED | Added the account-scoped interventions backlog with shared repository signals, generated and manual dedupe, linked content, filters, status actions, and the Missions handoff | VALIDATION OK; typecheck; 43 test files and 203 tests; production build; signal aggregation and SSRF tests; route dedupe and scope tests; component grouping and status tests; git diff --check | 2026-09-04 |
 | GS-024 | PENDING | — | — | — |
 | GS-025 | PENDING | — | — | — |
 | GS-026 | PENDING | — | — | — |

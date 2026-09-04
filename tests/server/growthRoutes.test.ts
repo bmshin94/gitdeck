@@ -11,6 +11,7 @@ const state = vi.hoisted(() => {
   return {
     activeAccountId: "account-a" as string | null,
     tmpDir: resolve(tmpdir(), `gitdeck-growth-routes-${process.pid}-${Date.now()}`),
+    generateSuggestions: vi.fn(),
   };
 });
 
@@ -27,6 +28,10 @@ vi.mock("../../src/server/accountStore", () => ({
     obtainedAt: "2026-09-04T00:00:00.000Z",
     source: "token",
   }) : null),
+}));
+vi.mock("../../src/server/goals", () => ({
+  generateRepositoryInterventionSuggestions: state.generateSuggestions,
+  refreshGoal: vi.fn(async (goal) => goal),
 }));
 
 const { registerGrowthRoutes } = await import("../../src/server/routes/growth");
@@ -82,6 +87,12 @@ beforeEach(async () => {
   closeDatabase();
   await rm(state.tmpDir, { recursive: true, force: true });
   state.activeAccountId = "account-a";
+  state.generateSuggestions.mockReset();
+  state.generateSuggestions.mockResolvedValue([{
+    category: "marketing",
+    title: "Share the release",
+    action: "Publish a grounded release story.",
+  }]);
 });
 
 afterAll(async () => {
@@ -198,6 +209,76 @@ describe("Growth API routes", () => {
 
     expect(growthStore.getGrowthIntervention("account-a", interventionId)?.status).toBe("proposed");
     expect(growthStore.getContentItem("account-a", contentId)?.title).toBe("");
+  });
+
+  it("generates repository or mission interventions with dedupe and preserves user status", async () => {
+    const first = await dispatch("POST", "/api/growth/interventions/generate", {
+      repository: "acme/repo",
+    });
+    expect(first.status).toBe(200);
+    expect(first.body.interventions).toEqual([
+      expect.objectContaining({ origin: "ai", status: "proposed", title: "Share the release" }),
+    ]);
+    const interventionId = first.body.interventions[0].id as string;
+    await dispatch("PATCH", `/api/growth/interventions/${interventionId}`, { status: "accepted" });
+    state.generateSuggestions.mockResolvedValueOnce([{
+      category: "marketing",
+      title: " SHARE the release! ",
+      action: "Publish the updated release story.",
+    }]);
+
+    const repeated = await dispatch("POST", "/api/growth/interventions/generate", {
+      repository: "acme/repo",
+    });
+    expect(repeated.body.interventions).toEqual([
+      expect.objectContaining({ id: interventionId, status: "accepted", action: "Publish the updated release story." }),
+    ]);
+    expect((await dispatch("GET", "/api/growth/interventions?repo=acme%2Frepo")).body.interventions).toHaveLength(1);
+
+    const goal = goalStore.createGoal({
+      accountId: "account-a",
+      repository: "acme/repo",
+      metric: "stars",
+      targetValue: 100,
+      deadline: "2099-12-31",
+    });
+    expect((await dispatch("POST", "/api/growth/interventions/generate", {
+      repository: "acme/repo",
+      goalId: goal.id,
+    })).status).toBe(200);
+    expect(state.generateSuggestions).toHaveBeenLastCalledWith(
+      "account-a",
+      "acme/repo",
+      expect.objectContaining({ id: goal.id }),
+    );
+    expect((await dispatch("POST", "/api/growth/interventions/generate", {
+      repository: "acme/other",
+      goalId: goal.id,
+    })).status).toBe(400);
+  });
+
+  it("deduplicates repeated manual interventions without resetting their status", async () => {
+    const first = await dispatch("POST", "/api/growth/interventions", {
+      repository: "acme/repo",
+      category: "community",
+      title: "Welcome contributors",
+      action: "Document the contribution path.",
+    });
+    const id = first.body.intervention.id as string;
+    await dispatch("PATCH", `/api/growth/interventions/${id}`, { status: "accepted" });
+
+    const repeated = await dispatch("POST", "/api/growth/interventions", {
+      repository: "acme/repo",
+      category: "community",
+      title: " WELCOME contributors! ",
+      action: "Document one clear contribution path.",
+    });
+    expect(repeated.body.intervention).toMatchObject({
+      id,
+      status: "accepted",
+      action: "Document one clear contribution path.",
+    });
+    expect(growthStore.listGrowthInterventions("account-a", { repository: "acme/repo" })).toHaveLength(1);
   });
 
   it("supports allowlisted updates, scheduling, publishing, and deletion", async () => {

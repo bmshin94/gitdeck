@@ -1,8 +1,9 @@
 import { getActive as getActiveAccount } from "../accountStore";
+import { isAiConfigured } from "../ai/settings";
 import { findGoal, listGoalRepositories } from "../goalStore";
+import { generateRepositoryInterventionSuggestions, refreshGoal } from "../goals";
 import {
   createContentItem,
-  createGrowthIntervention,
   deleteContentItem,
   getContentItem,
   getGrowthIntervention,
@@ -15,6 +16,7 @@ import {
   markContentItemPublished,
   updateContentItem,
   updateGrowthIntervention,
+  upsertGrowthIntervention,
   upsertGrowthProfile,
 } from "../growth/store";
 import { parseJsonBody, sendJson } from "../http";
@@ -32,7 +34,7 @@ import {
   type UpdateGrowthInterventionInput,
 } from "../../types/growth";
 import { GOAL_PROPOSAL_FORMATS, type GoalProposalFormat } from "../../types/goals";
-import { createLegacySuggestionDedupeKey } from "../../utils/growth/legacySuggestions";
+import { createGrowthInterventionDedupeKey } from "../../utils/growth/interventions";
 import {
   GrowthProfileValidationError,
   normalizeGrowthProfileInput,
@@ -201,10 +203,12 @@ function parseInterventionFilters(ctx: RouteContext): { repository?: string; sta
     badRequest(ctx, "invalid intervention status");
     return null;
   }
-  const goalId = ctx.url.searchParams.has("goalId")
-    ? (ctx.url.searchParams.get("goalId") || null)
-    : undefined;
-  return { repository: repository ?? undefined, status: statusValue ?? undefined, goalId };
+  const filters: { repository?: string; status?: GrowthInterventionStatus; goalId?: string | null } = {
+    repository: repository ?? undefined,
+    status: statusValue ?? undefined,
+  };
+  if (ctx.url.searchParams.has("goalId")) filters.goalId = ctx.url.searchParams.get("goalId") || null;
+  return filters;
 }
 
 async function interventions(ctx: RouteContext): Promise<void> {
@@ -231,17 +235,62 @@ async function interventions(ctx: RouteContext): Promise<void> {
   if (!isEnumValue(INTERVENTION_CATEGORIES, body.category)) return badRequest(ctx, "invalid intervention category");
   if (typeof body.title !== "string" || !body.title.trim()) return badRequest(ctx, "title must not be empty");
   if (typeof body.action !== "string" || !body.action.trim()) return badRequest(ctx, "action must not be empty");
-  const intervention = createGrowthIntervention({
+  const title = body.title.trim();
+  const intervention = upsertGrowthIntervention({
     accountId: account.id,
     repository,
     goalId: goalId ?? null,
     category: body.category,
-    title: body.title.trim(),
+    title,
     action: body.action.trim(),
     origin: "manual",
-    dedupeKey: createLegacySuggestionDedupeKey(repository, goalId ?? "manual", body.title),
+    dedupeKey: createGrowthInterventionDedupeKey(repository, goalId ?? null, body.category, title),
   });
   sendJson(ctx.res, 201, { ok: true, intervention });
+}
+
+async function generateInterventions(ctx: RouteContext): Promise<void> {
+  const account = await requireAccount(ctx);
+  if (!account) return;
+  const body = await parseJsonBody<Record<string, unknown>>(ctx.req, ctx.res);
+  if (!body) return;
+  if (!isRecord(body) || !hasOnlyKeys(body, ["repository", "goalId"])) {
+    return badRequest(ctx, "invalid intervention generation body");
+  }
+  const repository = repositoryFromValue(body.repository);
+  const goalId = parseOptionalId(body.goalId);
+  if (!repository) return badRequest(ctx, "invalid repository");
+  if (body.goalId !== undefined && (goalId === undefined || goalId === null)) return badRequest(ctx, "invalid goalId");
+  const storedGoal = goalId ? findGoal(account.id, goalId) : null;
+  if (goalId && !storedGoal) return sendJson(ctx.res, 404, { ok: false, error: "goal not found" });
+  if (storedGoal && storedGoal.repository !== repository) return badRequest(ctx, "invalid goalId");
+
+  try {
+    const goal = storedGoal ? await refreshGoal(storedGoal) : undefined;
+    const suggestions = await generateRepositoryInterventionSuggestions(account.id, repository, goal);
+    const generated = suggestions.map((suggestion) => upsertGrowthIntervention({
+      accountId: account.id,
+      repository,
+      goalId: goalId ?? null,
+      category: suggestion.category,
+      title: suggestion.title.trim(),
+      action: suggestion.action.trim(),
+      origin: "ai",
+      dedupeKey: createGrowthInterventionDedupeKey(
+        repository,
+        goalId ?? null,
+        suggestion.category,
+        suggestion.title,
+      ),
+    }));
+    sendJson(ctx.res, 200, {
+      ok: true,
+      interventions: generated,
+      aiEnabled: isAiConfigured(),
+    });
+  } catch (error) {
+    sendJson(ctx.res, 502, { ok: false, error: (error as Error).message });
+  }
 }
 
 async function patchIntervention(ctx: RouteContext): Promise<void> {
@@ -276,10 +325,11 @@ async function patchIntervention(ctx: RouteContext): Promise<void> {
     if (!isEnumValue(GROWTH_INTERVENTION_STATUSES, body.status)) return badRequest(ctx, "invalid intervention status");
     updates.status = body.status;
   }
-  if (updates.title !== undefined || updates.goalId !== undefined) {
-    updates.dedupeKey = createLegacySuggestionDedupeKey(
+  if (updates.title !== undefined || updates.goalId !== undefined || updates.category !== undefined) {
+    updates.dedupeKey = createGrowthInterventionDedupeKey(
       current.repository,
-      updates.goalId ?? current.goalId ?? "manual",
+      updates.goalId ?? current.goalId,
+      updates.category ?? current.category,
       updates.title ?? current.title,
     );
   }
@@ -497,6 +547,7 @@ export function registerGrowthRoutes(router: AppRouter): void {
   router.on("PUT", "/api/growth/profiles/:owner/:repo", profile);
   router.get("/api/growth/interventions", interventions);
   router.post("/api/growth/interventions", interventions);
+  router.post("/api/growth/interventions/generate", generateInterventions);
   router.on("PATCH", "/api/growth/interventions/:id", patchIntervention);
   router.get("/api/growth/content", content);
   router.post("/api/growth/content", content);

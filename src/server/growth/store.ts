@@ -32,6 +32,7 @@ import {
   type GoalProposalFormat,
   type GoalSuggestion,
 } from "../../types/goals";
+import { createGrowthInterventionDedupeKey } from "../../utils/growth/interventions";
 import {
   createLegacySuggestionDedupeKey,
   legacyMediaToContentMedia,
@@ -429,6 +430,35 @@ export function createGrowthIntervention(input: CreateGrowthInterventionInput): 
     ],
   );
   return getGrowthIntervention(input.accountId, id)!;
+}
+
+/** Updates matching backlog copy without resetting an existing user-selected status. */
+export function upsertGrowthIntervention(input: CreateGrowthInterventionInput): GrowthIntervention {
+  ensureGrowthAccountMigration(input.accountId);
+  const goalId = input.goalId ?? null;
+  const dedupeKey = createGrowthInterventionDedupeKey(
+    input.repository,
+    goalId,
+    input.category,
+    input.title,
+  );
+  const existing = listGrowthInterventions(input.accountId, { repository: input.repository })
+    .find((intervention) => createGrowthInterventionDedupeKey(
+      intervention.repository,
+      intervention.goalId,
+      intervention.category,
+      intervention.title,
+    ) === dedupeKey);
+  if (!existing) return createGrowthIntervention({ ...input, goalId, dedupeKey });
+
+  const updatedAt = new Date().toISOString();
+  run(
+    `UPDATE growth_interventions SET
+       goal_id = ?, category = ?, title = ?, action = ?, dedupe_key = ?, updated_at = ?
+     WHERE account_id = ? AND id = ?`,
+    [goalId, input.category, input.title, input.action, dedupeKey, updatedAt, input.accountId, existing.id],
+  );
+  return getGrowthIntervention(input.accountId, existing.id)!;
 }
 
 export function updateGrowthIntervention(
@@ -904,12 +934,15 @@ function upsertLegacyIntervention(
   createdAt: string,
 ): string {
   const dedupeKey = createLegacySuggestionDedupeKey(repository, goalId, suggestion.title);
-  const existing = get<{ id: string }>(
-    `SELECT id FROM growth_interventions
-     WHERE account_id = ? AND repository = ? AND goal_id = ? AND dedupe_key = ?
-     ORDER BY created_at, id LIMIT 1`,
-    [accountId, repository, goalId, dedupeKey],
-  );
+  const existing = all<GrowthInterventionRow>(
+    `SELECT * FROM growth_interventions
+     WHERE account_id = ? AND repository = ? AND goal_id = ?
+     ORDER BY created_at, id`,
+    [accountId, repository, goalId],
+  ).find((intervention) => (
+    intervention.dedupe_key === dedupeKey
+    || createLegacySuggestionDedupeKey(repository, goalId, intervention.title) === dedupeKey
+  ));
   if (existing) {
     run(
       `UPDATE growth_interventions

@@ -1,19 +1,16 @@
-import { lookup } from "node:dns/promises";
-import { isIP } from "node:net";
 import type { GoalContentSource, GoalMetric, GoalProposal, GoalSuggestion, RepositoryGoal } from "../types/goals";
 import { calculateGoalProgress } from "../utils/goals";
 import {
   attachSourceMedia,
-  extractMediaUrls,
-  extractWebPageSignal,
   hasCompleteSocialSet,
   normalizeSocialProposals,
   SOCIAL_PROPOSAL_FORMATS,
 } from "../utils/socialProposals";
 import { AiNotConfiguredError, AiRequestError, generateStructured } from "./ai/client";
 import { isAiConfigured } from "./ai/settings";
-import { getIssuesCached, getPullRequestsCached, getReposCached } from "./dashboardData";
-import { ghApiJson, restApi, restApiPaginate } from "./githubClient";
+import { getReposCached } from "./dashboardData";
+import { collectRepositorySignals } from "./growth/signals";
+import { ghApiJson, restApiPaginate } from "./githubClient";
 import { updateGoalCurrentValue } from "./goalStore";
 
 interface MetricResolver {
@@ -64,8 +61,11 @@ export async function refreshGoal(goal: Omit<RepositoryGoal, "aiEnabled">): Prom
   }
 }
 
-function fallbackSuggestions(goal: Omit<RepositoryGoal, "aiEnabled">): GoalSuggestion[] {
-  const progress = calculateGoalProgress(goal);
+function fallbackSuggestions(
+  repository: string,
+  goal?: Omit<RepositoryGoal, "aiEnabled">,
+): GoalSuggestion[] {
+  const progress = goal ? calculateGoalProgress(goal) : null;
   return [
     {
       category: "product",
@@ -80,7 +80,7 @@ function fallbackSuggestions(goal: Omit<RepositoryGoal, "aiEnabled">): GoalSugge
     {
       category: "marketing",
       title: "Publish a complete X launch thread",
-      action: `Tell the story of ${goal.repository} in a 5–7 post X thread: open with a concrete hook, show what the project solves, highlight recent work, share the ${progress.percentage}% goal progress, and close with one clear call to action.`,
+      action: `Tell the story of ${repository} in a 5–7 post X thread: open with a concrete hook, show what the project solves, highlight recent work, ${progress ? `share the ${progress.percentage}% goal progress, ` : ""}and close with one clear call to action.`,
     },
     {
       category: "marketing",
@@ -90,40 +90,47 @@ function fallbackSuggestions(goal: Omit<RepositoryGoal, "aiEnabled">): GoalSugge
   ];
 }
 
-export async function generateGoalSuggestions(goal: Omit<RepositoryGoal, "aiEnabled">): Promise<GoalSuggestion[]> {
-  if (!isAiConfigured()) return fallbackSuggestions(goal);
-  const [issuesResult, prsResult, reposResult, releases] = await Promise.all([
-    getIssuesCached(false),
-    getPullRequestsCached(false),
-    getReposCached(false),
-    fetchReleaseSignals(goal.repository),
-  ]);
-  const issues = issuesResult.ok ? issuesResult.issues.filter((item) => item.repository.nameWithOwner === goal.repository) : [];
-  const prs = prsResult.ok ? prsResult.pullRequests.filter((item) => item.repository.nameWithOwner === goal.repository) : [];
-  const repo = reposResult.ok ? reposResult.repos.find((item) => item.nameWithOwner === goal.repository) : null;
-  const progress = calculateGoalProgress(goal);
+export async function generateRepositoryInterventionSuggestions(
+  accountId: string,
+  repository: string,
+  goal?: Omit<RepositoryGoal, "aiEnabled">,
+): Promise<GoalSuggestion[]> {
+  if (!isAiConfigured()) return fallbackSuggestions(repository, goal);
+  const signals = await collectRepositorySignals(accountId, repository);
+  const issues = signals.openIssues;
+  const prs = signals.openPullRequests;
+  const repo = signals.repositoryMetadata;
+  const progress = goal ? calculateGoalProgress(goal) : null;
   const staleIssues = issues.filter((item) => Date.now() - new Date(item.updatedAt).getTime() > 30 * 86_400_000).length;
 
   const result = await generateStructured<{ suggestions: GoalSuggestion[] }>({
-    instructions: "Act as an open-source growth and social strategist. Give specific, ethical actions grounded in the supplied activity. Include at least one substantial social campaign idea designed as a complete 5–7 post X thread, not a generic one-line post. Also include one recommendation explicitly based on the latest verified updates (releases, recently updated issues, or pull requests), clearly framing unfinished work as work in progress. Give it a strong hook, a useful narrative arc, concrete project details, and one clear call to action. Return JSON only.",
+    instructions: "Act as an open-source growth and social strategist. Give specific, ethical actions grounded in the supplied activity. Include at least one substantial social campaign idea designed as a complete 5–7 post X thread, not a generic one-line post. Also include one recommendation explicitly based on the latest verified updates (releases, recently updated issues, pull requests, or commits), clearly framing unfinished work as work in progress. Give it a strong hook, a useful narrative arc, concrete project details, and one clear call to action. A numeric goal may be absent; in that case recommend repository-level actions from the verified signals. Return JSON only.",
     input: JSON.stringify({
-      repository: goal.repository,
+      repository,
       description: repo?.description,
-      metric: goal.metric,
-      current: goal.currentValue,
-      target: goal.targetValue,
-      deadline: goal.deadline,
-      percentage: progress.percentage,
+      metric: goal?.metric ?? null,
+      current: goal?.currentValue ?? null,
+      target: goal?.targetValue ?? null,
+      deadline: goal?.deadline ?? null,
+      percentage: progress?.percentage ?? null,
       openIssues: issues.length,
       staleIssues,
       openPullRequests: prs.length,
       recentIssues: issues.slice(0, 8).map((item) => ({ title: item.title, updatedAt: item.updatedAt })),
       recentPullRequests: prs.slice(0, 5).map((item) => ({ title: item.title, updatedAt: item.updatedAt })),
-      latestReleases: releases.map((release) => ({
+      latestReleases: signals.releases.map((release) => ({
         name: release.name || release.tag_name || null,
         publishedAt: release.published_at ?? null,
         notesExcerpt: release.body?.replace(/\s+/g, " ").trim().slice(0, 350) || null,
       })),
+      recentCommits: signals.recentCommits.slice(0, 10).map((commit) => ({
+        message: commit.commit.message.split("\n")[0],
+        authoredAt: commit.commit.author?.date ?? null,
+      })),
+      readmeExcerpt: signals.readme?.excerpt ?? null,
+      starHistory: signals.starHistory,
+      goals: signals.goals,
+      additionalSources: signals.additionalSources,
     }),
     schemaName: "goal_actions",
     schema: {
@@ -151,137 +158,14 @@ export async function generateGoalSuggestions(goal: Omit<RepositoryGoal, "aiEnab
     maxOutputTokens: 900,
   });
   const suggestions = Array.isArray(result.data.suggestions) ? result.data.suggestions : [];
-  return suggestions.length ? suggestions : fallbackSuggestions(goal);
+  return suggestions.length ? suggestions : fallbackSuggestions(repository, goal);
+}
+
+export function generateGoalSuggestions(goal: Omit<RepositoryGoal, "aiEnabled">): Promise<GoalSuggestion[]> {
+  return generateRepositoryInterventionSuggestions(goal.accountId, goal.repository, goal);
 }
 
 export const SOCIAL_PROPOSALS_VERSION = 4;
-const README_EXCERPT_CHARS = 7000;
-
-interface ReleaseSignal {
-  name?: string | null;
-  tag_name?: string;
-  html_url?: string;
-  published_at?: string | null;
-  body?: string | null;
-}
-
-async function fetchReleaseSignals(repository: string): Promise<ReleaseSignal[]> {
-  try {
-    const result = await restApi<ReleaseSignal[]>(`/repos/${repository}/releases?per_page=3`);
-    return result.ok && Array.isArray(result.data) ? result.data.slice(0, 3) : [];
-  } catch {
-    return [];
-  }
-}
-
-interface ReadmeSignal {
-  excerpt: string;
-  mediaUrls: string[];
-}
-
-async function fetchReadmeSignal(repository: string): Promise<ReadmeSignal | null> {
-  try {
-    const result = await restApi<{ content?: string; encoding?: string; download_url?: string | null }>(`/repos/${repository}/readme`);
-    if (!result.ok || !result.data?.content) return null;
-    const text = result.data.encoding === "base64" ? Buffer.from(result.data.content, "base64").toString("utf-8") : result.data.content;
-    return {
-      excerpt: text.replace(/\r/g, "").trim().slice(0, README_EXCERPT_CHARS),
-      mediaUrls: extractMediaUrls(text, result.data.download_url),
-    };
-  } catch {
-    return null;
-  }
-}
-
-function isPrivateAddress(address: string): boolean {
-  if (isIP(address) === 4) {
-    const [a, b] = address.split(".").map(Number);
-    return a === 0 || a === 10 || a === 127 || (a === 100 && b >= 64 && b <= 127)
-      || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168)
-      || (a === 198 && (b === 18 || b === 19)) || a >= 224;
-  }
-  const normalized = address.toLowerCase();
-  return normalized === "::" || normalized === "::1" || normalized.startsWith("fc") || normalized.startsWith("fd")
-    || /^fe[89ab]/.test(normalized) || normalized.startsWith("::ffff:") && isPrivateAddress(normalized.slice(7));
-}
-
-async function assertPublicWebsite(url: URL): Promise<void> {
-  if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) throw new Error("unsupported source URL");
-  if (url.hostname === "localhost" || url.hostname.endsWith(".localhost")) throw new Error("private source URL");
-  const addresses = isIP(url.hostname)
-    ? [{ address: url.hostname }]
-    : await lookup(url.hostname, { all: true, verbatim: true });
-  if (!addresses.length || addresses.some((entry) => isPrivateAddress(entry.address))) throw new Error("private source URL");
-}
-
-async function readBoundedText(response: Response, maxBytes = 600_000): Promise<string> {
-  if (!response.body) return "";
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let size = 0;
-  let text = "";
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    size += value.byteLength;
-    if (size > maxBytes) { await reader.cancel(); break; }
-    text += decoder.decode(value, { stream: true });
-  }
-  return text + decoder.decode();
-}
-
-async function fetchWebsiteSignal(value: string): Promise<unknown> {
-  try {
-    let url = new URL(value);
-    for (let redirects = 0; redirects <= 3; redirects += 1) {
-      await assertPublicWebsite(url);
-      const response = await fetch(url, {
-        redirect: "manual",
-        signal: AbortSignal.timeout(7_000),
-        headers: { Accept: "text/html,text/plain,image/*,video/*", "User-Agent": "GitDeck/1.0 source-reader" },
-      });
-      if (response.status >= 300 && response.status < 400) {
-        const location = response.headers.get("location");
-        if (!location || redirects === 3) throw new Error("too many source redirects");
-        url = new URL(location, url);
-        continue;
-      }
-      if (!response.ok) throw new Error(`source returned ${response.status}`);
-      const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
-      if (contentType.startsWith("image/") || contentType.startsWith("video/")) {
-        return { type: "website", url: value, title: null, excerpt: null, mediaUrls: [url.toString()] };
-      }
-      if (!contentType.includes("text/html") && !contentType.includes("text/plain")) throw new Error("unsupported source content");
-      const page = extractWebPageSignal(await readBoundedText(response), url.toString());
-      return { type: "website", url: value, title: page.title, excerpt: page.excerpt, mediaUrls: page.mediaUrls };
-    }
-  } catch (error) {
-    return { type: "website", url: value, error: (error as Error).message };
-  }
-  return { type: "website", url: value, error: "source unavailable" };
-}
-
-async function fetchAdditionalSourceSignals(sources: GoalContentSource[]): Promise<unknown[]> {
-  return Promise.all(sources.map(async (source) => {
-    if (source.type === "website") return fetchWebsiteSignal(source.value);
-    const [readme, releases] = await Promise.all([
-      fetchReadmeSignal(source.value),
-      fetchReleaseSignals(source.value),
-    ]);
-    return {
-      type: source.type,
-      repository: source.value,
-      readmeExcerpt: readme?.excerpt ?? null,
-      mediaUrls: readme?.mediaUrls ?? [],
-      releases: releases.map((release) => ({
-        name: release.name || release.tag_name || null,
-        url: release.html_url ?? null,
-        publishedAt: release.published_at ?? null,
-        notesExcerpt: release.body?.replace(/\s+/g, " ").trim().slice(0, 500) || null,
-      })),
-    };
-  }));
-}
 
 /**
  * Turns one recommended action into concrete, ready-to-use deliverables
@@ -294,21 +178,12 @@ export async function generateGoalProposals(
   sources: GoalContentSource[] = [],
 ): Promise<GoalProposal[]> {
   if (!isAiConfigured()) throw new AiNotConfiguredError();
-  const [issuesResult, prsResult, reposResult, readme, releases, additionalSources] = await Promise.all([
-    getIssuesCached(false),
-    getPullRequestsCached(false),
-    getReposCached(false),
-    fetchReadmeSignal(goal.repository),
-    fetchReleaseSignals(goal.repository),
-    fetchAdditionalSourceSignals(sources),
-  ]);
-  const issues = issuesResult.ok ? issuesResult.issues.filter((item) => item.repository.nameWithOwner === goal.repository) : [];
-  const prs = prsResult.ok ? prsResult.pullRequests.filter((item) => item.repository.nameWithOwner === goal.repository) : [];
-  const repo = reposResult.ok ? reposResult.repos.find((item) => item.nameWithOwner === goal.repository) : null;
+  const signals = await collectRepositorySignals(goal.accountId, goal.repository, sources);
+  const repo = signals.repositoryMetadata;
   const progress = calculateGoalProgress(goal);
 
   const context = {
-    generatedOn: new Date().toISOString().slice(0, 10),
+    generatedOn: signals.generatedOn,
     repository: goal.repository,
     repositoryUrl: repo?.url ?? null,
     visibility: repo?.visibility ?? null,
@@ -317,17 +192,23 @@ export async function generateGoalProposals(
     verifiedMetrics: { stars: repo?.stargazerCount ?? null, forks: repo?.forkCount ?? null },
     goal: { metric: goal.metric, current: goal.currentValue, target: goal.targetValue, deadline: goal.deadline, percentage: progress.percentage },
     recommendedAngle: { category: suggestion.category, title: suggestion.title, description: suggestion.action },
-    openIssues: issues.slice(0, 10).map((item) => ({ title: item.title, url: item.url, updatedAt: item.updatedAt, labels: item.labels.map((label) => label.name) })),
-    openPullRequests: prs.slice(0, 6).map((item) => ({ title: item.title, url: item.url, updatedAt: item.updatedAt, isDraft: item.isDraft })),
-    releases: releases.map((release) => ({
+    openIssues: signals.openIssues.slice(0, 10).map((item) => ({ title: item.title, url: item.url, updatedAt: item.updatedAt, labels: item.labels.map((label) => label.name) })),
+    openPullRequests: signals.openPullRequests.slice(0, 6).map((item) => ({ title: item.title, url: item.url, updatedAt: item.updatedAt, isDraft: item.isDraft })),
+    releases: signals.releases.map((release) => ({
       name: release.name || release.tag_name || null,
       url: release.html_url ?? null,
       publishedAt: release.published_at ?? null,
       notesExcerpt: release.body?.replace(/\s+/g, " ").trim().slice(0, 500) || null,
     })),
-    readmeExcerpt: readme?.excerpt ?? null,
-    repositoryMediaUrls: readme?.mediaUrls ?? [],
-    additionalSources,
+    recentCommits: signals.recentCommits.slice(0, 10).map((commit) => ({
+      message: commit.commit.message.split("\n")[0],
+      url: commit.html_url,
+      authoredAt: commit.commit.author?.date ?? null,
+    })),
+    starHistory: signals.starHistory,
+    readmeExcerpt: signals.readme?.excerpt ?? null,
+    repositoryMediaUrls: signals.readme?.mediaUrls ?? [],
+    additionalSources: signals.additionalSources,
   };
   const instructions = [
     "You are a senior open-source social strategist. Create publishable social copy, not an operational plan.",
@@ -390,8 +271,8 @@ export async function generateGoalProposals(
     });
     const proposals = normalizeSocialProposals(result.data.proposals);
     const sourceMedia = [
-      ...(readme?.mediaUrls ?? []),
-      ...additionalSources.flatMap((source) => {
+      ...(signals.readme?.mediaUrls ?? []),
+      ...signals.additionalSources.flatMap((source) => {
         if (!source || typeof source !== "object") return [];
         const mediaUrls = (source as { mediaUrls?: unknown }).mediaUrls;
         return Array.isArray(mediaUrls) ? mediaUrls.filter((url): url is string => typeof url === "string") : [];

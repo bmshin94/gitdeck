@@ -4,6 +4,7 @@ import type {
   GrowthContentItemData,
   GrowthContentItemFilters,
   GrowthContentItemsData,
+  GrowthGeneratedInterventionsData,
   GrowthInterventionData,
   GrowthInterventionFilters,
   GrowthInterventionsData,
@@ -118,6 +119,13 @@ export async function patchGrowthIntervention(id: string, updates: Omit<UpdateGr
     jsonRequest("PATCH", updates),
   );
   return data.intervention;
+}
+
+export async function generateGrowthInterventions(repository: string, goalId?: string) {
+  return requestJson<GrowthGeneratedInterventionsData>(
+    "/api/growth/interventions/generate",
+    jsonRequest("POST", { repository, ...(goalId ? { goalId } : {}) }),
+  );
 }
 
 type GrowthContentCreateRequest = Omit<

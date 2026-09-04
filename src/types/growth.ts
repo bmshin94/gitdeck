@@ -290,6 +290,10 @@ export interface GrowthInterventionData {
   intervention: GrowthIntervention;
 }
 
+export interface GrowthGeneratedInterventionsData extends GrowthInterventionsData {
+  aiEnabled: boolean;
+}
+
 export interface GrowthContentItemsData {
   ok: true;
   contentItems: GrowthContentItem[];

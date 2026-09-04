@@ -1,17 +1,17 @@
 import { useMemo, useState, type FormEvent } from "react";
-import { useNavigate } from "react-router-dom";
-import { createGoal, deleteGoal, generateGoalAdvice } from "../../api/github";
+import { Link } from "react-router-dom";
+import { createGoal, deleteGoal } from "../../api/github";
 import { useI18n } from "../../i18n/I18nProvider";
 import { Avatar } from "../common/Avatar";
 import { ConfirmDialog } from "../common/ConfirmDialog";
 import { RepositoryContentSources } from "../common/RepositoryContentSources";
 import { RepositoryPicker } from "../common/RepositoryPicker";
 import { GoalIcon } from "../common/Icons";
-import { GoalProposalsModal } from "../modals/GoalProposalsModal";
-import { GOAL_METRIC_DEFINITIONS, type GoalMetric, type GoalProposal, type RepositoryGoal } from "../../types/goals";
+import { GOAL_METRIC_DEFINITIONS, type GoalMetric, type RepositoryGoal } from "../../types/goals";
 import type { GhRepo } from "../../types/github";
 import { calculateGoalProgress, groupGoalsByRepository } from "../../utils/goals";
 import { formatNumber } from "../../utils/format";
+import { growthRepositoryPath } from "../../utils/growthRoutes";
 import { GoalsLoadingState } from "./GoalsLoadingState";
 
 interface GoalsViewProps {
@@ -38,13 +38,8 @@ export function GoalsView({ goals, repos, loading, onChange, fixedRepository, lo
   const [targetValue, setTargetValue] = useState("");
   const [deadline, setDeadline] = useState("");
   const [saving, setSaving] = useState(false);
-  const [advisingId, setAdvisingId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<RepositoryGoal | null>(null);
-  const [proposalTarget, setProposalTarget] = useState<{ goalId: string; index: number } | null>(null);
-  // Proposals fetched while the modal is open, so reopening it shows them without a round-trip.
-  const [proposalCache, setProposalCache] = useState<Record<string, { proposals: GoalProposal[]; generatedAt: string }>>({});
-  const navigate = useNavigate();
   const activeRepository = fixedRepository ?? repository;
   const scopedRepos = useMemo(
     () => fixedRepository ? repos.filter((repo) => repo.nameWithOwner === fixedRepository) : repos,
@@ -86,29 +81,6 @@ export function GoalsView({ goals, repos, loading, onChange, fixedRepository, lo
     } catch (cause) {
       setError((cause as Error).message);
     }
-  }
-
-  async function advise(id: string) {
-    setAdvisingId(id);
-    setError("");
-    try {
-      await generateGoalAdvice(id);
-      await onChange();
-    } catch (cause) {
-      setError((cause as Error).message);
-    } finally {
-      setAdvisingId(null);
-    }
-  }
-
-  function openAiPreferences() {
-    setProposalTarget(null);
-    if (fixedRepository) {
-      const preferencesWindow = window.open("/preferences#preferences-ai", "_blank", "noopener");
-      if (preferencesWindow) preferencesWindow.opener = null;
-      return;
-    }
-    navigate("/preferences#preferences-ai");
   }
 
   return (
@@ -210,37 +182,15 @@ export function GoalsView({ goals, repos, loading, onChange, fixedRepository, lo
                   </div>
                 </div>
                 <div className="goal-plan-grid">
-                  {group.goals.map((goal) => (
-                    <section className="goal-plan" key={goal.id}>
-                      <header className="goal-plan-head">
-                        <div><span>{metricLabels.get(goal.metric) ?? goal.metric}</span><strong>{t("goals.aiPlan")}</strong></div>
-                        <button className="btn ghost" disabled={advisingId === goal.id} onClick={() => void advise(goal.id)}>{advisingId === goal.id ? t("common.loading") : goal.suggestions.length ? t("goals.refreshAdvice") : t("goals.generateAdvice")}</button>
-                      </header>
-                      {!goal.aiEnabled ? <p className="goal-ai-note">{t("goals.aiFallback")}</p> : null}
-                      <div className="goal-suggestion-list">
-                        {goal.suggestions.map((suggestion, index) => {
-                          const hasProposals = Boolean(suggestion.proposals?.length || proposalCache[`${goal.id}:${index}`]);
-                          return (
-                            <article className="goal-suggestion" key={`${suggestion.title}-${index}`}>
-                              <span>{suggestion.category}</span>
-                              <strong>{suggestion.title}</strong>
-                              <button
-                                className={`goal-suggestion-proposals ${hasProposals ? "has-proposals" : ""}`}
-                                type="button"
-                                title={t("goals.proposalsOpen")}
-                                aria-label={`${t("goals.proposalsOpen")}: ${suggestion.title}`}
-                                onClick={() => setProposalTarget({ goalId: goal.id, index })}
-                              >
-                                <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 3v2.5M12 18.5V21M3 12h2.5M18.5 12H21M6 6l1.8 1.8M16.2 16.2 18 18M6 18l1.8-1.8M16.2 7.8 18 6" /><circle cx="12" cy="12" r="3" /></svg>
-                                <span>{t("goals.proposals")}</span>
-                              </button>
-                              <p>{suggestion.action}</p>
-                            </article>
-                          );
-                        })}
-                      </div>
-                    </section>
-                  ))}
+                  <section className="goal-plan goal-interventions-link">
+                    <header className="goal-plan-head">
+                      <div><span>{t("growth.interventionsEyebrow")}</span><strong>{t("growth.missionsBacklogTitle")}</strong></div>
+                      <Link className="btn primary" to={`${growthRepositoryPath(group.repository) ?? "/growth"}/interventions`}>
+                        {t("growth.missionsOpenBacklog")}
+                      </Link>
+                    </header>
+                    <p>{t("growth.missionsBacklogDescription")}</p>
+                  </section>
                 </div>
               </div>
             </section>
@@ -265,22 +215,6 @@ export function GoalsView({ goals, repos, loading, onChange, fixedRepository, lo
           if (id) void remove(id);
         }}
       />
-      {proposalTarget ? (() => {
-        const goal = scopedGoals.find((entry) => entry.id === proposalTarget.goalId);
-        const suggestion = goal?.suggestions[proposalTarget.index];
-        if (!goal || !suggestion) return null;
-        const cached = proposalCache[`${goal.id}:${proposalTarget.index}`];
-        return (
-          <GoalProposalsModal
-            goal={goal}
-            suggestion={cached ? { ...suggestion, proposals: cached.proposals, proposalsGeneratedAt: cached.generatedAt } : suggestion}
-            suggestionIndex={proposalTarget.index}
-            onClose={() => setProposalTarget(null)}
-            onOpenPreferences={openAiPreferences}
-            onProposals={(proposals, generatedAt) => setProposalCache((prev) => ({ ...prev, [`${goal.id}:${proposalTarget.index}`]: { proposals, generatedAt } }))}
-          />
-        );
-      })() : null}
     </div>
   );
 }

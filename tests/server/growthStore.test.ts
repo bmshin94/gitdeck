@@ -436,6 +436,21 @@ describe("Growth Studio store", () => {
       title: " SHARE the release! ",
       action: "Publish an updated release thread.",
     }]);
+    store.upsertGrowthIntervention({
+      accountId: "account-a",
+      repository: "owner/repo",
+      goalId: goal.id,
+      category: "marketing",
+      title: "Share the release",
+      action: "Publish an updated release thread.",
+      origin: "ai",
+      dedupeKey: "new-backlog-key",
+    });
+    goalStore.saveGoalSuggestions("account-a", goal.id, [{
+      category: "marketing",
+      title: " SHARE the release! ",
+      action: "Publish an updated release thread.",
+    }]);
 
     expect(store.listGrowthInterventions("account-a", { goalId: goal.id })).toEqual([
       expect.objectContaining({
