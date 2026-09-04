@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   draftGrowthContentFromIntervention: vi.fn(),
   generateGrowthInterventions: vi.fn(),
   patchGrowthIntervention: vi.fn(),
+  scanGrowthOpportunities: vi.fn(),
   patchGrowthContentItem: vi.fn(),
   markGrowthContentPublished: vi.fn(),
   useGoals: vi.fn(),
@@ -29,12 +30,17 @@ vi.mock("../../../src/api/growth", () => ({
   draftGrowthContentFromIntervention: mocks.draftGrowthContentFromIntervention,
   generateGrowthInterventions: mocks.generateGrowthInterventions,
   patchGrowthIntervention: mocks.patchGrowthIntervention,
+  scanGrowthOpportunities: mocks.scanGrowthOpportunities,
   patchGrowthContentItem: mocks.patchGrowthContentItem,
   markGrowthContentPublished: mocks.markGrowthContentPublished,
 }));
 vi.mock("../../../src/hooks/useGoals", () => ({ useGoals: mocks.useGoals }));
 
-function intervention(id: string, status: GrowthInterventionStatus): GrowthIntervention {
+function intervention(
+  id: string,
+  status: GrowthInterventionStatus,
+  overrides: Partial<GrowthIntervention> = {},
+): GrowthIntervention {
   return {
     id,
     accountId: "account-a",
@@ -49,7 +55,14 @@ function intervention(id: string, status: GrowthInterventionStatus): GrowthInter
     status,
     createdAt: "2026-09-04T00:00:00.000Z",
     updatedAt: "2026-09-04T00:00:00.000Z",
+    ...overrides,
   };
+}
+
+async function flush() {
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
 }
 
 let container: HTMLDivElement;
@@ -58,6 +71,7 @@ let root: Root;
 beforeEach(() => {
   vi.clearAllMocks();
   container = document.createElement("div");
+  document.body.append(container);
   root = createRoot(container);
   const interventions = [
     intervention("proposed", "proposed"),
@@ -97,6 +111,12 @@ beforeEach(() => {
   mocks.fetchGrowthContentItems.mockResolvedValue([contentItem]);
   mocks.fetchGrowthAssets.mockResolvedValue([]);
   mocks.draftGrowthContentFromIntervention.mockResolvedValue({ ok: true, contentItems: [contentItem], cached: true });
+  mocks.generateGrowthInterventions.mockResolvedValue({ ok: true, interventions: [], aiEnabled: true });
+  mocks.scanGrowthOpportunities.mockResolvedValue({
+    ok: true,
+    interventions: [],
+    scannedAt: "2026-09-04T12:00:00.000Z",
+  });
   mocks.useGoals.mockReturnValue({
     goals: [{ id: "goal-1", metric: "stars", currentValue: 50, targetValue: 100 }],
   });
@@ -108,26 +128,35 @@ beforeEach(() => {
 
 afterEach(async () => {
   await act(async () => root.unmount());
+  container.remove();
+  document.body.classList.remove("mode-growth");
+  delete document.documentElement.dataset.theme;
 });
 
-async function renderPanel() {
+async function renderPanel(accountId = "account-a", repository = "acme/rocket") {
   await act(async () => {
     root.render(createElement(
       I18nProvider,
       null,
       createElement(
         MemoryRouter,
-        { initialEntries: ["/growth/r/acme/rocket/interventions"] },
+        { initialEntries: [`/growth/r/${repository}/interventions`] },
         createElement(GrowthInterventions, {
-          accountId: "account-a",
+          accountId,
           enabled: true,
-          repository: "acme/rocket",
+          repository,
         }),
       ),
     ));
-    await Promise.resolve();
-    await Promise.resolve();
+    await flush();
   });
+}
+
+function button(label: string): HTMLButtonElement {
+  const match = [...container.querySelectorAll("button")]
+    .find((candidate) => candidate.textContent?.trim() === label);
+  if (!match) throw new Error(`Missing button: ${label}`);
+  return match;
 }
 
 describe("GrowthInterventions", () => {
@@ -178,7 +207,7 @@ describe("GrowthInterventions", () => {
   it("updates an intervention status through the account-scoped API", async () => {
     await renderPanel();
     const accept = [...container.querySelectorAll("button")]
-      .find((button) => button.textContent === "Accept");
+      .find((candidate) => candidate.textContent === "Accept");
 
     await act(async () => {
       accept?.click();
@@ -186,5 +215,190 @@ describe("GrowthInterventions", () => {
     });
 
     expect(mocks.patchGrowthIntervention).toHaveBeenCalledWith("proposed", { status: "accepted" });
+  });
+
+  it("runs an explicit keyboard-accessible scan and explains all six opportunity kinds", async () => {
+    const kinds = [
+      ["release:v2", "Release follow-up"],
+      ["star-milestone:100", "Star milestone"],
+      ["good-first-issue:12", "Good first issue"],
+      ["merged-pr:42", "Merged pull request"],
+      ["goal-pace:goal-1", "Mission pace"],
+      ["evergreen:content-1", "Evergreen recycling"],
+    ] as const;
+    const scanned = kinds.map(([ruleKey], index) => intervention(`rule-${index}`, "proposed", {
+      goalId: null,
+      origin: "rule",
+      ruleKey,
+      title: `Detected opportunity ${index + 1}`,
+      dedupeKey: `rule-${index}`,
+    }));
+    let resolveScan: ((value: { ok: true; interventions: GrowthIntervention[]; scannedAt: string }) => void) | undefined;
+    mocks.fetchGrowthInterventions.mockResolvedValue(scanned);
+    mocks.scanGrowthOpportunities.mockImplementationOnce(() => new Promise((resolve) => {
+      resolveScan = resolve;
+    }));
+
+    await renderPanel();
+    expect(container.textContent).toContain("Scan on demand for release follow-ups");
+    const scan = button("Scan opportunities");
+    scan.focus();
+    expect(document.activeElement).toBe(scan);
+
+    await act(async () => {
+      scan.click();
+      scan.click();
+      await flush();
+    });
+    expect(mocks.scanGrowthOpportunities).toHaveBeenCalledTimes(1);
+    expect(mocks.scanGrowthOpportunities).toHaveBeenCalledWith("acme/rocket", expect.any(AbortSignal));
+    expect(button("Scanning…").disabled).toBe(true);
+    expect(container.textContent).toContain("Checking the latest available repository signals");
+
+    await act(async () => {
+      resolveScan?.({ ok: true, interventions: scanned, scannedAt: "2026-09-04T12:00:00.000Z" });
+      await flush();
+    });
+
+    expect(container.textContent).toContain("Created or refreshed 6 rule-based opportunities");
+    expect(container.textContent).toContain("Signal types unavailable from GitHub are skipped safely");
+    for (const [ruleKey, label] of kinds) {
+      expect(container.textContent).toContain(label);
+      expect(container.textContent).not.toContain(ruleKey);
+    }
+    expect(container.textContent).toContain("Opportunity scan");
+  });
+
+  it("renders no-op and request-error scan states without running automatically", async () => {
+    mocks.fetchGrowthInterventions.mockResolvedValue([]);
+    await renderPanel();
+    expect(mocks.scanGrowthOpportunities).not.toHaveBeenCalled();
+
+    await act(async () => {
+      button("Scan opportunities").click();
+      await flush();
+    });
+    expect(container.textContent).toContain("No current opportunities were detected");
+    expect(container.textContent).toContain("repository signals currently available");
+
+    mocks.scanGrowthOpportunities.mockRejectedValueOnce(new Error("signals unavailable"));
+    await act(async () => {
+      button("Scan opportunities").click();
+      await flush();
+    });
+    expect(container.querySelector(".growth-opportunity-scan-error")?.textContent)
+      .toContain("Could not scan opportunities: signals unavailable");
+  });
+
+  it("reconciles repeated scans without duplicates and preserves status alongside AI generation", async () => {
+    const acceptedRule = intervention("rule-release", "accepted", {
+      goalId: null,
+      origin: "rule",
+      ruleKey: "release:v2",
+      title: "Share release v2",
+      dedupeKey: "rule-release",
+    });
+    const backlog = [intervention("ai-action", "proposed"), acceptedRule];
+    mocks.fetchGrowthInterventions.mockResolvedValue(backlog);
+    mocks.scanGrowthOpportunities.mockResolvedValue({
+      ok: true,
+      interventions: [acceptedRule],
+      scannedAt: "2026-09-04T12:00:00.000Z",
+    });
+
+    await renderPanel();
+    for (let count = 0; count < 2; count += 1) {
+      await act(async () => {
+        button("Scan opportunities").click();
+        await flush();
+      });
+    }
+
+    expect(mocks.scanGrowthOpportunities).toHaveBeenCalledTimes(2);
+    expect(container.querySelectorAll(".growth-intervention-card h3"))
+      .toHaveLength(2);
+    expect(container.querySelector(".status-accepted")?.textContent).toContain("Share release v2");
+    expect(container.textContent).toContain("Generate interventions");
+    expect(container.textContent).toContain("Add an intervention");
+
+    await act(async () => {
+      button("Generate interventions").click();
+      await flush();
+    });
+    expect(mocks.generateGrowthInterventions).toHaveBeenCalledWith("acme/rocket", undefined);
+  });
+
+  it.each([
+    ["account", "account-b", "acme/rocket"],
+    ["repository", "account-a", "acme/comet"],
+  ])("aborts an in-flight scan when the %s changes", async (_owner, nextAccountId, nextRepository) => {
+    let resolveScan: ((value: { ok: true; interventions: GrowthIntervention[]; scannedAt: string }) => void) | undefined;
+    mocks.scanGrowthOpportunities.mockImplementationOnce((_repository: string, _signal: AbortSignal) => new Promise((resolve) => {
+      resolveScan = resolve;
+    }));
+    await renderPanel();
+
+    await act(async () => {
+      button("Scan opportunities").click();
+      await flush();
+    });
+    const signal = mocks.scanGrowthOpportunities.mock.calls[0][1] as AbortSignal;
+    await renderPanel(nextAccountId, nextRepository);
+    expect(signal.aborted).toBe(true);
+
+    await act(async () => {
+      resolveScan?.({
+        ok: true,
+        interventions: [intervention("stale-rule", "proposed", {
+          origin: "rule",
+          ruleKey: "release:stale",
+          title: "Stale opportunity",
+        })],
+        scannedAt: "2026-09-04T12:00:00.000Z",
+      });
+      await flush();
+    });
+    expect(container.textContent).not.toContain("Stale opportunity");
+    expect(container.textContent).not.toContain("Created or refreshed");
+  });
+
+  it("aborts the post-scan backlog reload when request ownership changes", async () => {
+    let resolveReload: ((value: GrowthIntervention[]) => void) | undefined;
+    mocks.fetchGrowthInterventions
+      .mockResolvedValueOnce([])
+      .mockImplementationOnce((_filters, _signal: AbortSignal) => new Promise((resolve) => {
+        resolveReload = resolve;
+      }))
+      .mockResolvedValue([]);
+    await renderPanel();
+
+    await act(async () => {
+      button("Scan opportunities").click();
+      await flush();
+    });
+    const reloadSignal = mocks.fetchGrowthInterventions.mock.calls[1][1] as AbortSignal;
+    await renderPanel("account-b", "acme/comet");
+    expect(reloadSignal.aborted).toBe(true);
+
+    await act(async () => {
+      resolveReload?.([intervention("stale-reload", "proposed", { title: "Stale reload" })]);
+      await flush();
+    });
+    expect(container.textContent).not.toContain("Stale reload");
+  });
+
+  it.each(["dark", "light"])("keeps scan, AI, filters, and manual controls available at 390px in %s theme", async (theme) => {
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 390 });
+    document.documentElement.dataset.theme = theme;
+    document.body.classList.add("mode-growth");
+    await renderPanel();
+
+    const scan = button("Scan opportunities");
+    expect(scan.type).toBe("button");
+    expect(scan.closest(".growth-interventions-scan")).not.toBeNull();
+    expect(button("Generate interventions")).not.toBeNull();
+    expect(container.querySelectorAll(".growth-interventions-filters select")).toHaveLength(2);
+    expect(container.querySelector(".growth-interventions-manual input")).not.toBeNull();
+    expect(container.querySelector(".growth-interventions-manual textarea")).not.toBeNull();
   });
 });

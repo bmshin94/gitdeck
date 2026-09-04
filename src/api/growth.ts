@@ -234,13 +234,15 @@ export async function generateGrowthInterventions(repository: string, goalId?: s
   );
 }
 
-export async function scanGrowthInterventions(repository: string, signal?: AbortSignal) {
+export async function scanGrowthOpportunities(repository: string, signal?: AbortSignal) {
   if (!parseRepositoryName(repository)) throw new Error("invalid repository");
   return requestJson<GrowthScannedInterventionsData>(
     "/api/growth/interventions/scan",
     jsonRequest("POST", { repository }, signal),
   );
 }
+
+export const scanGrowthInterventions = scanGrowthOpportunities;
 
 type GrowthContentCreateRequest = Omit<
   CreateGrowthContentItemInput,

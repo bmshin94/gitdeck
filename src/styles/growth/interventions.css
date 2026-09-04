@@ -4,6 +4,7 @@
 }
 
 .mode-growth .growth-interventions-hero,
+.mode-growth .growth-interventions-scan,
 .mode-growth .growth-interventions-tools,
 .mode-growth .growth-intervention-group,
 .mode-growth .growth-interventions-empty,
@@ -127,6 +128,57 @@
   color: var(--success);
   background: color-mix(in srgb, var(--success) 10%, var(--panel));
   border: 1px solid color-mix(in srgb, var(--success) 32%, var(--border));
+}
+
+.mode-growth .growth-interventions-scan {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 16px 18px;
+  background:
+    linear-gradient(110deg, color-mix(in srgb, var(--accent) 8%, transparent), transparent 60%),
+    var(--panel);
+}
+
+.mode-growth .growth-interventions-scan > div {
+  min-width: 0;
+}
+
+.mode-growth .growth-interventions-scan > div > span {
+  color: var(--accent);
+  font-size: 9px;
+  font-weight: 850;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+
+.mode-growth .growth-interventions-scan h2 {
+  margin: 4px 0 0;
+  font-size: 15px;
+}
+
+.mode-growth .growth-interventions-scan p {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.mode-growth .growth-interventions-scan .growth-opportunity-scan-error {
+  color: var(--danger);
+}
+
+.mode-growth .growth-opportunity-scan-partial {
+  display: block;
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 9.5px;
+  line-height: 1.45;
+}
+
+.mode-growth .growth-interventions-scan > .btn {
+  flex: 0 0 auto;
 }
 
 .mode-growth .growth-interventions-tools {
@@ -261,6 +313,7 @@
 
 .mode-growth .growth-intervention-category,
 .mode-growth .growth-intervention-origin,
+.mode-growth .growth-intervention-kind,
 .mode-growth .growth-intervention-goal,
 .mode-growth .growth-intervention-content small {
   padding: 3px 6px;
@@ -276,6 +329,7 @@
 
 .mode-growth .growth-intervention-category.category-marketing { color: var(--accent); border-color: var(--accent-border); }
 .mode-growth .growth-intervention-category.category-community { color: var(--success); }
+.mode-growth .growth-intervention-kind { color: var(--accent-2); }
 .mode-growth .growth-intervention-category.category-engineering { color: var(--accent-2); }
 .mode-growth .growth-intervention-category.category-product { color: var(--warn); }
 
@@ -426,6 +480,15 @@
 }
 
 @media (max-width: 560px) {
+  .mode-growth .growth-interventions-scan {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .mode-growth .growth-interventions-scan > .btn {
+    width: 100%;
+  }
+
   .mode-growth .growth-interventions-generate,
   .mode-growth .growth-interventions-filters,
   .mode-growth .growth-interventions-manual {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { fetchAiSettings } from "../../api/github";
 import {
   createGrowthIntervention,
@@ -7,6 +7,7 @@ import {
   fetchGrowthInterventions,
   generateGrowthInterventions,
   patchGrowthIntervention,
+  scanGrowthOpportunities,
 } from "../../api/growth";
 import { useGoals } from "../../hooks/useGoals";
 import { useI18n } from "../../i18n/I18nProvider";
@@ -50,6 +51,18 @@ const originKeys: Record<GrowthInterventionOrigin, TranslationKey> = {
   manual: "growth.interventionsOrigin.manual",
 };
 
+type OpportunityScanState = "idle" | "scanning" | "empty" | "success" | "error";
+
+function opportunityKindKey(ruleKey: string | null): TranslationKey {
+  if (ruleKey?.startsWith("release:")) return "growth.opportunityKind.release";
+  if (ruleKey?.startsWith("star-milestone:")) return "growth.opportunityKind.starMilestone";
+  if (ruleKey?.startsWith("good-first-issue:")) return "growth.opportunityKind.goodFirstIssue";
+  if (ruleKey?.startsWith("merged-pr:")) return "growth.opportunityKind.mergedPullRequest";
+  if (ruleKey?.startsWith("goal-pace:")) return "growth.opportunityKind.goalPace";
+  if (ruleKey?.startsWith("evergreen:")) return "growth.opportunityKind.evergreen";
+  return "growth.opportunityKind.detected";
+}
+
 export function GrowthInterventions({ accountId, enabled, repository }: GrowthInterventionsProps) {
   const { t } = useI18n();
   const { goals } = useGoals({ accountId, enabled, repository });
@@ -69,9 +82,13 @@ export function GrowthInterventions({ accountId, enabled, repository }: GrowthIn
   const [aiEnabled, setAiEnabled] = useState<boolean | null>(null);
   const [selectedContentItem, setSelectedContentItem] = useState<GrowthContentItem | null>(null);
   const [draftErrors, setDraftErrors] = useState<Record<string, string>>({});
+  const [scanState, setScanState] = useState<OpportunityScanState>("idle");
+  const [scanCount, setScanCount] = useState(0);
+  const [scanError, setScanError] = useState("");
+  const scanControllerRef = useRef<AbortController | null>(null);
 
   const load = useCallback(async (signal?: AbortSignal) => {
-    if (!enabled || !repository) return;
+    if (!enabled || !accountId || !repository) return;
     setLoading(true);
     setError("");
     try {
@@ -87,7 +104,7 @@ export function GrowthInterventions({ accountId, enabled, repository }: GrowthIn
     } finally {
       if (!signal?.aborted) setLoading(false);
     }
-  }, [enabled, repository]);
+  }, [accountId, enabled, repository]);
 
   useEffect(() => {
     setAiEnabled(null);
@@ -106,19 +123,27 @@ export function GrowthInterventions({ accountId, enabled, repository }: GrowthIn
   }, [accountId, enabled]);
 
   useEffect(() => {
+    scanControllerRef.current?.abort();
+    scanControllerRef.current = null;
     setInterventions([]);
     setContentItems([]);
     setNotice("");
     setDismissedOpen(false);
     setSelectedContentItem(null);
     setDraftErrors({});
-    if (!enabled || !repository) {
+    setScanState("idle");
+    setScanCount(0);
+    setScanError("");
+    if (!enabled || !accountId || !repository) {
       setLoading(false);
       return;
     }
     const controller = new AbortController();
     void load(controller.signal);
-    return () => controller.abort();
+    return () => {
+      controller.abort();
+      scanControllerRef.current?.abort();
+    };
   }, [accountId, enabled, load, repository]);
 
   const goalsById = useMemo(() => new Map(goals.map((goal) => [goal.id, goal])), [goals]);
@@ -164,6 +189,40 @@ export function GrowthInterventions({ accountId, enabled, repository }: GrowthIn
       setError((cause as Error).message);
     } finally {
       setBusy("");
+    }
+  }
+
+  async function scanOpportunities() {
+    if (!accountId || !enabled || !repository || scanControllerRef.current || scanState === "scanning" || busy !== "") return;
+    const requestAccountId = accountId;
+    const requestRepository = repository;
+    const controller = new AbortController();
+    scanControllerRef.current = controller;
+    setScanState("scanning");
+    setScanCount(0);
+    setScanError("");
+    setError("");
+    setNotice("");
+    try {
+      const result = await scanGrowthOpportunities(requestRepository, controller.signal);
+      if (controller.signal.aborted) return;
+      const ownedInterventions = result.interventions.filter((intervention) => (
+        intervention.accountId === requestAccountId && intervention.repository === requestRepository
+      ));
+      setInterventions((current) => {
+        const returnedIds = new Set(ownedInterventions.map((intervention) => intervention.id));
+        return [...current.filter((intervention) => !returnedIds.has(intervention.id)), ...ownedInterventions];
+      });
+      setScanCount(ownedInterventions.length);
+      await load(controller.signal);
+      if (!controller.signal.aborted) setScanState(ownedInterventions.length ? "success" : "empty");
+    } catch (cause) {
+      if (!controller.signal.aborted && (cause as Error).name !== "AbortError") {
+        setScanError((cause as Error).message);
+        setScanState("error");
+      }
+    } finally {
+      if (scanControllerRef.current === controller) scanControllerRef.current = null;
     }
   }
 
@@ -222,6 +281,9 @@ export function GrowthInterventions({ accountId, enabled, repository }: GrowthIn
           <div className="growth-intervention-badges">
             <span className={`growth-intervention-category category-${intervention.category}`}>{t(categoryKeys[intervention.category])}</span>
             <span className="growth-intervention-origin">{t(originKeys[intervention.origin])}</span>
+            {intervention.origin === "rule" ? (
+              <span className="growth-intervention-kind">{t(opportunityKindKey(intervention.ruleKey))}</span>
+            ) : null}
           </div>
           {linkedGoal ? (
             <span className="growth-intervention-goal">
@@ -255,21 +317,21 @@ export function GrowthInterventions({ accountId, enabled, repository }: GrowthIn
           </p>
         ) : null}
         <div className="growth-intervention-actions">
-          <button className="btn" type="button" disabled={busy !== ""} onClick={() => void draftFromIntervention(intervention)}>
+          <button className="btn" type="button" disabled={busy !== "" || scanState === "scanning"} onClick={() => void draftFromIntervention(intervention)}>
             {busy === `draft-${intervention.id}` ? t("growth.contentDrafting") : t("growth.contentDraftFromIntervention")}
           </button>
           {intervention.status === "proposed" || intervention.status === "dismissed" ? (
-            <button className="btn primary" type="button" disabled={busy === intervention.id} onClick={() => void changeStatus(intervention, "accepted")}>
+            <button className="btn primary" type="button" disabled={busy === intervention.id || scanState === "scanning"} onClick={() => void changeStatus(intervention, "accepted")}>
               {t("growth.interventionsAccept")}
             </button>
           ) : null}
           {intervention.status === "accepted" ? (
-            <button className="btn primary" type="button" disabled={busy === intervention.id} onClick={() => void changeStatus(intervention, "done")}>
+            <button className="btn primary" type="button" disabled={busy === intervention.id || scanState === "scanning"} onClick={() => void changeStatus(intervention, "done")}>
               {t("growth.interventionsMarkDone")}
             </button>
           ) : null}
           {intervention.status !== "dismissed" && intervention.status !== "done" ? (
-            <button className="btn ghost" type="button" disabled={busy === intervention.id} onClick={() => void changeStatus(intervention, "dismissed")}>
+            <button className="btn ghost" type="button" disabled={busy === intervention.id || scanState === "scanning"} onClick={() => void changeStatus(intervention, "dismissed")}>
               {t("growth.interventionsDismiss")}
             </button>
           ) : null}
@@ -298,7 +360,7 @@ export function GrowthInterventions({ accountId, enabled, repository }: GrowthIn
               ))}
             </select>
           </label>
-          <button className="btn primary" type="button" disabled={busy !== ""} onClick={() => void generate()}>
+          <button className="btn primary" type="button" disabled={busy !== "" || scanState === "scanning"} onClick={() => void generate()}>
             {busy === "generate" ? t("growth.interventionsGenerating") : t("growth.interventionsGenerate")}
           </button>
           {aiEnabled === false ? (
@@ -311,6 +373,29 @@ export function GrowthInterventions({ accountId, enabled, repository }: GrowthIn
 
       {error ? <div className="growth-interventions-error" role="alert">{t("growth.interventionsError", { message: error })}</div> : null}
       {notice ? <div className="growth-interventions-notice" role="status">{notice}</div> : null}
+
+      <section className="growth-interventions-scan" aria-labelledby="growth-opportunity-scan-title" aria-busy={scanState === "scanning"}>
+        <div>
+          <span>{t("growth.opportunityScanEyebrow")}</span>
+          <h2 id="growth-opportunity-scan-title">{t("growth.opportunityScanTitle")}</h2>
+          {scanState === "idle" ? <p>{t("growth.opportunityScanGuidance")}</p> : null}
+          {scanState === "scanning" ? <p role="status">{t("growth.opportunityScanScanning")}</p> : null}
+          {scanState === "empty" ? <p role="status">{t("growth.opportunityScanEmpty")}</p> : null}
+          {scanState === "success" ? <p role="status">{t("growth.opportunityScanSummary", { count: scanCount })}</p> : null}
+          {scanState === "error" ? <p className="growth-opportunity-scan-error" role="alert">{t("growth.opportunityScanError", { message: scanError })}</p> : null}
+          {scanState === "empty" || scanState === "success" ? (
+            <small className="growth-opportunity-scan-partial">{t("growth.opportunityScanPartialSignals")}</small>
+          ) : null}
+        </div>
+        <button
+          className="btn"
+          type="button"
+          disabled={!accountId || !enabled || busy !== "" || scanState === "scanning"}
+          onClick={() => void scanOpportunities()}
+        >
+          {scanState === "scanning" ? t("growth.opportunityScanScanningAction") : t("growth.opportunityScanAction")}
+        </button>
+      </section>
 
       <section className="growth-interventions-tools">
         <div className="growth-interventions-filters">
@@ -348,7 +433,7 @@ export function GrowthInterventions({ accountId, enabled, repository }: GrowthIn
             {t("growth.interventionsActionLabel")}
             <textarea value={manualAction} onChange={(event) => setManualAction(event.target.value)} required maxLength={1200} rows={3} />
           </label>
-          <button className="btn" type="submit" disabled={busy !== "" || !manualTitle.trim() || !manualAction.trim()}>
+          <button className="btn" type="submit" disabled={busy !== "" || scanState === "scanning" || !manualTitle.trim() || !manualAction.trim()}>
             {busy === "manual" ? t("growth.interventionsCreating") : t("growth.interventionsCreate")}
           </button>
         </form>
