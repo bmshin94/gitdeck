@@ -51,4 +51,12 @@ phase-closing tasks) are appended with `PENDING` rows and matching task files.
 | GS-054 | COMPLETED | Added deterministic repository and account-wide weekly Growth Reviews with optional narrative AI and responsive review panels | VALIDATION OK; typecheck; 76 test files and 436 tests; production build; UTC week, account scope, strict route, AI fallback, stale load, keyboard, empty, misses, upcoming, findings, and recommendation coverage; git diff --check | 2026-09-04 |
 | GS-055 | COMPLETED | Added account-scoped evergreen controls and deduplicated recycling into fresh evidence-linked ideas without mutating published sources | VALIDATION OK; typecheck; 78 test files and 446 tests; production build; eligibility, boundary, clone reset, transaction, account-scope, retry, drawer, keyboard, and UI state coverage; git diff --check | 2026-09-04 |
 | GS-056 | COMPLETED | Added bounded account-scoped performance re-weighting for plan snapshots with deterministic rounding and a localized plan notice | VALIDATION OK; typecheck; 79 test files and 454 tests; production build; bounds, rounding, date edges, isolation, profile immutability, slot distribution, API, regeneration, and protected-content coverage; git diff --check | 2026-09-04 |
-| GS-057 | PENDING | — | — | — |
+| GS-057 | COMPLETED | Closed phase 5, fixed the desktop Interventions overflow, and authored eight contract-aligned phase 6 tasks | VALIDATION OK; typecheck; 79 test files and 454 tests; production build; 18 targeted files and 114 tests; 24-screen Chromium audit at 1440, 1024, and 390 in dark and light themes with no overflow, alerts, broken images, or console errors; drawer Escape, locale parity, scope, dependency, outbound-posting, and task-structure checks; git diff --check | 2026-09-04 |
+| GS-060 | PENDING | — | — | — |
+| GS-061 | PENDING | — | — | — |
+| GS-062 | PENDING | — | — | — |
+| GS-063 | PENDING | — | — | — |
+| GS-064 | PENDING | — | — | — |
+| GS-065 | PENDING | — | — | — |
+| GS-066 | PENDING | — | — | — |
+| GS-067 | PENDING | — | — | — |

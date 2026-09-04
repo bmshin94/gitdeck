@@ -197,7 +197,7 @@
 
 .mode-growth .growth-interventions-manual {
   display: grid;
-  grid-template-columns: minmax(130px, .7fr) minmax(130px, .7fr) minmax(160px, 1fr) minmax(220px, 1.5fr) auto;
+  grid-template-columns: minmax(0, .7fr) minmax(0, .7fr) minmax(0, 1fr) minmax(0, 1.5fr) auto;
   align-items: end;
   gap: 8px;
   padding-left: 18px;
