@@ -288,6 +288,7 @@ export const it: Record<keyof typeof en, string> = {
   "growth.calendarPreviousWeek": "Settimana precedente",
   "growth.calendarNextWeek": "Settimana successiva",
   "growth.calendarToday": "Oggi",
+  "growth.calendarExport": "Esporta calendario",
   "growth.calendarLoading": "Caricamento del calendario dei contenuti…",
   "growth.calendarError": "Impossibile caricare il calendario dei contenuti: {message}",
   "growth.calendarRescheduleError": "Impossibile spostare il contenuto: {message}",

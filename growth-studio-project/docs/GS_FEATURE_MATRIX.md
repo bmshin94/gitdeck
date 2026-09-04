@@ -35,7 +35,7 @@ Authoritative inventory of Growth Studio capabilities. Statuses: `EXISTING`
 | AI drafter producing media-aware drafts per slot | `src/server/growth/drafter.ts`, `src/utils/growth/contentDraft.ts`, `src/utils/growth/mediaCandidates.ts`, `src/server/growth/store.ts`, `src/api/growth.ts`, `/api/growth/content/:id/draft` | DONE | GS-032 |
 | Calendar month and week views with drag and drop | `src/components/growth/calendar/`, `src/utils/growth/calendar.ts`, `/growth/r/:owner/:repo/calendar` | DONE | GS-033 and GS-034 |
 | Queue "this week" with timezone-local workflow groups, drafting, copy, media previews, and manual publication recording | `src/components/growth/calendar/GrowthQueue.tsx`, `src/utils/growth/calendar.ts`, `/growth/r/:owner/:repo/calendar?view=queue` | DONE | GS-035 |
-| ICS export | `src/utils/growth/ics.ts`, `/api/growth/calendar.ics` | PLANNED | GS-036 |
+| Account-scoped ICS export for scheduled content with repository and visible-range filters | `src/utils/growth/ics.ts`, `src/server/routes/growth.ts`, `src/api/growth.ts`, `src/components/growth/calendar/GrowthCalendar.tsx`, `/api/growth/calendar.ics` | DONE | GS-036 |
 | Content plan create, regenerate, and archive management | `src/components/growth/calendar/GrowthPlanManager.tsx`, `/api/growth/plans/:id/regenerate`, `/api/growth/plans/:id/archive` | PLANNED | GS-037 |
 | Assets library with uploads and imports from README and web sources | `server/growth/assets.ts` | PLANNED | Phase 4 |
 | Generated SVG cards (release, milestone, stats, quote, what's new) | `server/growth/cards.ts` | PLANNED | Phase 4 |

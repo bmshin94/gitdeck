@@ -61,6 +61,12 @@ interface TestResponse {
   body: Record<string, any>;
 }
 
+interface RawTestResponse {
+  status: number;
+  body: string;
+  headers: Record<string, string>;
+}
+
 function request(method: string, path: string, body?: unknown): IncomingMessage {
   const input = body === undefined ? [] : [JSON.stringify(body)];
   const req = Readable.from(input) as IncomingMessage;
@@ -70,18 +76,29 @@ function request(method: string, path: string, body?: unknown): IncomingMessage 
   return req;
 }
 
-async function dispatch(method: string, path: string, body?: unknown): Promise<TestResponse> {
+async function dispatchRaw(method: string, path: string, body?: unknown): Promise<RawTestResponse> {
   let status = 0;
   let responseBody = "";
+  const headers: Record<string, string> = {};
   const res = {
-    writeHead(code: number) { status = code; },
+    writeHead(code: number, values: Record<string, string | number> = {}) {
+      status = code;
+      for (const [name, value] of Object.entries(values)) headers[name.toLowerCase()] = String(value);
+    },
     end(chunk?: Buffer | string) { responseBody = chunk?.toString() ?? ""; },
-    setHeader() {},
+    setHeader(name: string, value: string | number | readonly string[]) {
+      headers[name.toLowerCase()] = Array.isArray(value) ? value.join(", ") : String(value);
+    },
   } as unknown as ServerResponse;
   const router = new AppRouter();
   registerGrowthRoutes(router);
   await router.dispatch(request(method, path, body), res, new URL(path, "http://localhost"));
-  return { status, body: JSON.parse(responseBody) as Record<string, any> };
+  return { status, body: responseBody, headers };
+}
+
+async function dispatch(method: string, path: string, body?: unknown): Promise<TestResponse> {
+  const response = await dispatchRaw(method, path, body);
+  return { status: response.status, body: JSON.parse(response.body) as Record<string, any> };
 }
 
 function profileInput() {
@@ -587,6 +604,98 @@ describe("Growth API routes", () => {
     const protectedResponse = await dispatch("POST", `/api/growth/content/${id}/draft`, { refresh: true });
     expect(protectedResponse.status).toBe(409);
     expect(growthStore.getContentItem("account-a", id)).toMatchObject({ status: "ready", body: drafted.body.contentItem.body });
+  });
+
+  it("exports only the active account's scheduled content with validated repository and UTC bounds", async () => {
+    const scheduled = await dispatch("POST", "/api/growth/content", {
+      repository: "acme/repo",
+      channel: "x",
+      format: "x-thread",
+      pillar: "product",
+      title: "Account A launch",
+      sources: ["https://example.com/releases/launch"],
+      status: "scheduled",
+      scheduledFor: "2026-10-14T08:30:00.000Z",
+      media: [{ kind: "image", url: "https://example.com/launch.png", alt: "Launch" }],
+    });
+    await dispatch("POST", "/api/growth/content", {
+      repository: "acme/other",
+      channel: "linkedin",
+      format: "linkedin-post",
+      title: "Other repository",
+      status: "scheduled",
+      scheduledFor: "2026-10-14T08:45:00.000Z",
+      media: [{ kind: "image", url: "https://example.com/other.png", alt: "Other" }],
+    });
+    await dispatch("POST", "/api/growth/content", {
+      repository: "acme/repo",
+      channel: "x",
+      format: "x-thread",
+      title: "Draft content",
+      status: "draft",
+      scheduledFor: "2026-10-14T08:40:00.000Z",
+    });
+    await dispatch("POST", "/api/growth/content", {
+      repository: "acme/repo",
+      channel: "x",
+      format: "x-thread",
+      title: "Outside range",
+      status: "scheduled",
+      scheduledFor: "2026-10-14T10:00:00.000Z",
+      media: [{ kind: "image", url: "https://example.com/outside.png", alt: "Outside" }],
+    });
+
+    const filtered = await dispatchRaw(
+      "GET",
+      "/api/growth/calendar.ics?repo=acme%2Frepo&from=2026-10-14T08%3A00%3A00Z&to=2026-10-14T09%3A00%3A00Z",
+    );
+    expect(filtered.status).toBe(200);
+    expect(filtered.headers["content-type"]).toBe("text/calendar; charset=utf-8");
+    expect(filtered.headers["content-disposition"]).toBe('attachment; filename="gitdeck-growth-calendar.ics"');
+    expect(filtered.body).toContain(`UID:${scheduled.body.contentItem.id}@growth.gitdeck\r\n`);
+    expect(filtered.body).toContain("SUMMARY:Account A launch\r\n");
+    expect(filtered.body).toContain("DESCRIPTION:Repository: acme/repo\\nChannel: x\\nPillar: product\r\n");
+    expect(filtered.body).toContain("URL:https://example.com/releases/launch\r\n");
+    expect(filtered.body).not.toContain("Other repository");
+    expect(filtered.body).not.toContain("Draft content");
+    expect(filtered.body).not.toContain("Outside range");
+    expect(filtered.body).not.toContain("account-a");
+
+    const unified = await dispatchRaw(
+      "GET",
+      "/api/growth/calendar.ics?from=2026-10-14T08%3A00%3A00.000Z&to=2026-10-14T09%3A00%3A00.000Z",
+    );
+    expect(unified.body).toContain("Account A launch");
+    expect(unified.body).toContain("Other repository");
+
+    state.activeAccountId = "account-b";
+    await dispatch("POST", "/api/growth/content", {
+      repository: "acme/repo",
+      channel: "mastodon",
+      format: "mastodon-post",
+      title: "Account B launch",
+      status: "scheduled",
+      scheduledFor: "2026-10-14T08:30:00.000Z",
+      media: [{ kind: "image", url: "https://example.com/b.png", alt: "Launch B" }],
+    });
+    const accountB = await dispatchRaw(
+      "GET",
+      "/api/growth/calendar.ics?repo=acme%2Frepo&from=2026-10-14T08%3A00%3A00Z&to=2026-10-14T09%3A00%3A00Z",
+    );
+    expect(accountB.body).toContain("Account B launch");
+    expect(accountB.body).not.toContain("Account A launch");
+
+    const malformed = [
+      "/api/growth/calendar.ics?unknown=1",
+      "/api/growth/calendar.ics?repo=invalid",
+      "/api/growth/calendar.ics?from=2026-10-14T08%3A00%3A00%2B02%3A00",
+      "/api/growth/calendar.ics?from=2026-02-30T08%3A00%3A00Z",
+      "/api/growth/calendar.ics?from=2026-10-15T08%3A00%3A00Z&to=2026-10-14T08%3A00%3A00Z",
+      "/api/growth/calendar.ics?from=2026-10-14T08%3A00%3A00Z&from=2026-10-14T09%3A00%3A00Z",
+    ];
+    for (const path of malformed) {
+      expect((await dispatch("GET", path)).status, path).toBe(400);
+    }
   });
 
   it("supports allowlisted updates, scheduling, publishing, and deletion", async () => {

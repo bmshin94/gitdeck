@@ -92,6 +92,21 @@ function addFilters(path: string, filters: Record<string, string | null | undefi
   return serialized ? `${path}?${serialized}` : path;
 }
 
+export function buildGrowthCalendarExportUrl(filters: {
+  repository?: string;
+  from?: string;
+  to?: string;
+} = {}): string {
+  if (filters.repository !== undefined && !parseRepositoryName(filters.repository)) {
+    throw new Error("invalid repository");
+  }
+  return addFilters("/api/growth/calendar.ics", {
+    repo: filters.repository,
+    from: filters.from,
+    to: filters.to,
+  });
+}
+
 export async function fetchGrowthInterventions(
   filters: GrowthInterventionFilters = {},
   signal?: AbortSignal,

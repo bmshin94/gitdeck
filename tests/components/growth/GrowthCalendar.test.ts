@@ -7,12 +7,14 @@ import { I18nProvider } from "../../../src/i18n/I18nProvider";
 import type { GrowthContentItem, GrowthProfile } from "../../../src/types/growth";
 
 const mocks = vi.hoisted(() => ({
+  buildGrowthCalendarExportUrl: vi.fn(() => "/api/growth/calendar.ics?export=visible"),
   fetchGrowthProfile: vi.fn(),
   fetchGrowthContentItems: vi.fn(),
   patchGrowthContentItem: vi.fn(),
 }));
 
 vi.mock("../../../src/api/growth", () => ({
+  buildGrowthCalendarExportUrl: mocks.buildGrowthCalendarExportUrl,
   fetchGrowthProfile: mocks.fetchGrowthProfile,
   fetchGrowthContentItems: mocks.fetchGrowthContentItems,
   patchGrowthContentItem: mocks.patchGrowthContentItem,
@@ -139,6 +141,15 @@ describe("GrowthCalendar", () => {
       scheduledFrom: "2026-09-27T22:00:00.000Z",
       scheduledTo: "2026-11-08T22:59:59.999Z",
     }, expect.any(AbortSignal));
+    expect(mocks.buildGrowthCalendarExportUrl).toHaveBeenCalledWith({
+      repository: "acme/rocket",
+      from: "2026-09-27T22:00:00.000Z",
+      to: "2026-11-08T22:59:59.999Z",
+    });
+    const exportLink = [...container.querySelectorAll<HTMLAnchorElement>("a")]
+      .find((link) => link.textContent === "Export calendar");
+    expect(exportLink?.getAttribute("href")).toBe("/api/growth/calendar.ics?export=visible");
+    expect(exportLink?.download).toBe("gitdeck-growth-calendar.ics");
     expect(container.querySelectorAll(".growth-calendar-day")).toHaveLength(42);
 
     const itemButton = [...container.querySelectorAll<HTMLButtonElement>(".growth-calendar-item")]

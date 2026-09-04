@@ -7,6 +7,7 @@ import { I18nProvider } from "../../../src/i18n/I18nProvider";
 import type { GrowthContentItem, GrowthProfile } from "../../../src/types/growth";
 
 const mocks = vi.hoisted(() => ({
+  buildGrowthCalendarExportUrl: vi.fn(() => "/api/growth/calendar.ics?export=visible"),
   fetchGrowthProfile: vi.fn(),
   fetchGrowthContentItems: vi.fn(),
   patchGrowthContentItem: vi.fn(),
@@ -16,6 +17,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("../../../src/api/growth", () => ({
+  buildGrowthCalendarExportUrl: mocks.buildGrowthCalendarExportUrl,
   fetchGrowthProfile: mocks.fetchGrowthProfile,
   fetchGrowthContentItems: mocks.fetchGrowthContentItems,
   patchGrowthContentItem: mocks.patchGrowthContentItem,

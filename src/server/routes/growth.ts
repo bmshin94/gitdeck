@@ -31,7 +31,7 @@ import {
   draftGrowthContentItem,
   GrowthContentDraftConflictError,
 } from "../growth/drafter";
-import { parseJsonBody, sendJson } from "../http";
+import { parseJsonBody, send, sendJson } from "../http";
 import type { AppRouter, RouteContext } from "../router";
 import {
   GROWTH_CHANNELS,
@@ -47,6 +47,7 @@ import {
 } from "../../types/growth";
 import { GOAL_PROPOSAL_FORMATS, type GoalProposal, type GoalProposalFormat } from "../../types/goals";
 import { createGrowthInterventionDedupeKey } from "../../utils/growth/interventions";
+import { buildGrowthCalendarIcs } from "../../utils/growth/ics";
 import { legacyMediaToContentMedia, legacyProposalChannel } from "../../utils/growth/legacySuggestions";
 import {
   GrowthProfileValidationError,
@@ -442,6 +443,72 @@ function parseContentUpdates(body: Record<string, unknown>, creating: boolean): 
   return updates;
 }
 
+interface CalendarExportFilters {
+  repository?: string;
+  from?: number;
+  to?: number;
+}
+
+function parseUtcIsoDateTime(value: string): number | null {
+  const match = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d{1,3}))?Z$/.exec(value);
+  if (!match) return null;
+  const timestamp = Date.parse(value);
+  if (Number.isNaN(timestamp)) return null;
+  const normalized = `${match[1]}.${(match[2] ?? "").padEnd(3, "0")}Z`;
+  return new Date(timestamp).toISOString() === normalized ? timestamp : null;
+}
+
+function parseCalendarExportFilters(ctx: RouteContext): CalendarExportFilters | null {
+  const allowed = new Set(["repo", "from", "to"]);
+  const keys = [...ctx.url.searchParams.keys()];
+  if (keys.some((key) => !allowed.has(key)) || [...allowed].some((key) => ctx.url.searchParams.getAll(key).length > 1)) {
+    badRequest(ctx, "invalid calendar filter");
+    return null;
+  }
+  const repositoryValue = ctx.url.searchParams.get("repo");
+  const repository = repositoryValue === null ? undefined : repositoryFromValue(repositoryValue);
+  if (repositoryValue !== null && !repository) {
+    badRequest(ctx, "invalid repository");
+    return null;
+  }
+  const fromValue = ctx.url.searchParams.get("from");
+  const toValue = ctx.url.searchParams.get("to");
+  const from = fromValue === null ? undefined : parseUtcIsoDateTime(fromValue);
+  const to = toValue === null ? undefined : parseUtcIsoDateTime(toValue);
+  if ((fromValue !== null && from === null) || (toValue !== null && to === null)) {
+    badRequest(ctx, "invalid calendar date range");
+    return null;
+  }
+  if (typeof from === "number" && typeof to === "number" && from > to) {
+    badRequest(ctx, "invalid calendar date range");
+    return null;
+  }
+  return {
+    repository: repository ?? undefined,
+    from: from ?? undefined,
+    to: to ?? undefined,
+  };
+}
+
+async function exportCalendar(ctx: RouteContext): Promise<void> {
+  const account = await requireAccount(ctx);
+  if (!account) return;
+  const filters = parseCalendarExportFilters(ctx);
+  if (!filters) return;
+  const contentItems = listContentItems(account.id, {
+    repository: filters.repository,
+    status: "scheduled",
+  }).filter((item) => {
+    if (!item.scheduledFor) return false;
+    const scheduledFor = Date.parse(item.scheduledFor);
+    return !Number.isNaN(scheduledFor)
+      && (filters.from === undefined || scheduledFor >= filters.from)
+      && (filters.to === undefined || scheduledFor <= filters.to);
+  });
+  ctx.res.setHeader("Content-Disposition", 'attachment; filename="gitdeck-growth-calendar.ics"');
+  send(ctx.res, 200, buildGrowthCalendarIcs(contentItems), "text/calendar; charset=utf-8");
+}
+
 function parseContentFilters(ctx: RouteContext): Parameters<typeof listContentItems>[1] | null {
   const allowed = new Set(["repo", "status", "scheduledFrom", "scheduledTo"]);
   if ([...ctx.url.searchParams.keys()].some((key) => !allowed.has(key))) {
@@ -735,6 +802,7 @@ export function registerGrowthRoutes(router: AppRouter): void {
   router.on("PATCH", "/api/growth/interventions/:id", patchIntervention);
   router.get("/api/growth/plans", plans);
   router.post("/api/growth/plans/generate", generatePlan);
+  router.get("/api/growth/calendar.ics", exportCalendar);
   router.get("/api/growth/content", content);
   router.post("/api/growth/content", content);
   router.post("/api/growth/content/draft", draftContent);

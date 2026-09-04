@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
+  buildGrowthCalendarExportUrl,
   fetchGrowthContentItems,
   fetchGrowthProfile,
   patchGrowthContentItem,
@@ -158,6 +159,12 @@ export function GrowthCalendar({ accountId, enabled, repository }: GrowthCalenda
     [profile?.postingWindows],
   );
   const loading = profileLoading || itemsLoading;
+  const exportRange = profile ? growthCalendarUtcRange(grid, profile.timezone) : null;
+  const exportUrl = exportRange ? buildGrowthCalendarExportUrl({
+    repository,
+    from: exportRange.scheduledFrom,
+    to: exportRange.scheduledTo,
+  }) : null;
 
   function navigateDate(date: string, nextView = calendarView) {
     const next = new URLSearchParams();
@@ -241,6 +248,11 @@ export function GrowthCalendar({ accountId, enabled, repository }: GrowthCalenda
             <button className="btn ghost" type="button" disabled={!profile} onClick={() => navigateDate(calendarView !== "month" ? shiftCalendarWeek(selectedDate, 1) : shiftCalendarMonth(selectedDate, 1))}>
               {t(calendarView !== "month" ? "growth.calendarNextWeek" : "growth.calendarNextMonth")} <span aria-hidden="true">→</span>
             </button>
+            {exportUrl ? (
+              <a className="btn ghost" href={exportUrl} download="gitdeck-growth-calendar.ics">
+                {t("growth.calendarExport")}
+              </a>
+            ) : null}
           </div>
         </div>
         <h2>{headingLabel}</h2>

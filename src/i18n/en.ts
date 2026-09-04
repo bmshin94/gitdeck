@@ -286,6 +286,7 @@ export const en = {
   "growth.calendarPreviousWeek": "Previous week",
   "growth.calendarNextWeek": "Next week",
   "growth.calendarToday": "Today",
+  "growth.calendarExport": "Export calendar",
   "growth.calendarLoading": "Loading the content calendar…",
   "growth.calendarError": "Could not load the content calendar: {message}",
   "growth.calendarRescheduleError": "Could not move the content item: {message}",
