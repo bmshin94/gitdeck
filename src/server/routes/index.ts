@@ -5,6 +5,7 @@ import { registerAuthRoutes } from "./auth";
 import { registerDashboardRoutes } from "./dashboard";
 import { registerMentionRoutes } from "./mentions";
 import { registerGoalRoutes } from "./goals";
+import { registerGrowthRoutes } from "./growth";
 import { registerNotificationRoutes } from "./notifications";
 import { registerProjectRoutes } from "./projects";
 import { registerRepositoryRoutes } from "./repository";
@@ -16,6 +17,7 @@ export function registerApiRoutes(router: AppRouter): void {
   registerRepositoryRoutes(router);
   registerMentionRoutes(router);
   registerGoalRoutes(router);
+  registerGrowthRoutes(router);
   registerProjectRoutes(router);
   registerNotificationRoutes(router);
   registerAiRoutes(router);

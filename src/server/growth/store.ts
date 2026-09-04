@@ -1,4 +1,8 @@
 import { randomUUID } from "node:crypto";
+import {
+  GROWTH_CONTENT_ITEM_STATUSES,
+  GROWTH_INTERVENTION_STATUSES,
+} from "../../types/growth";
 import type {
   CreateGrowthContentItemInput,
   CreateGrowthContentPlanInput,
@@ -18,7 +22,9 @@ import type {
   GrowthPostingWindow,
   GrowthProfile,
   GrowthProfileInput,
+  GrowthWorkspaceSummary,
   UpdateGrowthContentItemInput,
+  UpdateGrowthInterventionInput,
 } from "../../types/growth";
 import {
   GOAL_PROPOSAL_FORMATS,
@@ -361,7 +367,7 @@ function interventionFromRow(row: GrowthInterventionRow): GrowthIntervention {
   };
 }
 
-function findGrowthIntervention(accountId: string, id: string): GrowthIntervention | null {
+export function getGrowthIntervention(accountId: string, id: string): GrowthIntervention | null {
   ensureGrowthAccountMigration(accountId);
   const row = get<GrowthInterventionRow>(
     "SELECT * FROM growth_interventions WHERE account_id = ? AND id = ?",
@@ -422,7 +428,35 @@ export function createGrowthIntervention(input: CreateGrowthInterventionInput): 
       now,
     ],
   );
-  return findGrowthIntervention(input.accountId, id)!;
+  return getGrowthIntervention(input.accountId, id)!;
+}
+
+export function updateGrowthIntervention(
+  accountId: string,
+  id: string,
+  updates: UpdateGrowthInterventionInput,
+): GrowthIntervention | null {
+  ensureGrowthAccountMigration(accountId);
+  const current = getGrowthIntervention(accountId, id);
+  if (!current) return null;
+  const intervention = { ...current, ...updates, updatedAt: new Date().toISOString() };
+  run(
+    `UPDATE growth_interventions SET
+       goal_id = ?, category = ?, title = ?, action = ?, dedupe_key = ?, status = ?, updated_at = ?
+     WHERE account_id = ? AND id = ?`,
+    [
+      intervention.goalId,
+      intervention.category,
+      intervention.title,
+      intervention.action,
+      intervention.dedupeKey,
+      intervention.status,
+      intervention.updatedAt,
+      accountId,
+      id,
+    ],
+  );
+  return getGrowthIntervention(accountId, id);
 }
 
 export function updateGrowthInterventionStatus(
@@ -430,12 +464,7 @@ export function updateGrowthInterventionStatus(
   id: string,
   status: GrowthInterventionStatus,
 ): GrowthIntervention | null {
-  ensureGrowthAccountMigration(accountId);
-  const result = run(
-    "UPDATE growth_interventions SET status = ?, updated_at = ? WHERE account_id = ? AND id = ?",
-    [status, new Date().toISOString(), accountId, id],
-  );
-  return result.changes > 0 ? findGrowthIntervention(accountId, id) : null;
+  return updateGrowthIntervention(accountId, id, { status });
 }
 
 function contentPlanFromRow(row: GrowthContentPlanRow): GrowthContentPlan {
@@ -771,6 +800,44 @@ export function markContentItemPublished(
 export function deleteContentItem(accountId: string, id: string): boolean {
   ensureGrowthAccountMigration(accountId);
   return run("DELETE FROM content_items WHERE account_id = ? AND id = ?", [accountId, id]).changes > 0;
+}
+
+export function listPersistedGrowthProfileRepositories(accountId: string): string[] {
+  ensureGrowthAccountMigration(accountId);
+  return all<{ repository: string }>(
+    "SELECT repository FROM growth_profiles WHERE account_id = ? ORDER BY repository COLLATE NOCASE",
+    [accountId],
+  ).map(({ repository }) => repository);
+}
+
+export function getGrowthWorkspaceSummary(
+  accountId: string,
+  repository: string,
+  now = new Date(),
+): GrowthWorkspaceSummary {
+  const interventions = listGrowthInterventions(accountId, { repository });
+  const contentItems = listContentItems(accountId, { repository });
+  const interventionsByStatus = Object.fromEntries(
+    GROWTH_INTERVENTION_STATUSES.map((status) => [
+      status,
+      interventions.filter((intervention) => intervention.status === status).length,
+    ]),
+  ) as GrowthWorkspaceSummary["interventionsByStatus"];
+  const contentItemsByStatus = Object.fromEntries(
+    GROWTH_CONTENT_ITEM_STATUSES.map((status) => [
+      status,
+      contentItems.filter((item) => item.status === status).length,
+    ]),
+  ) as GrowthWorkspaceSummary["contentItemsByStatus"];
+  const start = now.getTime();
+  const end = start + 7 * 24 * 60 * 60 * 1000;
+  const nextSevenDays = contentItems.filter((item) => {
+    if (item.status !== "scheduled" || item.scheduledFor === null) return false;
+    const scheduled = Date.parse(item.scheduledFor);
+    return scheduled >= start && scheduled <= end;
+  });
+
+  return { repository, interventionsByStatus, contentItemsByStatus, nextSevenDays };
 }
 
 interface LegacyGoalRow {

@@ -20,15 +20,22 @@ export interface GrowthHomeSummary {
 export function buildGrowthHomeSummary(
   goals: RepositoryGoal[],
   repositories: GhRepo[],
+  activeRepositories?: string[],
 ): GrowthHomeSummary {
   const repositoriesByName = new Map(repositories.map((repo) => [repo.nameWithOwner, repo]));
-  const workspaces = groupGoalsByRepository(goals).map((group) => ({
-    repository: group.repository,
-    repo: repositoriesByName.get(group.repository) ?? null,
-    goals: group.goals,
-    completedGoals: group.goals.filter((goal) => calculateGoalProgress(goal).completed).length,
-  }));
-  const representedRepositories = new Set(workspaces.map((workspace) => workspace.repository));
+  const goalGroups = groupGoalsByRepository(goals);
+  const goalsByRepository = new Map(goalGroups.map((group) => [group.repository, group.goals]));
+  const representedRepositories = new Set(activeRepositories ?? goalGroups.map((group) => group.repository));
+  for (const group of goalGroups) representedRepositories.add(group.repository);
+  const workspaces = [...representedRepositories].map((repository) => {
+    const repositoryGoals = goalsByRepository.get(repository) ?? [];
+    return {
+      repository,
+      repo: repositoriesByName.get(repository) ?? null,
+      goals: repositoryGoals,
+      completedGoals: repositoryGoals.filter((goal) => calculateGoalProgress(goal).completed).length,
+    };
+  });
 
   return {
     workspaces,

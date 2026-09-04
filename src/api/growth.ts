@@ -1,31 +1,171 @@
-import type { GrowthWorkspaceSummary } from "../types/growth";
+import { AuthRequiredClientError } from "./github";
+import type {
+  CreateGrowthContentItemInput,
+  GrowthContentItemData,
+  GrowthContentItemFilters,
+  GrowthContentItemsData,
+  GrowthInterventionData,
+  GrowthInterventionFilters,
+  GrowthInterventionsData,
+  GrowthInterventionCategory,
+  GrowthProfileData,
+  GrowthProfileInput,
+  GrowthWorkspaceData,
+  GrowthWorkspacesData,
+  GrowthWorkspaceSummary,
+  UpdateGrowthContentItemInput,
+  UpdateGrowthInterventionInput,
+} from "../types/growth";
+import { parseRepositoryName } from "../utils/repository";
 
-/**
- * Phase 1 workspace summary. GS-022 replaces this placeholder with the
- * account-scoped Growth API request without changing overview callers.
- */
+async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(url, { cache: "no-store", ...init });
+  const body = await response.json() as T & { ok?: boolean; needsAuth?: boolean; error?: string };
+  if (response.status === 401 || body.needsAuth) {
+    throw new AuthRequiredClientError(body.error || "authentication required");
+  }
+  if (!response.ok || body.ok === false) {
+    throw new Error(body.error || `Request failed: ${response.status}`);
+  }
+  return body;
+}
+
+function jsonRequest(method: "POST" | "PUT" | "PATCH", body: unknown, signal?: AbortSignal): RequestInit {
+  return {
+    method,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+    signal,
+  };
+}
+
+function repositoryRoute(repository: string): string {
+  const parts = parseRepositoryName(repository);
+  if (!parts) throw new Error("invalid repository");
+  return `${encodeURIComponent(parts[0])}/${encodeURIComponent(parts[1])}`;
+}
+
+export async function fetchGrowthWorkspaces(signal?: AbortSignal): Promise<GrowthWorkspaceSummary[]> {
+  const data = await requestJson<GrowthWorkspacesData>("/api/growth/workspaces", { signal });
+  return data.workspaces;
+}
+
 export async function fetchGrowthWorkspaceSummary(
   repository: string,
   signal?: AbortSignal,
 ): Promise<GrowthWorkspaceSummary> {
-  if (signal?.aborted) throw new DOMException("The request was aborted", "AbortError");
+  const data = await requestJson<GrowthWorkspaceData>(
+    `/api/growth/workspace/${repositoryRoute(repository)}`,
+    { signal },
+  );
+  return data.workspace;
+}
 
-  return {
-    repository,
-    interventionsByStatus: {
-      proposed: 0,
-      accepted: 0,
-      dismissed: 0,
-      done: 0,
-    },
-    contentItemsByStatus: {
-      idea: 0,
-      draft: 0,
-      ready: 0,
-      scheduled: 0,
-      published: 0,
-      skipped: 0,
-    },
-    nextSevenDays: [],
-  };
+export async function fetchGrowthProfile(repository: string, signal?: AbortSignal) {
+  const data = await requestJson<GrowthProfileData>(
+    `/api/growth/profiles/${repositoryRoute(repository)}`,
+    { signal },
+  );
+  return data.profile;
+}
+
+export async function updateGrowthProfile(repository: string, profile: GrowthProfileInput) {
+  const data = await requestJson<GrowthProfileData>(
+    `/api/growth/profiles/${repositoryRoute(repository)}`,
+    jsonRequest("PUT", profile),
+  );
+  return data.profile;
+}
+
+function addFilters(path: string, filters: Record<string, string | null | undefined>): string {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(filters)) {
+    if (value !== undefined && value !== null) query.set(key, value);
+  }
+  const serialized = query.toString();
+  return serialized ? `${path}?${serialized}` : path;
+}
+
+export async function fetchGrowthInterventions(
+  filters: GrowthInterventionFilters = {},
+  signal?: AbortSignal,
+) {
+  const data = await requestJson<GrowthInterventionsData>(addFilters("/api/growth/interventions", {
+    repo: filters.repository,
+    goalId: filters.goalId === null ? "" : filters.goalId,
+    status: filters.status,
+  }), { signal });
+  return data.interventions;
+}
+
+export async function createGrowthIntervention(input: {
+  repository: string;
+  goalId?: string | null;
+  category: GrowthInterventionCategory;
+  title: string;
+  action: string;
+}) {
+  const data = await requestJson<GrowthInterventionData>(
+    "/api/growth/interventions",
+    jsonRequest("POST", input),
+  );
+  return data.intervention;
+}
+
+export async function patchGrowthIntervention(id: string, updates: Omit<UpdateGrowthInterventionInput, "dedupeKey">) {
+  const data = await requestJson<GrowthInterventionData>(
+    `/api/growth/interventions/${encodeURIComponent(id)}`,
+    jsonRequest("PATCH", updates),
+  );
+  return data.intervention;
+}
+
+type GrowthContentCreateRequest = Omit<
+  CreateGrowthContentItemInput,
+  "accountId" | "publishedAt" | "publishedUrl"
+>;
+type GrowthContentUpdateRequest = Omit<
+  UpdateGrowthContentItemInput,
+  "publishedAt" | "publishedUrl"
+>;
+
+export async function fetchGrowthContentItems(
+  filters: GrowthContentItemFilters = {},
+  signal?: AbortSignal,
+) {
+  const data = await requestJson<GrowthContentItemsData>(addFilters("/api/growth/content", {
+    repo: filters.repository,
+    status: filters.status,
+    scheduledFrom: filters.scheduledFrom,
+    scheduledTo: filters.scheduledTo,
+  }), { signal });
+  return data.contentItems;
+}
+
+export async function createGrowthContentItem(input: GrowthContentCreateRequest) {
+  const data = await requestJson<GrowthContentItemData>(
+    "/api/growth/content",
+    jsonRequest("POST", input),
+  );
+  return data.contentItem;
+}
+
+export async function patchGrowthContentItem(id: string, updates: GrowthContentUpdateRequest) {
+  const data = await requestJson<GrowthContentItemData>(
+    `/api/growth/content/${encodeURIComponent(id)}`,
+    jsonRequest("PATCH", updates),
+  );
+  return data.contentItem;
+}
+
+export async function markGrowthContentPublished(id: string, url?: string | null) {
+  const data = await requestJson<GrowthContentItemData>(
+    `/api/growth/content/${encodeURIComponent(id)}/published`,
+    jsonRequest("POST", { url: url ?? null }),
+  );
+  return data.contentItem;
+}
+
+export async function deleteGrowthContentItem(id: string): Promise<void> {
+  await requestJson<{ ok: true }>(`/api/growth/content/${encodeURIComponent(id)}`, { method: "DELETE" });
 }

@@ -72,6 +72,15 @@ export function listGoals(accountId: string): Array<Omit<RepositoryGoal, "aiEnab
   return all<GoalRow>("SELECT * FROM repository_goals WHERE account_id = ? ORDER BY deadline, created_at", [accountId]).map(fromRow);
 }
 
+export function listGoalRepositories(accountId: string): string[] {
+  ensureSchema();
+  migrateLegacySuggestions(accountId);
+  return all<{ repository: string }>(
+    "SELECT DISTINCT repository FROM repository_goals WHERE account_id = ? ORDER BY repository COLLATE NOCASE",
+    [accountId],
+  ).map(({ repository }) => repository);
+}
+
 export function findGoal(accountId: string, id: string): Omit<RepositoryGoal, "aiEnabled"> | null {
   ensureSchema();
   migrateLegacySuggestions(accountId);

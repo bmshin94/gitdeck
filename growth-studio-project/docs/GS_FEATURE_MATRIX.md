@@ -18,13 +18,13 @@ Authoritative inventory of Growth Studio capabilities. Statuses: `EXISTING`
 | Growth shell: own top bar, sidebar, `mode-growth` body class, no dashboard chrome | `src/components/growth/GrowthStudioApp.tsx`, `src/components/growth/GrowthTopBar.tsx`, `src/components/growth/GrowthSidebar.tsx`, `src/styles/growth/shell.css` | DONE | GS-011 |
 | Main-menu entry opening `/growth` in a new window; `goals` tab removed; `/goals` redirect | `src/App.tsx`, `src/main.tsx`, `src/utils/dataRequirements.ts`, `src/components/SidebarControls.tsx` | DONE | GS-012 |
 | Missions panel hosting the existing goals UI | `src/components/growth/GrowthStudioApp.tsx`, `src/hooks/useGoals.ts`, `src/components/views/GoalsView.tsx` | DONE | GS-013 |
-| Growth home: repositories with profiles or goals, quick stats | `src/components/growth/GrowthHome.tsx`, `src/utils/growthHome.ts`, `/growth` | DONE | GS-014 |
-| Workspace overview per repository | `src/components/growth/GrowthWorkspaceOverview.tsx`, `src/types/growth.ts`, `src/api/growth.ts`, `/growth/r/:owner/:repo` | DONE | GS-015 |
+| Growth home: repositories with profiles or goals, quick stats | `src/components/growth/GrowthHome.tsx`, `src/utils/growthHome.ts`, `/api/growth/workspaces`, `/growth` | DONE | GS-014 and GS-022 |
+| Workspace overview per repository | `src/components/growth/GrowthWorkspaceOverview.tsx`, `src/types/growth.ts`, `src/api/growth.ts`, `/api/growth/workspace/:owner/:repo`, `/growth/r/:owner/:repo` | DONE | GS-015 and GS-022 |
 | Shell i18n, responsive layout, theme parity, and keyboard dismissal | `src/components/growth/`, `src/components/common/RepositoryPicker.tsx`, `src/styles/growth/`, `src/i18n/en.ts`, `src/i18n/it.ts` | DONE | GS-016 |
 | Growth Studio introduction and screenshot placeholder | `README.md` | DONE | GS-016 |
 | Growth store schema (profiles, interventions, plans, items, assets, performance) | `src/server/growth/store.ts`, `src/types/growth.ts`, `src/utils/growth/profileDefaults.ts`, `tests/server/growthStore.test.ts` | DONE | GS-020 |
 | One-shot migration of legacy suggestions and proposals | `src/server/growth/store.ts`, `src/utils/growth/legacySuggestions.ts`, `tests/server/growthStore.test.ts` | DONE | GS-021 |
-| Growth API routes and account-wide workspace summaries | `src/server/routes/growth.ts`, `src/api/growth.ts` | PLANNED | GS-022 |
+| Growth API routes and account-wide workspace summaries | `src/server/routes/growth.ts`, `src/server/growth/store.ts`, `src/api/growth.ts`, `tests/server/growthRoutes.test.ts` | DONE | GS-022 |
 | Shared repository signal collection with SSRF-guarded sources | `src/server/growth/signals.ts` | PLANNED | GS-023 |
 | Interventions backlog with statuses and manual creation | `/growth/r/:owner/:repo/interventions` | PLANNED | GS-023 |
 | Content items list and drawer with copy actions | Interventions and Calendar panels | PLANNED | GS-024 |

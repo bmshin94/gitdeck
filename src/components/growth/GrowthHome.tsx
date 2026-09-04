@@ -1,5 +1,6 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import { fetchGrowthWorkspaces } from "../../api/growth";
 import { useI18n } from "../../i18n/I18nProvider";
 import { useGoals } from "../../hooks/useGoals";
 import type { GhRepo } from "../../types/github";
@@ -25,9 +26,42 @@ export function GrowthHome({
   onSelectRepository,
 }: GrowthHomeProps) {
   const { t } = useI18n();
-  const { goals, loading: goalsLoading, error } = useGoals({ accountId, enabled });
-  const summary = useMemo(() => buildGrowthHomeSummary(goals, repos), [goals, repos]);
-  const loading = repositoriesLoading || goalsLoading;
+  const { goals, loading: goalsLoading, error: goalsError } = useGoals({ accountId, enabled });
+  const [workspaceRepositories, setWorkspaceRepositories] = useState<string[]>([]);
+  const [workspacesLoading, setWorkspacesLoading] = useState(enabled);
+  const [workspacesError, setWorkspacesError] = useState("");
+
+  useEffect(() => {
+    setWorkspaceRepositories([]);
+    setWorkspacesError("");
+    if (!enabled || !accountId) {
+      setWorkspacesLoading(false);
+      return;
+    }
+    const controller = new AbortController();
+    setWorkspacesLoading(true);
+    void fetchGrowthWorkspaces(controller.signal)
+      .then((workspaces) => {
+        if (!controller.signal.aborted) {
+          setWorkspaceRepositories(workspaces.map(({ repository }) => repository));
+        }
+      })
+      .catch((error: unknown) => {
+        if (!controller.signal.aborted && (error as Error).name !== "AbortError") {
+          setWorkspacesError((error as Error).message);
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setWorkspacesLoading(false);
+      });
+    return () => controller.abort();
+  }, [accountId, enabled]);
+
+  const summary = useMemo(
+    () => buildGrowthHomeSummary(goals, repos, workspaceRepositories),
+    [goals, repos, workspaceRepositories],
+  );
+  const loading = repositoriesLoading || goalsLoading || workspacesLoading;
 
   return (
     <section className="growth-home">
@@ -52,7 +86,8 @@ export function GrowthHome({
         </div>
       ) : (
         <>
-          {error ? <div className="growth-home-error" role="alert">{t("growth.goalsLoadError", { message: error })}</div> : null}
+          {goalsError ? <div className="growth-home-error" role="alert">{t("growth.goalsLoadError", { message: goalsError })}</div> : null}
+          {workspacesError ? <div className="growth-home-error" role="alert">{t("growth.summaryLoadError", { message: workspacesError })}</div> : null}
 
           {summary.workspaces.length ? (
             <div className="growth-home-section">
@@ -91,7 +126,7 @@ export function GrowthHome({
                 })}
               </div>
             </div>
-          ) : !error ? (
+          ) : !goalsError && !workspacesError ? (
             <div className="growth-home-empty">
               <span aria-hidden="true"><TargetIcon /></span>
               <div>

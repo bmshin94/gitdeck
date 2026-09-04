@@ -87,6 +87,11 @@ export interface GrowthInterventionFilters {
   status?: GrowthInterventionStatus;
 }
 
+export type UpdateGrowthInterventionInput = Partial<Pick<
+  GrowthIntervention,
+  "goalId" | "category" | "title" | "action" | "dedupeKey" | "status"
+>>;
+
 export type GrowthContentPlanStatus = "draft" | "active" | "archived";
 
 export interface GrowthContentPlan {
@@ -258,4 +263,39 @@ export interface GrowthWorkspaceSummary {
   interventionsByStatus: Record<GrowthInterventionStatus, number>;
   contentItemsByStatus: Record<GrowthContentItemStatus, number>;
   nextSevenDays: GrowthContentItem[];
+}
+
+export interface GrowthWorkspacesData {
+  ok: true;
+  workspaces: GrowthWorkspaceSummary[];
+}
+
+export interface GrowthWorkspaceData {
+  ok: true;
+  workspace: GrowthWorkspaceSummary;
+}
+
+export interface GrowthProfileData {
+  ok: true;
+  profile: GrowthProfile;
+}
+
+export interface GrowthInterventionsData {
+  ok: true;
+  interventions: GrowthIntervention[];
+}
+
+export interface GrowthInterventionData {
+  ok: true;
+  intervention: GrowthIntervention;
+}
+
+export interface GrowthContentItemsData {
+  ok: true;
+  contentItems: GrowthContentItem[];
+}
+
+export interface GrowthContentItemData {
+  ok: true;
+  contentItem: GrowthContentItem;
 }

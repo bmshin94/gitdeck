@@ -72,4 +72,18 @@ describe("buildGrowthHomeSummary", () => {
     });
     expect(summary.starterRepositories).toHaveLength(1);
   });
+
+  it("includes profile-only repositories supplied by the workspace API", () => {
+    const profileOnly = repo("acme/profile-only");
+    const starter = repo("acme/starter");
+    const summary = buildGrowthHomeSummary([], [profileOnly, starter], [profileOnly.nameWithOwner]);
+
+    expect(summary.workspaces).toEqual([{
+      repository: profileOnly.nameWithOwner,
+      repo: profileOnly,
+      goals: [],
+      completedGoals: 0,
+    }]);
+    expect(summary.starterRepositories).toEqual([starter]);
+  });
 });
