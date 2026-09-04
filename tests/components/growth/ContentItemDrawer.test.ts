@@ -8,6 +8,7 @@ import type { GrowthContentItem } from "../../../src/types/growth";
 const mocks = vi.hoisted(() => ({
   buildGrowthAssetFileUrl: vi.fn((id: string) => `/api/growth/assets/${id}/file`),
   fetchGrowthAssetFile: vi.fn(),
+  fetchGrowthAssets: vi.fn(),
   patchGrowthContentItem: vi.fn(),
   markGrowthContentPublished: vi.fn(),
   writeText: vi.fn(),
@@ -16,6 +17,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("../../../src/api/growth", () => ({
   buildGrowthAssetFileUrl: mocks.buildGrowthAssetFileUrl,
   fetchGrowthAssetFile: mocks.fetchGrowthAssetFile,
+  fetchGrowthAssets: mocks.fetchGrowthAssets,
   patchGrowthContentItem: mocks.patchGrowthContentItem,
   markGrowthContentPublished: mocks.markGrowthContentPublished,
 }));
@@ -81,6 +83,7 @@ beforeEach(() => {
     value: { writeText: mocks.writeText },
   });
   mocks.writeText.mockResolvedValue(undefined);
+  mocks.fetchGrowthAssets.mockResolvedValue([]);
   mocks.patchGrowthContentItem.mockImplementation(async (_id: string, updates: Partial<GrowthContentItem>) => ({
     ...item,
     ...updates,
@@ -176,6 +179,39 @@ describe("ContentItemDrawer", () => {
       await Promise.resolve();
     });
     expect(document.body.querySelector('[role="alert"]')?.textContent).toContain("at least one media attachment");
+  });
+
+  it("attaches repository media through the content patch and disables ready without media", async () => {
+    item = { ...item, media: [] };
+    mocks.fetchGrowthAssets.mockResolvedValueOnce([{
+      id: "asset-library",
+      accountId: "account-a",
+      repository: "acme/rocket",
+      kind: "image",
+      origin: "upload",
+      url: null,
+      title: "Library card",
+      alt: "Library release card",
+      width: 1200,
+      height: 630,
+      cardTemplate: null,
+      cardData: null,
+      createdAt: "2026-09-04T10:00:00.000Z",
+    }]);
+    await renderDrawer();
+
+    expect(button("Mark ready").disabled).toBe(true);
+    await act(async () => {
+      button("Attach media").click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(mocks.patchGrowthContentItem).toHaveBeenCalledWith("content-1", {
+      media: [{ assetId: "asset-library", kind: "image", alt: "Library release card" }],
+    });
+    expect(onUpdate).toHaveBeenCalledWith(expect.objectContaining({
+      media: [{ assetId: "asset-library", kind: "image", alt: "Library release card" }],
+    }));
   });
 
   it("uses authenticated asset previews and excludes videos from image actions", async () => {

@@ -223,6 +223,79 @@ describe("Growth Studio store", () => {
     expect(tables.count).toBe(1);
   });
 
+  it("validates asset-backed content media against its account and repository", () => {
+    const owned = store.createGrowthAsset({
+      accountId: "account-a",
+      repository: "owner/repo",
+      kind: "image",
+      origin: "upload",
+      path: "owned.png",
+      title: "Owned",
+      alt: "Owned image",
+    });
+    const otherRepository = store.createGrowthAsset({
+      accountId: "account-a",
+      repository: "owner/other",
+      kind: "image",
+      origin: "upload",
+      path: "other.png",
+      title: "Other",
+      alt: "Other image",
+    });
+    const otherAccount = store.createGrowthAsset({
+      accountId: "account-b",
+      repository: "owner/repo",
+      kind: "image",
+      origin: "upload",
+      path: "private.png",
+      title: "Private",
+      alt: "Private image",
+    });
+    const validMedia: GrowthContentMedia[] = [{ assetId: owned.id, kind: "image", alt: "Release card" }];
+
+    for (const assetId of ["missing", otherRepository.id, otherAccount.id]) {
+      expect(() => store.createContentItem({
+        accountId: "account-a",
+        repository: "owner/repo",
+        channel: "x",
+        format: "x-thread",
+        status: "draft",
+        media: [{ assetId, kind: "image", alt: "Invalid asset" }],
+      })).toThrowError("Media attachment is invalid.");
+    }
+    expect(() => store.createContentItem({
+      accountId: "account-a",
+      repository: "owner/repo",
+      channel: "x",
+      format: "x-thread",
+      status: "draft",
+      media: [{ assetId: owned.id, kind: "video", alt: "Wrong kind" }],
+    })).toThrow(store.InvalidMediaAttachmentError);
+
+    const draft = createDraft();
+    expect(() => store.updateContentItem("account-a", draft.id, {
+      media: [{ assetId: otherAccount.id, kind: "image", alt: "Private" }],
+    })).toThrowError("Media attachment is invalid.");
+    expect(store.getContentItem("account-a", draft.id)?.media).toEqual([]);
+
+    const ready = store.updateContentItem("account-a", draft.id, { status: "ready", media: validMedia });
+    expect(ready).toMatchObject({ status: "ready", media: validMedia });
+    expect(() => store.updateContentItem("account-a", draft.id, { media: [] })).toThrow(store.MediaRequiredError);
+    expect(store.getContentItem("account-a", draft.id)?.media).toEqual(validMedia);
+
+    const scheduled = store.rescheduleContentItem("account-a", draft.id, "2026-09-08T10:00:00Z");
+    expect(scheduled?.status).toBe("scheduled");
+    expect(() => store.updateContentItem("account-a", draft.id, { media: [] })).toThrow(store.MediaRequiredError);
+
+    const published = store.markContentItemPublished("account-a", draft.id);
+    expect(published?.status).toBe("published");
+    expect(() => store.updateContentItem("account-a", draft.id, { media: [] })).toThrow(store.MediaRequiredError);
+    expect(store.updateContentItem("account-a", draft.id, { title: "Media preserved" })).toMatchObject({
+      title: "Media preserved",
+      media: validMedia,
+    });
+  });
+
   it("creates and archives account-scoped content plans", () => {
     const input = profileInput();
     const plan = store.createContentPlan({

@@ -17,6 +17,7 @@ import { socialCharacterCount } from "../../utils/socialProposals";
 import { CloseIcon } from "../common/Icons";
 import { Markdown } from "../common/Markdown";
 import { GrowthMediaActions } from "./GrowthMediaActions";
+import { GrowthMediaPicker } from "./GrowthMediaPicker";
 
 interface ContentItemDrawerProps {
   item: GrowthContentItem;
@@ -101,6 +102,16 @@ export function ContentItemDrawer({ item, onClose, onUpdate }: ContentItemDrawer
 
   function saveEdits() {
     void persist("save", () => patchGrowthContentItem(item.id, { title, body, threadPosts }));
+  }
+
+  async function saveMedia(media: GrowthContentMedia[]): Promise<void> {
+    setBusy("media");
+    setError("");
+    try {
+      onUpdate(await patchGrowthContentItem(item.id, { media }));
+    } finally {
+      setBusy("");
+    }
   }
 
   function changeStatus(status: GrowthContentItemStatus) {
@@ -217,6 +228,14 @@ export function ContentItemDrawer({ item, onClose, onUpdate }: ContentItemDrawer
                 </article>
               );
             })}</div> : <p className="growth-content-empty-note">{t("growth.contentMediaEmpty")}</p>}
+            <GrowthMediaPicker
+              accountId={item.accountId}
+              repository={item.repository}
+              media={item.media}
+              status={item.status}
+              disabled={busy !== ""}
+              onChange={saveMedia}
+            />
           </section>
 
           <section className="growth-content-section">
@@ -228,7 +247,15 @@ export function ContentItemDrawer({ item, onClose, onUpdate }: ContentItemDrawer
             <h3>{t("growth.contentStatusTitle")}</h3>
             <div className="growth-content-status-actions">
               {EDITABLE_STATUSES.filter((status) => status !== item.status).map((status) => (
-                <button className="btn ghost" type="button" key={status} disabled={busy !== ""} onClick={() => changeStatus(status)}>{t(`growth.contentSetStatus.${status}` as TranslationKey)}</button>
+                <button
+                  className="btn ghost"
+                  type="button"
+                  key={status}
+                  disabled={busy !== "" || (status === "ready" && item.media.length === 0)}
+                  onClick={() => changeStatus(status)}
+                >
+                  {t(`growth.contentSetStatus.${status}` as TranslationKey)}
+                </button>
               ))}
             </div>
             <label>{t("growth.contentScheduleLabel")}<input type="datetime-local" value={scheduledFor} onChange={(event) => setScheduledFor(event.target.value)} /></label>

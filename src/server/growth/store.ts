@@ -154,6 +154,13 @@ export class MediaRequiredError extends GrowthStoreValidationError {
   }
 }
 
+export class InvalidMediaAttachmentError extends GrowthStoreValidationError {
+  constructor() {
+    super("Media attachment is invalid.");
+    this.name = "InvalidMediaAttachmentError";
+  }
+}
+
 export class ScheduleRequiredError extends GrowthStoreValidationError {
   constructor() {
     super("Scheduled content requires a valid ISO date and time.");
@@ -795,7 +802,40 @@ function validatePublishedUrl(value: string | null): void {
   }
 }
 
+export function validateContentMediaAttachments(
+  accountId: string,
+  repository: string,
+  media: readonly GrowthContentMedia[],
+): void {
+  ensureGrowthSchema();
+  for (const attachment of media) {
+    if (!attachment.alt.trim() || (attachment.kind !== "image" && attachment.kind !== "video")) {
+      throw new InvalidMediaAttachmentError();
+    }
+    if (attachment.url !== undefined) {
+      try {
+        const url = new URL(attachment.url);
+        if (url.protocol !== "http:" && url.protocol !== "https:") throw new InvalidMediaAttachmentError();
+      } catch (error) {
+        if (error instanceof InvalidMediaAttachmentError) throw error;
+        throw new InvalidMediaAttachmentError();
+      }
+    }
+    if (!attachment.assetId) {
+      if (!attachment.url) throw new InvalidMediaAttachmentError();
+      continue;
+    }
+    const asset = get<{ kind: GrowthAsset["kind"] }>(
+      `SELECT kind FROM growth_assets
+       WHERE account_id = ? AND repository = ? AND id = ?`,
+      [accountId, repository, attachment.assetId],
+    );
+    if (!asset || asset.kind !== attachment.kind) throw new InvalidMediaAttachmentError();
+  }
+}
+
 function validateContentItem(item: GrowthContentItem): void {
+  validateContentMediaAttachments(item.accountId, item.repository, item.media);
   if (MEDIA_REQUIRED_STATUSES.has(item.status) && item.media.length === 0) {
     throw new MediaRequiredError();
   }

@@ -27,6 +27,7 @@ import {
   updateContentItem,
   updateGrowthIntervention,
   upsertGrowthIntervention,
+  validateContentMediaAttachments,
   upsertGrowthProfile,
 } from "../growth/store";
 import {
@@ -847,6 +848,7 @@ async function content(ctx: RouteContext): Promise<void> {
     return badRequest(ctx, "invalid goalIds");
   }
   try {
+    if (updates.media) validateContentMediaAttachments(account.id, repository, updates.media);
     const contentItem = createContentItem({
       accountId: account.id,
       repository,
@@ -1005,6 +1007,7 @@ async function patchContent(ctx: RouteContext): Promise<void> {
       : "scheduled";
   }
   try {
+    if (updates.media) validateContentMediaAttachments(account.id, current.repository, updates.media);
     const contentItem = updateContentItem(account.id, current.id, updates);
     sendJson(ctx.res, 200, { ok: true, contentItem });
   } catch (error) {

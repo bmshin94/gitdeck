@@ -44,8 +44,8 @@ Authoritative inventory of Growth Studio capabilities. Statuses: `EXISTING`
 | Generated SVG cards (release, milestone, stats, quote, what's new) | `src/types/growth.ts`, `src/server/growth/cards.ts`, `src/server/growth/assets.ts`, `src/components/growth/GrowthAssetLibrary.tsx`, `/api/growth/assets/cards` | DONE | GS-043 |
 | Browser canvas rasterization at 2x | `src/utils/growth/rasterize.ts`, `tests/utils/growth/rasterize.test.ts` | DONE | GS-044 |
 | Image clipboard copy with download fallback | `src/components/growth/GrowthMediaActions.tsx`, `src/components/growth/calendar/GrowthQueue.tsx`, `src/components/growth/ContentItemDrawer.tsx` | DONE | GS-045 |
-| Media gate: `ready`, `scheduled`, and `published` require media | `src/server/growth/store.ts`, `src/components/growth/ContentItemDrawer.tsx`, `tests/server/growthStore.test.ts`, `tests/server/growthRoutes.test.ts` | DONE | GS-020 and GS-024 |
-| Media attachment and removal UI with asset ownership validation | `src/components/growth/GrowthMediaPicker.tsx`, `src/components/growth/ContentItemDrawer.tsx`, `src/utils/growth/contentMedia.ts`, `src/server/routes/growth.ts` | PLANNED | GS-046 |
+| Media gate: `ready`, `scheduled`, and `published` require account-valid media | `src/server/growth/store.ts`, `src/server/routes/growth.ts`, `src/components/growth/ContentItemDrawer.tsx`, `tests/server/growthStore.test.ts`, `tests/server/growthRoutes.test.ts` | DONE | GS-020, GS-024, and GS-046 |
+| Media attachment and removal UI with asset ownership validation | `src/components/growth/GrowthMediaPicker.tsx`, `src/components/growth/ContentItemDrawer.tsx`, `src/utils/growth/contentMedia.ts`, `src/server/growth/store.ts`, `src/server/routes/growth.ts` | DONE | GS-046 |
 | Opportunity rules producing interventions | `utils/growth/opportunityRules.ts`, `server/growth/rules.ts` | PLANNED | Phase 5 |
 | Attribution of published items to metric deltas (48h, 7d) | `server/growth/attribution.ts` | PLANNED | Phase 5 |
 | Weekly Growth Review | `server/growth/review.ts`, `/growth/review` | PLANNED | Phase 5 |

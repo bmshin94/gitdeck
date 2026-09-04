@@ -1111,6 +1111,128 @@ describe("Growth API routes", () => {
     }
   });
 
+  it("enforces generic account-scoped asset attachment validation across content gates", async () => {
+    const owned = growthStore.createGrowthAsset({
+      accountId: "account-a",
+      repository: "acme/repo",
+      kind: "image",
+      origin: "upload",
+      path: "owned.png",
+      title: "Owned card",
+      alt: "Owned release card",
+    });
+    const otherRepository = growthStore.createGrowthAsset({
+      accountId: "account-a",
+      repository: "acme/other",
+      kind: "image",
+      origin: "upload",
+      path: "other.png",
+      title: "Other card",
+      alt: "Other card",
+    });
+    const otherAccount = growthStore.createGrowthAsset({
+      accountId: "account-b",
+      repository: "acme/repo",
+      kind: "image",
+      origin: "upload",
+      path: "private.png",
+      title: "Private card",
+      alt: "Private card",
+    });
+    const created = await dispatch("POST", "/api/growth/content", {
+      repository: "acme/repo",
+      channel: "x",
+      format: "x-thread",
+      status: "draft",
+    });
+    const id = created.body.contentItem.id as string;
+
+    for (const assetId of ["missing", otherRepository.id, otherAccount.id]) {
+      const media = [{ assetId, kind: "image", alt: "Untrusted media" }];
+      const invalidCreate = await dispatch("POST", "/api/growth/content", {
+        repository: "acme/repo",
+        channel: "x",
+        format: "x-thread",
+        status: "draft",
+        media,
+      });
+      const invalidPatch = await dispatch("PATCH", `/api/growth/content/${id}`, { media });
+      for (const invalid of [invalidCreate, invalidPatch]) {
+        expect(invalid).toEqual({
+          status: 400,
+          body: { ok: false, error: "Media attachment is invalid." },
+        });
+      }
+    }
+    expect(growthStore.getContentItem("account-a", id)?.media).toEqual([]);
+    const mediaGateRequests: Array<[string, string, unknown]> = [
+      ["PATCH", `/api/growth/content/${id}`, { status: "ready" }],
+      ["PATCH", `/api/growth/content/${id}`, { scheduledFor: "2026-09-08T10:00:00.000Z" }],
+      ["POST", `/api/growth/content/${id}/published`, { url: null }],
+    ];
+    for (const [method, path, body] of mediaGateRequests) {
+      const rejected = await dispatch(method, path, body);
+      expect(rejected.status).toBe(400);
+      expect(rejected.body.error).toContain("at least one media attachment");
+    }
+    expect(growthStore.getContentItem("account-a", id)).toMatchObject({ status: "draft", media: [] });
+
+    for (const status of ["ready", "scheduled", "published"] as const) {
+      const rejected = await dispatch("POST", "/api/growth/content", {
+        repository: "acme/repo",
+        channel: "x",
+        format: "x-thread",
+        status,
+        ...(status === "scheduled" ? { scheduledFor: "2026-09-08T10:00:00.000Z" } : {}),
+      });
+      expect(rejected.status).toBe(400);
+      expect(rejected.body.error).toContain("at least one media attachment");
+    }
+
+    const validMedia = [{ assetId: owned.id, kind: "image", alt: "Edited release card", caption: "Release v2" }];
+    for (const status of ["ready", "scheduled", "published"] as const) {
+      const protectedItem = await dispatch("POST", "/api/growth/content", {
+        repository: "acme/repo",
+        channel: "x",
+        format: "x-thread",
+        status,
+        media: validMedia,
+        ...(status === "scheduled" ? { scheduledFor: "2026-09-08T10:00:00.000Z" } : {}),
+      });
+      expect(protectedItem.status).toBe(201);
+      const protectedId = protectedItem.body.contentItem.id as string;
+      expect((await dispatch("PATCH", `/api/growth/content/${protectedId}`, { media: [] })).status).toBe(400);
+      expect((await dispatch("PATCH", `/api/growth/content/${protectedId}`, { title: `${status} preserved` })).status).toBe(200);
+    }
+
+    const ready = await dispatch("PATCH", `/api/growth/content/${id}`, { media: validMedia, status: "ready" });
+    expect(ready.status).toBe(200);
+    expect(ready.body.contentItem).toMatchObject({ status: "ready", media: validMedia });
+    let removal = await dispatch("PATCH", `/api/growth/content/${id}`, { media: [] });
+    expect(removal.status).toBe(400);
+    expect(growthStore.getContentItem("account-a", id)?.media).toEqual(validMedia);
+
+    const scheduledFor = "2026-09-08T10:00:00.000Z";
+    expect((await dispatch("PATCH", `/api/growth/content/${id}`, { scheduledFor })).body.contentItem.status).toBe("scheduled");
+    removal = await dispatch("PATCH", `/api/growth/content/${id}`, { media: [] });
+    expect(removal.status).toBe(400);
+
+    expect((await dispatch("POST", `/api/growth/content/${id}/published`, { url: null })).body.contentItem.status).toBe("published");
+    removal = await dispatch("PATCH", `/api/growth/content/${id}`, { media: [] });
+    expect(removal.status).toBe(400);
+    expect((await dispatch("PATCH", `/api/growth/content/${id}`, { title: "Media-preserving edit" })).body.contentItem)
+      .toMatchObject({ title: "Media-preserving edit", media: validMedia });
+
+    const legacy = await dispatch("POST", "/api/growth/content", {
+      repository: "acme/repo",
+      channel: "linkedin",
+      format: "linkedin-post",
+      status: "ready",
+      media: [{ url: "https://example.com/legacy.png", kind: "image", alt: "Legacy image" }],
+    });
+    expect(legacy.status).toBe(201);
+  });
+
   it("supports allowlisted updates, scheduling, publishing, and deletion", async () => {
     const interventionResponse = await dispatch("POST", "/api/growth/interventions", {
       repository: "acme/repo",

@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   fetchAiSettings: vi.fn(),
   fetchGrowthInterventions: vi.fn(),
   fetchGrowthContentItems: vi.fn(),
+  fetchGrowthAssets: vi.fn(),
   createGrowthIntervention: vi.fn(),
   draftGrowthContentFromIntervention: vi.fn(),
   generateGrowthInterventions: vi.fn(),
@@ -23,6 +24,7 @@ vi.mock("../../../src/api/github", () => ({ fetchAiSettings: mocks.fetchAiSettin
 vi.mock("../../../src/api/growth", () => ({
   fetchGrowthInterventions: mocks.fetchGrowthInterventions,
   fetchGrowthContentItems: mocks.fetchGrowthContentItems,
+  fetchGrowthAssets: mocks.fetchGrowthAssets,
   createGrowthIntervention: mocks.createGrowthIntervention,
   draftGrowthContentFromIntervention: mocks.draftGrowthContentFromIntervention,
   generateGrowthInterventions: mocks.generateGrowthInterventions,
@@ -93,6 +95,7 @@ beforeEach(() => {
     updatedAt: "2026-09-04T00:00:00.000Z",
   };
   mocks.fetchGrowthContentItems.mockResolvedValue([contentItem]);
+  mocks.fetchGrowthAssets.mockResolvedValue([]);
   mocks.draftGrowthContentFromIntervention.mockResolvedValue({ ok: true, contentItems: [contentItem], cached: true });
   mocks.useGoals.mockReturnValue({
     goals: [{ id: "goal-1", metric: "stars", currentValue: 50, targetValue: 100 }],
