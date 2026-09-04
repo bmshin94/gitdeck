@@ -21,7 +21,7 @@ phase-closing tasks) are appended with `PENDING` rows and matching task files.
 | GS-015 | COMPLETED | Added the repository workspace overview with mission progress, typed phase 2 activity summaries, upcoming content, and panel shortcuts | VALIDATION OK; typecheck; 34 test files and 168 tests; production build; overview rendering and goal summary tests; git diff --check | 2026-09-04 |
 | GS-016 | COMPLETED | Polished responsive shell and Missions layouts, hardened keyboard dismissal, refined Italian copy, documented Growth Studio, and aligned phase 2 tasks | VALIDATION OK; typecheck; 35 test files and 169 tests; production build; 60-screen Chromium audit at 1440, 1024, and 390 in dark and light themes with no overflow; keyboard focus and Escape checks; 715 locale keys matched; phase 2 files and PENDING rows verified; git diff --check | 2026-09-04 |
 | GS-020 | COMPLETED | Added the idempotent account-scoped growth schema, typed CRUD, deterministic profile defaults, and content workflow invariants | VALIDATION OK; typecheck; 37 test files and 178 tests; production build; isolated growth store and profile default tests; git diff --check | 2026-09-04 |
-| GS-021 | PENDING | — | — | — |
+| GS-021 | COMPLETED | Migrated legacy goal suggestions and proposals into account-scoped interventions and content items with compatibility projection and idempotent writes | VALIDATION OK; typecheck; 38 test files and 183 tests; production build; migration mapping, idempotency, projection, dedupe, and goal-detachment tests; git diff --check | 2026-09-04 |
 | GS-022 | PENDING | — | — | — |
 | GS-023 | PENDING | — | — | — |
 | GS-024 | PENDING | — | — | — |

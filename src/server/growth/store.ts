@@ -20,11 +20,22 @@ import type {
   GrowthProfileInput,
   UpdateGrowthContentItemInput,
 } from "../../types/growth";
-import type { GoalProposalFormat } from "../../types/goals";
+import {
+  GOAL_PROPOSAL_FORMATS,
+  type GoalProposal,
+  type GoalProposalFormat,
+  type GoalSuggestion,
+} from "../../types/goals";
+import {
+  createLegacySuggestionDedupeKey,
+  legacyMediaToContentMedia,
+  legacyProposalChannel,
+} from "../../utils/growth/legacySuggestions";
 import {
   createDefaultGrowthProfile,
   DEFAULT_GROWTH_CADENCE,
 } from "../../utils/growth/profileDefaults";
+import { getPreference, setPreference } from "../preferenceStore";
 import { all, get, getDatabase, run } from "../sqlite";
 
 interface GrowthProfileRow {
@@ -280,7 +291,7 @@ function profileFromRow(row: GrowthProfileRow): GrowthProfile {
 }
 
 export function getGrowthProfile(accountId: string, repository: string): GrowthProfile {
-  ensureGrowthSchema();
+  ensureGrowthAccountMigration(accountId);
   const row = get<GrowthProfileRow>(
     "SELECT * FROM growth_profiles WHERE account_id = ? AND repository = ?",
     [accountId, repository],
@@ -293,7 +304,7 @@ export function upsertGrowthProfile(
   repository: string,
   input: GrowthProfileInput,
 ): GrowthProfile {
-  ensureGrowthSchema();
+  ensureGrowthAccountMigration(accountId);
   const now = new Date().toISOString();
   run(
     `INSERT INTO growth_profiles
@@ -351,7 +362,7 @@ function interventionFromRow(row: GrowthInterventionRow): GrowthIntervention {
 }
 
 function findGrowthIntervention(accountId: string, id: string): GrowthIntervention | null {
-  ensureGrowthSchema();
+  ensureGrowthAccountMigration(accountId);
   const row = get<GrowthInterventionRow>(
     "SELECT * FROM growth_interventions WHERE account_id = ? AND id = ?",
     [accountId, id],
@@ -363,7 +374,7 @@ export function listGrowthInterventions(
   accountId: string,
   filters: GrowthInterventionFilters = {},
 ): GrowthIntervention[] {
-  ensureGrowthSchema();
+  ensureGrowthAccountMigration(accountId);
   const clauses = ["account_id = ?"];
   const params: unknown[] = [accountId];
   if (filters.repository !== undefined) {
@@ -388,7 +399,7 @@ export function listGrowthInterventions(
 }
 
 export function createGrowthIntervention(input: CreateGrowthInterventionInput): GrowthIntervention {
-  ensureGrowthSchema();
+  ensureGrowthAccountMigration(input.accountId);
   const id = randomUUID();
   const now = new Date().toISOString();
   run(
@@ -419,7 +430,7 @@ export function updateGrowthInterventionStatus(
   id: string,
   status: GrowthInterventionStatus,
 ): GrowthIntervention | null {
-  ensureGrowthSchema();
+  ensureGrowthAccountMigration(accountId);
   const result = run(
     "UPDATE growth_interventions SET status = ?, updated_at = ? WHERE account_id = ? AND id = ?",
     [status, new Date().toISOString(), accountId, id],
@@ -443,7 +454,7 @@ function contentPlanFromRow(row: GrowthContentPlanRow): GrowthContentPlan {
 }
 
 function findContentPlan(accountId: string, id: string): GrowthContentPlan | null {
-  ensureGrowthSchema();
+  ensureGrowthAccountMigration(accountId);
   const row = get<GrowthContentPlanRow>(
     "SELECT * FROM content_plans WHERE account_id = ? AND id = ?",
     [accountId, id],
@@ -452,7 +463,7 @@ function findContentPlan(accountId: string, id: string): GrowthContentPlan | nul
 }
 
 export function createContentPlan(input: CreateGrowthContentPlanInput): GrowthContentPlan {
-  ensureGrowthSchema();
+  ensureGrowthAccountMigration(input.accountId);
   const id = randomUUID();
   const now = new Date().toISOString();
   run(
@@ -476,7 +487,7 @@ export function createContentPlan(input: CreateGrowthContentPlanInput): GrowthCo
 }
 
 export function archiveContentPlan(accountId: string, id: string): GrowthContentPlan | null {
-  ensureGrowthSchema();
+  ensureGrowthAccountMigration(accountId);
   const result = run(
     "UPDATE content_plans SET status = 'archived' WHERE account_id = ? AND id = ?",
     [accountId, id],
@@ -515,7 +526,7 @@ function contentItemFromRow(row: GrowthContentItemRow): GrowthContentItem {
 }
 
 export function getContentItem(accountId: string, id: string): GrowthContentItem | null {
-  ensureGrowthSchema();
+  ensureGrowthAccountMigration(accountId);
   const row = get<GrowthContentItemRow>(
     "SELECT * FROM content_items WHERE account_id = ? AND id = ?",
     [accountId, id],
@@ -527,7 +538,7 @@ export function listContentItems(
   accountId: string,
   filters: GrowthContentItemFilters = {},
 ): GrowthContentItem[] {
-  ensureGrowthSchema();
+  ensureGrowthAccountMigration(accountId);
   const clauses = ["account_id = ?"];
   const params: unknown[] = [accountId];
   if (filters.repository !== undefined) {
@@ -635,7 +646,7 @@ function insertContentItem(item: GrowthContentItem): void {
 }
 
 export function createContentItem(input: CreateGrowthContentItemInput): GrowthContentItem {
-  ensureGrowthSchema();
+  ensureGrowthAccountMigration(input.accountId);
   const now = new Date().toISOString();
   const status = input.status ?? "idea";
   const item: GrowthContentItem = {
@@ -711,7 +722,7 @@ export function updateContentItem(
   id: string,
   updates: UpdateGrowthContentItemInput,
 ): GrowthContentItem | null {
-  ensureGrowthSchema();
+  ensureGrowthAccountMigration(accountId);
   const current = getContentItem(accountId, id);
   if (!current) return null;
   const item: GrowthContentItem = {
@@ -758,6 +769,330 @@ export function markContentItemPublished(
 }
 
 export function deleteContentItem(accountId: string, id: string): boolean {
-  ensureGrowthSchema();
+  ensureGrowthAccountMigration(accountId);
   return run("DELETE FROM content_items WHERE account_id = ? AND id = ?", [accountId, id]).changes > 0;
+}
+
+interface LegacyGoalRow {
+  id: string;
+  account_id: string;
+  repository: string;
+  suggestions: string;
+  suggestions_generated_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+const LEGACY_MIGRATION_SCOPE = "growth";
+const LEGACY_MIGRATION_KEY_PREFIX = "migratedSuggestionsV1:";
+const GROWTH_INTERVENTION_CATEGORIES = new Set<GrowthInterventionCategory>([
+  "product",
+  "community",
+  "engineering",
+  "marketing",
+]);
+
+function isLegacyProposal(value: unknown): value is GoalProposal {
+  if (!value || typeof value !== "object") return false;
+  const proposal = value as Partial<GoalProposal>;
+  return typeof proposal.title === "string"
+    && typeof proposal.summary === "string"
+    && typeof proposal.content === "string"
+    && typeof proposal.format === "string"
+    && GOAL_PROPOSAL_FORMATS.includes(proposal.format as GoalProposalFormat);
+}
+
+function parseLegacySuggestions(value: string): GoalSuggestion[] {
+  const parsed = parseJson<unknown>(value, []);
+  if (!Array.isArray(parsed)) return [];
+  return parsed.flatMap((entry) => {
+    if (!entry || typeof entry !== "object") return [];
+    const suggestion = entry as Partial<GoalSuggestion>;
+    if (
+      typeof suggestion.title !== "string"
+      || typeof suggestion.action !== "string"
+      || !GROWTH_INTERVENTION_CATEGORIES.has(suggestion.category as GrowthInterventionCategory)
+    ) return [];
+    const proposals = Array.isArray(suggestion.proposals)
+      ? suggestion.proposals.filter(isLegacyProposal)
+      : undefined;
+    return [{
+      ...suggestion,
+      category: suggestion.category as GrowthInterventionCategory,
+      proposals,
+    } as GoalSuggestion];
+  });
+}
+
+function orderedTimestamp(value: string | null, offset: number): string {
+  const timestamp = value === null ? Number.NaN : Date.parse(value);
+  return new Date((Number.isNaN(timestamp) ? Date.now() : timestamp) + offset).toISOString();
+}
+
+function upsertLegacyIntervention(
+  accountId: string,
+  repository: string,
+  goalId: string,
+  suggestion: GoalSuggestion,
+  createdAt: string,
+): string {
+  const dedupeKey = createLegacySuggestionDedupeKey(repository, goalId, suggestion.title);
+  const existing = get<{ id: string }>(
+    `SELECT id FROM growth_interventions
+     WHERE account_id = ? AND repository = ? AND goal_id = ? AND dedupe_key = ?
+     ORDER BY created_at, id LIMIT 1`,
+    [accountId, repository, goalId, dedupeKey],
+  );
+  if (existing) {
+    run(
+      `UPDATE growth_interventions
+       SET category = ?, title = ?, action = ?, origin = 'ai', rule_key = NULL, dedupe_key = ?, updated_at = ?
+       WHERE account_id = ? AND id = ?`,
+      [suggestion.category, suggestion.title, suggestion.action, dedupeKey, createdAt, accountId, existing.id],
+    );
+    return existing.id;
+  }
+
+  const id = randomUUID();
+  run(
+    `INSERT INTO growth_interventions
+      (id, account_id, repository, goal_id, category, title, action, origin, rule_key, dedupe_key, status, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, 'ai', NULL, ?, 'proposed', ?, ?)`,
+    [
+      id,
+      accountId,
+      repository,
+      goalId,
+      suggestion.category,
+      suggestion.title,
+      suggestion.action,
+      dedupeKey,
+      createdAt,
+      createdAt,
+    ],
+  );
+  return id;
+}
+
+function insertLegacyProposal(
+  accountId: string,
+  repository: string,
+  goalId: string,
+  interventionId: string,
+  proposal: GoalProposal,
+  generatedAt: string,
+  generationVersion: number,
+  createdAt: string,
+): void {
+  const item: GrowthContentItem = {
+    id: randomUUID(),
+    accountId,
+    repository,
+    planId: null,
+    interventionId,
+    goalIds: [goalId],
+    channel: legacyProposalChannel(proposal.format),
+    format: proposal.format,
+    pillar: "",
+    angle: "",
+    title: proposal.title,
+    summary: proposal.summary,
+    body: proposal.content,
+    threadPosts: proposal.threadPosts ?? [],
+    media: legacyMediaToContentMedia(proposal.mediaSuggestions),
+    sources: [],
+    status: "draft",
+    scheduledFor: null,
+    publishedAt: null,
+    publishedUrl: null,
+    generatedAt,
+    generationVersion,
+    evergreen: 0,
+    createdAt,
+    updatedAt: createdAt,
+  };
+  validateContentItem(item);
+  assertContentReferences(item);
+  insertContentItem(item);
+}
+
+function migrationKey(accountId: string): string {
+  return `${LEGACY_MIGRATION_KEY_PREFIX}${accountId}`;
+}
+
+function ensureGrowthAccountMigration(accountId: string): void {
+  ensureGrowthSchema();
+  migrateLegacySuggestions(accountId);
+}
+
+/** Migrates the legacy goal JSON once for one account, including its completion marker. */
+export function migrateLegacySuggestions(accountId: string): void {
+  ensureGrowthSchema();
+  const key = migrationKey(accountId);
+  if (getPreference(LEGACY_MIGRATION_SCOPE, key, false)) return;
+
+  const database = getDatabase();
+  database.transaction(() => {
+    if (getPreference(LEGACY_MIGRATION_SCOPE, key, false)) return;
+    const goalsTable = get<{ name: string }>(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'repository_goals'",
+    );
+    const goals = goalsTable
+      ? all<LegacyGoalRow>(
+        `SELECT id, account_id, repository, suggestions, suggestions_generated_at, created_at, updated_at
+         FROM repository_goals WHERE account_id = ? ORDER BY deadline, created_at`,
+        [accountId],
+      )
+      : [];
+
+    for (const goal of goals) {
+      const suggestions = parseLegacySuggestions(goal.suggestions);
+      suggestions.forEach((suggestion, suggestionIndex) => {
+        const interventionCreatedAt = orderedTimestamp(
+          goal.suggestions_generated_at ?? goal.updated_at ?? goal.created_at,
+          suggestionIndex,
+        );
+        const interventionId = upsertLegacyIntervention(
+          accountId,
+          goal.repository,
+          goal.id,
+          suggestion,
+          interventionCreatedAt,
+        );
+        const generatedAt = suggestion.proposalsGeneratedAt
+          ?? goal.suggestions_generated_at
+          ?? interventionCreatedAt;
+        const generationVersion = suggestion.proposalsVersion ?? 1;
+        suggestion.proposals?.forEach((proposal, proposalIndex) => {
+          insertLegacyProposal(
+            accountId,
+            goal.repository,
+            goal.id,
+            interventionId,
+            proposal,
+            generatedAt,
+            generationVersion,
+            orderedTimestamp(interventionCreatedAt, proposalIndex),
+          );
+        });
+      });
+    }
+
+    setPreference(LEGACY_MIGRATION_SCOPE, key, true);
+  })();
+}
+
+function contentItemToLegacyProposal(item: GrowthContentItem): GoalProposal {
+  const mediaSuggestions = item.media.flatMap((media) => media.url ? [{
+    kind: media.kind,
+    title: media.alt,
+    sourceUrl: media.url,
+    guidance: media.caption ?? "",
+  }] : []);
+  return {
+    title: item.title,
+    format: item.format,
+    summary: item.summary,
+    content: item.body,
+    ...(item.threadPosts.length > 0 ? { threadPosts: item.threadPosts } : {}),
+    ...(mediaSuggestions.length > 0 ? { mediaSuggestions } : {}),
+  };
+}
+
+/** Projects first-class Growth Studio rows into the temporary Missions API shape. */
+export function projectLegacyGoalSuggestions(accountId: string, goalId: string): GoalSuggestion[] {
+  migrateLegacySuggestions(accountId);
+  return listGrowthInterventions(accountId, { goalId }).map((intervention) => {
+    const items = all<GrowthContentItemRow>(
+      `SELECT * FROM content_items
+       WHERE account_id = ? AND intervention_id = ?
+       ORDER BY created_at, id`,
+      [accountId, intervention.id],
+    ).map(contentItemFromRow);
+    return {
+      title: intervention.title,
+      action: intervention.action,
+      category: intervention.category,
+      ...(items.length > 0 ? {
+        proposals: items.map(contentItemToLegacyProposal),
+        proposalsGeneratedAt: items[0].generatedAt,
+        proposalsVersion: items[0].generationVersion,
+      } : {}),
+    };
+  });
+}
+
+export function saveLegacyGoalSuggestions(
+  accountId: string,
+  repository: string,
+  goalId: string,
+  suggestions: GoalSuggestion[],
+): void {
+  migrateLegacySuggestions(accountId);
+  const baseTimestamp = new Date().toISOString();
+  getDatabase().transaction(() => {
+    suggestions.forEach((suggestion, index) => {
+      upsertLegacyIntervention(
+        accountId,
+        repository,
+        goalId,
+        suggestion,
+        orderedTimestamp(baseTimestamp, index),
+      );
+    });
+  })();
+}
+
+export function saveLegacyGoalProposals(
+  accountId: string,
+  goalId: string,
+  suggestionIndex: number,
+  proposals: GoalProposal[],
+  proposalsVersion: number,
+): GoalSuggestion | null {
+  migrateLegacySuggestions(accountId);
+  const intervention = listGrowthInterventions(accountId, { goalId })[suggestionIndex];
+  if (!intervention) return null;
+  const generatedAt = new Date().toISOString();
+  getDatabase().transaction(() => {
+    run(
+      `DELETE FROM content_items
+       WHERE account_id = ? AND intervention_id = ? AND status IN ('idea', 'draft')`,
+      [accountId, intervention.id],
+    );
+    proposals.forEach((proposal, index) => {
+      insertLegacyProposal(
+        accountId,
+        intervention.repository,
+        goalId,
+        intervention.id,
+        proposal,
+        generatedAt,
+        proposalsVersion,
+        orderedTimestamp(generatedAt, index),
+      );
+    });
+  })();
+  return projectLegacyGoalSuggestions(accountId, goalId)[suggestionIndex] ?? null;
+}
+
+/** Removes optional goal links while preserving Growth Studio work. */
+export function detachGoalFromGrowth(accountId: string, goalId: string): void {
+  ensureGrowthAccountMigration(accountId);
+  const rows = all<{ id: string; goal_ids: string }>(
+    "SELECT id, goal_ids FROM content_items WHERE account_id = ?",
+    [accountId],
+  );
+  for (const row of rows) {
+    const goalIds = parseJson(row.goal_ids, [] as string[]);
+    if (!goalIds.includes(goalId)) continue;
+    run(
+      "UPDATE content_items SET goal_ids = ?, updated_at = ? WHERE account_id = ? AND id = ?",
+      [JSON.stringify(goalIds.filter((id) => id !== goalId)), new Date().toISOString(), accountId, row.id],
+    );
+  }
+  run(
+    "UPDATE growth_interventions SET goal_id = NULL, updated_at = ? WHERE account_id = ? AND goal_id = ?",
+    [new Date().toISOString(), accountId, goalId],
+  );
 }

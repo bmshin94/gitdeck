@@ -1,5 +1,12 @@
 import { randomUUID } from "node:crypto";
 import type { GoalContentSource, GoalMetric, GoalProposal, GoalSuggestion, RepositoryGoal } from "../types/goals";
+import {
+  detachGoalFromGrowth,
+  migrateLegacySuggestions,
+  projectLegacyGoalSuggestions,
+  saveLegacyGoalProposals,
+  saveLegacyGoalSuggestions,
+} from "./growth/store";
 import { all, get, getDatabase, run } from "./sqlite";
 
 interface GoalRow {
@@ -44,8 +51,6 @@ function ensureSchema(): void {
 }
 
 function fromRow(row: GoalRow): Omit<RepositoryGoal, "aiEnabled"> {
-  let suggestions: GoalSuggestion[] = [];
-  try { suggestions = JSON.parse(row.suggestions) as GoalSuggestion[]; } catch { /* ignore invalid legacy data */ }
   return {
     id: row.id,
     accountId: row.account_id,
@@ -56,18 +61,20 @@ function fromRow(row: GoalRow): Omit<RepositoryGoal, "aiEnabled"> {
     deadline: row.deadline,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
-    suggestions,
+    suggestions: projectLegacyGoalSuggestions(row.account_id, row.id),
     suggestionsGeneratedAt: row.suggestions_generated_at,
   };
 }
 
 export function listGoals(accountId: string): Array<Omit<RepositoryGoal, "aiEnabled">> {
   ensureSchema();
+  migrateLegacySuggestions(accountId);
   return all<GoalRow>("SELECT * FROM repository_goals WHERE account_id = ? ORDER BY deadline, created_at", [accountId]).map(fromRow);
 }
 
 export function findGoal(accountId: string, id: string): Omit<RepositoryGoal, "aiEnabled"> | null {
   ensureSchema();
+  migrateLegacySuggestions(accountId);
   const row = get<GoalRow>("SELECT * FROM repository_goals WHERE account_id = ? AND id = ?", [accountId, id]);
   return row ? fromRow(row) : null;
 }
@@ -126,23 +133,35 @@ export function saveRepositoryContentSources(accountId: string, repository: stri
 
 export function saveGoalSuggestions(accountId: string, id: string, suggestions: GoalSuggestion[]): void {
   ensureSchema();
+  const goal = findGoal(accountId, id);
+  if (!goal) return;
+  saveLegacyGoalSuggestions(accountId, goal.repository, id, suggestions);
   const now = new Date().toISOString();
-  run("UPDATE repository_goals SET suggestions = ?, suggestions_generated_at = ?, updated_at = ? WHERE account_id = ? AND id = ?", [JSON.stringify(suggestions), now, now, accountId, id]);
+  run(
+    "UPDATE repository_goals SET suggestions_generated_at = ?, updated_at = ? WHERE account_id = ? AND id = ?",
+    [now, now, accountId, id],
+  );
 }
 
-/** Attaches generated proposals to one suggestion; other suggestions are left untouched. */
+/** Attaches generated proposals to one projected suggestion; other suggestions are left untouched. */
 export function saveGoalProposals(accountId: string, id: string, index: number, proposals: GoalProposal[], proposalsVersion: number): GoalSuggestion | null {
   const goal = findGoal(accountId, id);
-  const suggestion = goal?.suggestions[index];
-  if (!goal || !suggestion) return null;
-  const now = new Date().toISOString();
-  const updated: GoalSuggestion = { ...suggestion, proposals, proposalsGeneratedAt: now, proposalsVersion };
-  const suggestions = goal.suggestions.map((entry, position) => (position === index ? updated : entry));
-  run("UPDATE repository_goals SET suggestions = ?, updated_at = ? WHERE account_id = ? AND id = ?", [JSON.stringify(suggestions), now, accountId, id]);
-  return updated;
+  if (!goal?.suggestions[index]) return null;
+  const saved = saveLegacyGoalProposals(accountId, id, index, proposals, proposalsVersion);
+  if (saved) {
+    run(
+      "UPDATE repository_goals SET updated_at = ? WHERE account_id = ? AND id = ?",
+      [saved.proposalsGeneratedAt ?? new Date().toISOString(), accountId, id],
+    );
+  }
+  return saved;
 }
 
 export function deleteGoal(accountId: string, id: string): boolean {
   ensureSchema();
-  return run("DELETE FROM repository_goals WHERE account_id = ? AND id = ?", [accountId, id]).changes > 0;
+  if (!findGoal(accountId, id)) return false;
+  return getDatabase().transaction(() => {
+    detachGoalFromGrowth(accountId, id);
+    return run("DELETE FROM repository_goals WHERE account_id = ? AND id = ?", [accountId, id]).changes > 0;
+  })();
 }

@@ -1,6 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { rm } from "node:fs/promises";
 import type { GrowthContentMedia, GrowthProfileInput } from "../../src/types/growth";
+import type { GoalSuggestion } from "../../src/types/goals";
 
 const { TMP_DIR } = vi.hoisted(() => {
   const { tmpdir } = require("node:os") as typeof import("node:os");
@@ -11,6 +12,7 @@ const { TMP_DIR } = vi.hoisted(() => {
 vi.mock("../../src/server/config", () => ({ DATA_DIR: TMP_DIR }));
 
 const store = await import("../../src/server/growth/store");
+const goalStore = await import("../../src/server/goalStore");
 const { closeDatabase, getDatabase } = await import("../../src/server/sqlite");
 
 const MEDIA: GrowthContentMedia[] = [
@@ -280,5 +282,202 @@ describe("Growth Studio store", () => {
     })).toMatchObject({ title: "Updated title", body: "Updated body", evergreen: 1 });
     expect(store.deleteContentItem("account-a", item.id)).toBe(true);
     expect(store.getContentItem("account-a", item.id)).toBeNull();
+  });
+
+  it("migrates legacy suggestions and proposals once per account with complete mapping", () => {
+    const database = getDatabase();
+    database.exec(`
+      CREATE TABLE repository_goals (
+        id TEXT PRIMARY KEY,
+        account_id TEXT NOT NULL,
+        repository TEXT NOT NULL,
+        metric TEXT NOT NULL,
+        target_value INTEGER NOT NULL,
+        current_value INTEGER NOT NULL,
+        deadline TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        suggestions TEXT NOT NULL DEFAULT '[]',
+        suggestions_generated_at TEXT
+      )
+    `);
+    const legacySuggestions: GoalSuggestion[] = [
+      {
+        category: "marketing",
+        title: "Share the release",
+        action: "Tell maintainers what changed.",
+        proposalsGeneratedAt: "2026-09-03T12:00:00.000Z",
+        proposalsVersion: 7,
+        proposals: [
+          {
+            title: "Release thread",
+            format: "x-thread",
+            summary: "A release overview",
+            content: "First post\n\nSecond post",
+            threadPosts: ["First post", "Second post"],
+            mediaSuggestions: [{
+              kind: "image",
+              title: "Release screenshot",
+              sourceUrl: "https://example.com/release.png",
+              guidance: "Show the new workflow.",
+            }],
+          },
+          {
+            title: "Community discussion",
+            format: "discussion",
+            summary: "Invite feedback",
+            content: "What should come next?",
+          },
+        ],
+      },
+      {
+        category: "community",
+        title: "Welcome contributors",
+        action: "Document one contribution path.",
+      },
+    ];
+    const insertGoal = database.prepare(
+      `INSERT INTO repository_goals
+        (id, account_id, repository, metric, target_value, current_value, deadline, created_at, updated_at, suggestions, suggestions_generated_at)
+       VALUES (?, ?, ?, 'stars', 100, 10, '2026-12-01', ?, ?, ?, ?)`,
+    );
+    insertGoal.run(
+      "goal-a",
+      "account-a",
+      "owner/repo",
+      "2026-09-01T00:00:00.000Z",
+      "2026-09-02T00:00:00.000Z",
+      JSON.stringify(legacySuggestions),
+      "2026-09-02T00:00:00.000Z",
+    );
+    insertGoal.run(
+      "goal-b",
+      "account-b",
+      "owner/private",
+      "2026-09-01T00:00:00.000Z",
+      "2026-09-02T00:00:00.000Z",
+      JSON.stringify(legacySuggestions.slice(0, 1)),
+      "2026-09-02T00:00:00.000Z",
+    );
+
+    store.migrateLegacySuggestions("account-a");
+    store.migrateLegacySuggestions("account-a");
+
+    const interventions = store.listGrowthInterventions("account-a", { goalId: "goal-a" });
+    expect(interventions).toHaveLength(2);
+    expect(interventions.map(({ title }) => title)).toEqual(["Share the release", "Welcome contributors"]);
+    expect(interventions[0]).toMatchObject({
+      repository: "owner/repo",
+      category: "marketing",
+      origin: "ai",
+      status: "proposed",
+      dedupeKey: "owner/repo:goal-a:share-the-release",
+    });
+    const items = store.listContentItems("account-a", { repository: "owner/repo" });
+    expect(items).toHaveLength(2);
+    expect(items[0]).toMatchObject({
+      interventionId: interventions[0].id,
+      goalIds: ["goal-a"],
+      channel: "x",
+      format: "x-thread",
+      body: "First post\n\nSecond post",
+      threadPosts: ["First post", "Second post"],
+      media: [{
+        kind: "image",
+        url: "https://example.com/release.png",
+        alt: "Release screenshot",
+        caption: "Show the new workflow.",
+      }],
+      status: "draft",
+      generatedAt: "2026-09-03T12:00:00.000Z",
+      generationVersion: 7,
+    });
+    expect(items[1].channel).toBe("other");
+    expect(database.prepare(
+      "SELECT COUNT(*) AS count FROM growth_interventions WHERE account_id = 'account-b'",
+    ).get()).toEqual({ count: 0 });
+    expect(database.prepare(
+      "SELECT value FROM preferences WHERE scope = 'growth' AND key = ?",
+    ).get("migratedSuggestionsV1:account-a")).toEqual({ value: "true" });
+    expect(database.prepare(
+      "SELECT suggestions FROM repository_goals WHERE id = 'goal-a'",
+    ).get()).toEqual({ suggestions: JSON.stringify(legacySuggestions) });
+
+    const projected = goalStore.findGoal("account-a", "goal-a");
+    expect(projected?.suggestions).toHaveLength(2);
+    expect(projected?.suggestions[0]).toMatchObject({
+      title: "Share the release",
+      proposalsVersion: 7,
+      proposalsGeneratedAt: "2026-09-03T12:00:00.000Z",
+      proposals: [
+        { title: "Release thread", format: "x-thread" },
+        { title: "Community discussion", format: "discussion" },
+      ],
+    });
+  });
+
+  it("persists new goal advice as growth rows while preserving legacy JSON", () => {
+    const goal = goalStore.createGoal({
+      accountId: "account-a",
+      repository: "owner/repo",
+      metric: "stars",
+      targetValue: 100,
+      deadline: "2026-12-01",
+    });
+    goalStore.saveGoalSuggestions("account-a", goal.id, [{
+      category: "marketing",
+      title: "Share the release",
+      action: "Publish a release thread.",
+    }]);
+    const intervention = store.listGrowthInterventions("account-a", { goalId: goal.id })[0];
+    store.updateGrowthInterventionStatus("account-a", intervention.id, "accepted");
+    goalStore.saveGoalSuggestions("account-a", goal.id, [{
+      category: "marketing",
+      title: " SHARE the release! ",
+      action: "Publish an updated release thread.",
+    }]);
+
+    expect(store.listGrowthInterventions("account-a", { goalId: goal.id })).toEqual([
+      expect.objectContaining({
+        id: intervention.id,
+        status: "accepted",
+        action: "Publish an updated release thread.",
+      }),
+    ]);
+    expect(getDatabase().prepare(
+      "SELECT suggestions FROM repository_goals WHERE id = ?",
+    ).get(goal.id)).toEqual({ suggestions: "[]" });
+
+    const saved = goalStore.saveGoalProposals("account-a", goal.id, 0, [{
+      title: "Release post",
+      format: "linkedin-post",
+      summary: "A concise release summary",
+      content: "The release is ready to try.",
+      mediaSuggestions: [{
+        kind: "image",
+        title: "Product screenshot",
+        sourceUrl: "https://example.com/product.png",
+        guidance: "Highlight the updated screen.",
+      }],
+    }], 4);
+    expect(saved).toMatchObject({
+      title: " SHARE the release! ",
+      proposalsVersion: 4,
+      proposals: [{ title: "Release post", format: "linkedin-post" }],
+    });
+    expect(store.listContentItems("account-a")).toEqual([
+      expect.objectContaining({
+        interventionId: intervention.id,
+        channel: "linkedin",
+        generationVersion: 4,
+        status: "draft",
+      }),
+    ]);
+
+    expect(goalStore.deleteGoal("account-a", goal.id)).toBe(true);
+    expect(store.listGrowthInterventions("account-a", { goalId: null })).toEqual([
+      expect.objectContaining({ id: intervention.id }),
+    ]);
+    expect(store.listContentItems("account-a")[0].goalIds).toEqual([]);
   });
 });
