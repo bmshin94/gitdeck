@@ -7,6 +7,7 @@ import type {
   GrowthContentItemsData,
   GrowthContentPlansData,
   GrowthDraftContentData,
+  GrowthDraftContentItemData,
   GrowthGeneratedContentPlanData,
   GrowthGeneratedInterventionsData,
   GrowthInterventionData,
@@ -147,6 +148,13 @@ export async function draftGrowthContentFromIntervention(interventionId: string,
     jsonRequest("POST", { interventionId, refresh }),
   );
   return data;
+}
+
+export async function draftGrowthContentItem(id: string, refresh = false, signal?: AbortSignal) {
+  return requestJson<GrowthDraftContentItemData>(
+    `/api/growth/content/${encodeURIComponent(id)}/draft`,
+    jsonRequest("POST", refresh ? { refresh: true } : {}, signal),
+  );
 }
 
 export async function fetchGrowthContentPlans(repository: string, signal?: AbortSignal) {

@@ -544,6 +544,51 @@ describe("Growth API routes", () => {
     expect(state.generateProposals).not.toHaveBeenCalled();
   });
 
+  it("drafts one planned item with strict validation, account scope, refresh, and status protection", async () => {
+    const created = await dispatch("POST", "/api/growth/content", {
+      repository: "acme/repo",
+      channel: "linkedin",
+      format: "linkedin-post",
+      status: "idea",
+      angle: "Explain the verified repository",
+      summary: "Try it and share feedback",
+    });
+    const id = created.body.contentItem.id as string;
+
+    expect((await dispatch("POST", `/api/growth/content/${id}/draft`, { unknown: true })).status).toBe(400);
+    expect((await dispatch("POST", `/api/growth/content/${id}/draft`, { refresh: "yes" })).status).toBe(400);
+    state.activeAccountId = "account-b";
+    expect((await dispatch("POST", `/api/growth/content/${id}/draft`, {})).status).toBe(404);
+    expect(state.collectSignals).not.toHaveBeenCalled();
+
+    state.activeAccountId = "account-a";
+    const drafted = await dispatch("POST", `/api/growth/content/${id}/draft`);
+    expect(drafted.status).toBe(200);
+    expect(drafted.body).toMatchObject({
+      ok: true,
+      aiEnabled: false,
+      usedFallback: true,
+      cached: false,
+      mediaRequired: true,
+      contentItem: { id, status: "draft" },
+    });
+    expect(drafted.body.contentItem.body).not.toBe("");
+
+    const cached = await dispatch("POST", `/api/growth/content/${id}/draft`, {});
+    expect(cached.body).toMatchObject({ cached: true, contentItem: { id } });
+    const refreshed = await dispatch("POST", `/api/growth/content/${id}/draft`, { refresh: true });
+    expect(refreshed.body).toMatchObject({ cached: false, contentItem: { id } });
+    expect(state.collectSignals).toHaveBeenCalledTimes(2);
+
+    expect((await dispatch("PATCH", `/api/growth/content/${id}`, {
+      media: [{ kind: "image", url: "https://example.com/release.png", alt: "Release" }],
+      status: "ready",
+    })).status).toBe(200);
+    const protectedResponse = await dispatch("POST", `/api/growth/content/${id}/draft`, { refresh: true });
+    expect(protectedResponse.status).toBe(409);
+    expect(growthStore.getContentItem("account-a", id)).toMatchObject({ status: "ready", body: drafted.body.contentItem.body });
+  });
+
   it("supports allowlisted updates, scheduling, publishing, and deletion", async () => {
     const interventionResponse = await dispatch("POST", "/api/growth/interventions", {
       repository: "acme/repo",

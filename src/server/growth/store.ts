@@ -7,6 +7,7 @@ import type {
   CreateGrowthContentItemInput,
   CreateGrowthContentPlanInput,
   CreateGrowthInterventionInput,
+  GrowthAsset,
   GrowthContentItem,
   GrowthContentItemFilters,
   GrowthContentItemStatus,
@@ -88,6 +89,23 @@ interface GrowthContentPlanRow {
   pillars: string;
   status: GrowthContentPlanStatus;
   generated_at: string;
+  created_at: string;
+}
+
+interface GrowthAssetRow {
+  id: string;
+  account_id: string;
+  repository: string;
+  kind: GrowthAsset["kind"];
+  origin: GrowthAsset["origin"];
+  path: string | null;
+  url: string | null;
+  title: string;
+  alt: string;
+  width: number | null;
+  height: number | null;
+  card_template: string | null;
+  card_data: string | null;
   created_at: string;
 }
 
@@ -595,6 +613,36 @@ export function archiveContentPlan(accountId: string, id: string): GrowthContent
     [accountId, id],
   );
   return result.changes > 0 ? getContentPlan(accountId, id) : null;
+}
+
+function growthAssetFromRow(row: GrowthAssetRow): GrowthAsset {
+  return {
+    id: row.id,
+    accountId: row.account_id,
+    repository: row.repository,
+    kind: row.kind,
+    origin: row.origin,
+    path: row.path,
+    url: row.url,
+    title: row.title,
+    alt: row.alt,
+    width: row.width,
+    height: row.height,
+    cardTemplate: row.card_template,
+    cardData: row.card_data === null ? null : parseJson(row.card_data, {} as Record<string, unknown>),
+    createdAt: row.created_at,
+  };
+}
+
+/** Lists the stored media library for exactly one account and repository. */
+export function listGrowthAssets(accountId: string, repository: string): GrowthAsset[] {
+  ensureGrowthAccountMigration(accountId);
+  return all<GrowthAssetRow>(
+    `SELECT * FROM growth_assets
+     WHERE account_id = ? AND repository = ?
+     ORDER BY created_at, id`,
+    [accountId, repository],
+  ).map(growthAssetFromRow);
 }
 
 function contentItemFromRow(row: GrowthContentItemRow): GrowthContentItem {

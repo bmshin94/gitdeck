@@ -27,6 +27,10 @@ import {
   upsertGrowthProfile,
 } from "../growth/store";
 import { generateGrowthContentPlan } from "../growth/planner";
+import {
+  draftGrowthContentItem,
+  GrowthContentDraftConflictError,
+} from "../growth/drafter";
 import { parseJsonBody, sendJson } from "../http";
 import type { AppRouter, RouteContext } from "../router";
 import {
@@ -636,6 +640,37 @@ async function draftContent(ctx: RouteContext): Promise<void> {
   }
 }
 
+async function draftContentItem(ctx: RouteContext): Promise<void> {
+  const account = await requireAccount(ctx);
+  if (!account) return;
+  if (!getContentItem(account.id, ctx.params.id ?? "")) {
+    return sendJson(ctx.res, 404, { ok: false, error: "content item not found" });
+  }
+  const body = await parseJsonBody<Record<string, unknown>>(ctx.req, ctx.res);
+  if (!body) return;
+  if (
+    !isRecord(body)
+    || !hasOnlyKeys(body, ["refresh"])
+    || (body.refresh !== undefined && typeof body.refresh !== "boolean")
+  ) return badRequest(ctx, "invalid content draft body");
+
+  try {
+    const result = await draftGrowthContentItem(account.id, ctx.params.id ?? "", {
+      refresh: body.refresh === true,
+    });
+    if (!result) return sendJson(ctx.res, 404, { ok: false, error: "content item not found" });
+    sendJson(ctx.res, 200, { ok: true, ...result });
+  } catch (error) {
+    if (error instanceof GrowthContentDraftConflictError) {
+      return sendJson(ctx.res, 409, { ok: false, error: error.message });
+    }
+    sendJson(ctx.res, error instanceof AiRequestError ? 502 : 500, {
+      ok: false,
+      error: (error as Error).message,
+    });
+  }
+}
+
 async function patchContent(ctx: RouteContext): Promise<void> {
   const account = await requireAccount(ctx);
   if (!account) return;
@@ -703,6 +738,7 @@ export function registerGrowthRoutes(router: AppRouter): void {
   router.get("/api/growth/content", content);
   router.post("/api/growth/content", content);
   router.post("/api/growth/content/draft", draftContent);
+  router.post("/api/growth/content/:id/draft", draftContentItem);
   router.on("PATCH", "/api/growth/content/:id", patchContent);
   router.post("/api/growth/content/:id/published", publishContent);
   router.delete("/api/growth/content/:id", removeContent);

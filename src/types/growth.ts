@@ -357,3 +357,10 @@ export interface GrowthContentItemData {
 export interface GrowthDraftContentData extends GrowthContentItemsData {
   cached: boolean;
 }
+
+export interface GrowthDraftContentItemData extends GrowthContentItemData {
+  aiEnabled: boolean;
+  usedFallback: boolean;
+  cached: boolean;
+  mediaRequired: boolean;
+}
