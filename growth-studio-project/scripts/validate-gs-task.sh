@@ -80,6 +80,14 @@ for locale in src/i18n/en.ts src/i18n/it.ts; do
   [[ -f "$locale" ]] || { echo "ERROR: missing $locale" >&2; fail=1; }
 done
 
+step "Guard: English and Italian locale key parity"
+command -v node >/dev/null 2>&1 || { echo "node is required but not in PATH." >&2; exit 1; }
+if [[ -f src/i18n/en.ts && -f src/i18n/it.ts ]] &&
+  ! node "${PROJECT_DIR}/scripts/check-i18n-key-parity.mjs" \
+    src/i18n/en.ts src/i18n/it.ts; then
+  fail=1
+fi
+
 command -v npm >/dev/null 2>&1 || { echo "npm is required but not in PATH." >&2; exit 1; }
 [[ -d node_modules ]] || { step "npm install"; npm install; }
 
