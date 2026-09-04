@@ -257,6 +257,58 @@ export interface GrowthContentItemFilters {
   scheduledTo?: string;
 }
 
+export const GROWTH_CARD_TEMPLATES = [
+  "release",
+  "milestone",
+  "stats",
+  "quote",
+  "whats-new",
+] as const;
+export type GrowthCardTemplate = (typeof GROWTH_CARD_TEMPLATES)[number];
+
+export interface GrowthReleaseCardData {
+  version: string;
+  highlights: string[];
+}
+
+export interface GrowthMilestoneCardData {
+  value: number;
+  label: string;
+  detail: string;
+}
+
+export interface GrowthStatsCardData {
+  stats: Array<{ label: string; value: number }>;
+}
+
+export interface GrowthQuoteCardData {
+  quote: string;
+  attribution: string;
+}
+
+export interface GrowthWhatsNewCardData {
+  items: string[];
+}
+
+export interface GrowthCardDataByTemplate {
+  release: GrowthReleaseCardData;
+  milestone: GrowthMilestoneCardData;
+  stats: GrowthStatsCardData;
+  quote: GrowthQuoteCardData;
+  "whats-new": GrowthWhatsNewCardData;
+}
+
+export type GrowthCardData = GrowthCardDataByTemplate[GrowthCardTemplate];
+export type CreateGrowthCardInput = {
+  [Template in GrowthCardTemplate]: {
+    repository: string;
+    template: Template;
+    title: string;
+    alt: string;
+    data: GrowthCardDataByTemplate[Template];
+  };
+}[GrowthCardTemplate];
+
 export type GrowthAssetKind = "image" | "video";
 export type GrowthAssetOrigin = "upload" | "readme" | "website" | "generated";
 export type GrowthAssetImportOrigin = Extract<GrowthAssetOrigin, "readme" | "website">;

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import {
   buildGrowthAssetFileUrl,
+  createGrowthCard,
   fetchGrowthAssetImportCandidates,
   fetchGrowthAssets,
   importGrowthAsset,
@@ -10,15 +11,22 @@ import { useI18n } from "../../i18n/I18nProvider";
 import type { TranslationKey } from "../../i18n/translations";
 import {
   GROWTH_ASSET_MIME_TYPES,
+  GROWTH_CARD_TEMPLATES,
   type GrowthAssetImportCandidate,
   type GrowthAssetKind,
   type GrowthAssetMetadata,
   type GrowthAssetOrigin,
+  type GrowthCardTemplate,
 } from "../../types/growth";
 import {
   validateGrowthAssetUpload,
   type GrowthAssetUploadValidationIssue,
 } from "../../utils/growth/assets";
+import {
+  createGrowthCardInputFromForm,
+  EMPTY_GROWTH_CARD_FORM,
+  type GrowthCardFormFields,
+} from "../../utils/growth/cardForm";
 
 interface GrowthAssetLibraryProps {
   accountId: string | null;
@@ -53,6 +61,13 @@ const originKeys: Record<GrowthAssetOrigin, TranslationKey> = {
   readme: "growth.assetsOriginReadme",
   website: "growth.assetsOriginWebsite",
   generated: "growth.assetsOriginGenerated",
+};
+const cardTemplateKeys: Record<GrowthCardTemplate, TranslationKey> = {
+  release: "growth.cardsTemplateRelease",
+  milestone: "growth.cardsTemplateMilestone",
+  stats: "growth.cardsTemplateStats",
+  quote: "growth.cardsTemplateQuote",
+  "whats-new": "growth.cardsTemplateWhatsNew",
 };
 
 async function readImageDimensions(file: File, signal: AbortSignal): Promise<ImageDimensions> {
@@ -99,6 +114,11 @@ export function GrowthAssetLibrary({ accountId, enabled, repository }: GrowthAss
   const [uploadError, setUploadError] = useState("");
   const [validationError, setValidationError] = useState("");
   const [uploaded, setUploaded] = useState(false);
+  const [cardTemplate, setCardTemplate] = useState<GrowthCardTemplate>("release");
+  const [cardFields, setCardFields] = useState<GrowthCardFormFields>(EMPTY_GROWTH_CARD_FORM);
+  const [cardCreating, setCardCreating] = useState(false);
+  const [cardError, setCardError] = useState("");
+  const [cardCreated, setCardCreated] = useState<GrowthAssetMetadata | null>(null);
   const [importCandidates, setImportCandidates] = useState<GrowthAssetImportCandidate[]>([]);
   const [importFields, setImportFields] = useState<Record<string, ImportCandidateFields>>({});
   const [importedAssets, setImportedAssets] = useState<Record<string, GrowthAssetMetadata>>({});
@@ -109,12 +129,15 @@ export function GrowthAssetLibrary({ accountId, enabled, repository }: GrowthAss
   const [candidateError, setCandidateError] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const uploadControllerRef = useRef<AbortController | null>(null);
+  const cardControllerRef = useRef<AbortController | null>(null);
   const candidateControllerRef = useRef<AbortController | null>(null);
   const importControllersRef = useRef(new Map<string, AbortController>());
 
   useEffect(() => {
     uploadControllerRef.current?.abort();
     uploadControllerRef.current = null;
+    cardControllerRef.current?.abort();
+    cardControllerRef.current = null;
     candidateControllerRef.current?.abort();
     candidateControllerRef.current = null;
     importControllersRef.current.forEach((controller) => controller.abort());
@@ -128,6 +151,11 @@ export function GrowthAssetLibrary({ accountId, enabled, repository }: GrowthAss
     setValidationError("");
     setUploaded(false);
     setUploading(false);
+    setCardTemplate("release");
+    setCardFields(EMPTY_GROWTH_CARD_FORM);
+    setCardCreating(false);
+    setCardError("");
+    setCardCreated(null);
     setImportCandidates([]);
     setImportFields({});
     setImportedAssets({});
@@ -181,6 +209,7 @@ export function GrowthAssetLibrary({ accountId, enabled, repository }: GrowthAss
       controller.abort();
       candidateController.abort();
       uploadControllerRef.current?.abort();
+      cardControllerRef.current?.abort();
       importControllersRef.current.forEach((activeController) => activeController.abort());
     };
   }, [accountId, enabled, repository, t]);
@@ -249,6 +278,51 @@ export function GrowthAssetLibrary({ accountId, enabled, repository }: GrowthAss
       if (importControllersRef.current.get(candidate.url) === controller) {
         importControllersRef.current.delete(candidate.url);
         setImportBusy((current) => ({ ...current, [candidate.url]: false }));
+      }
+    }
+  }
+
+  function updateCardField<Field extends keyof GrowthCardFormFields>(field: Field, value: GrowthCardFormFields[Field]) {
+    setCardFields((current) => ({ ...current, [field]: value }));
+    setCardError("");
+    setCardCreated(null);
+  }
+
+  async function submitCard(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setCardError("");
+    setCardCreated(null);
+    const input = createGrowthCardInputFromForm(repository, cardTemplate, cardFields);
+    if (!input) {
+      setCardError(t("growth.cardsValidation"));
+      return;
+    }
+
+    cardControllerRef.current?.abort();
+    const controller = new AbortController();
+    cardControllerRef.current = controller;
+    setCardCreating(true);
+    try {
+      const saved = await createGrowthCard(input, controller.signal);
+      if (controller.signal.aborted) return;
+      setAssets((current) => [saved, ...current.filter((asset) => asset.id !== saved.id)]);
+      setCardCreated(saved);
+      try {
+        const refreshed = await fetchGrowthAssets(repository, controller.signal);
+        if (!controller.signal.aborted) setAssets(refreshed);
+      } catch (cause) {
+        if (!controller.signal.aborted && (cause as Error).name !== "AbortError") {
+          setCardError(t("growth.cardsRefreshError", { message: (cause as Error).message }));
+        }
+      }
+    } catch (cause) {
+      if (!controller.signal.aborted && (cause as Error).name !== "AbortError") {
+        setCardError(t("growth.cardsCreateError", { message: (cause as Error).message }));
+      }
+    } finally {
+      if (cardControllerRef.current === controller) {
+        cardControllerRef.current = null;
+        setCardCreating(false);
       }
     }
   }
@@ -374,6 +448,184 @@ export function GrowthAssetLibrary({ accountId, enabled, repository }: GrowthAss
         <button className="btn primary" type="submit" disabled={uploading}>
           {uploading ? t("growth.assetsUploading") : t("growth.assetsUpload")}
         </button>
+      </form>
+
+      <form className="growth-card-creator" aria-busy={cardCreating} onSubmit={(event) => void submitCard(event)}>
+        <div className="growth-card-creator-heading">
+          <h3>{t("growth.cardsTitle")}</h3>
+          <p>{t("growth.cardsDescription")}</p>
+        </div>
+        <div className="growth-card-creator-fields">
+          <label htmlFor="growth-card-template">
+            {t("growth.cardsTemplate")}
+            <select
+              id="growth-card-template"
+              value={cardTemplate}
+              onChange={(event) => {
+                setCardTemplate(event.target.value as GrowthCardTemplate);
+                setCardError("");
+                setCardCreated(null);
+              }}
+            >
+              {GROWTH_CARD_TEMPLATES.map((template) => (
+                <option key={template} value={template}>{t(cardTemplateKeys[template])}</option>
+              ))}
+            </select>
+          </label>
+          <label htmlFor="growth-card-title">
+            {t("growth.assetsTitleLabel")}
+            <input
+              id="growth-card-title"
+              required
+              maxLength={500}
+              value={cardFields.title}
+              onChange={(event) => updateCardField("title", event.target.value)}
+            />
+          </label>
+          <label className="growth-card-wide-field" htmlFor="growth-card-alt">
+            {t("growth.assetsAltLabel")}
+            <textarea
+              id="growth-card-alt"
+              required
+              maxLength={2000}
+              rows={2}
+              value={cardFields.alt}
+              onChange={(event) => updateCardField("alt", event.target.value)}
+            />
+          </label>
+
+          {cardTemplate === "release" ? (
+            <>
+              <label htmlFor="growth-card-version">
+                {t("growth.cardsVersion")}
+                <input
+                  id="growth-card-version"
+                  required
+                  maxLength={80}
+                  value={cardFields.version}
+                  onChange={(event) => updateCardField("version", event.target.value)}
+                />
+              </label>
+              <label className="growth-card-wide-field" htmlFor="growth-card-highlights">
+                {t("growth.cardsHighlights")}
+                <textarea
+                  id="growth-card-highlights"
+                  required
+                  maxLength={483}
+                  rows={4}
+                  value={cardFields.highlights}
+                  onChange={(event) => updateCardField("highlights", event.target.value)}
+                />
+                <small>{t("growth.cardsHighlightsHint")}</small>
+              </label>
+            </>
+          ) : null}
+
+          {cardTemplate === "milestone" ? (
+            <>
+              <label htmlFor="growth-card-milestone-value">
+                {t("growth.cardsMilestoneValue")}
+                <input
+                  id="growth-card-milestone-value"
+                  required
+                  type="number"
+                  min={0}
+                  max={999999999}
+                  step={1}
+                  value={cardFields.milestoneValue}
+                  onChange={(event) => updateCardField("milestoneValue", event.target.value)}
+                />
+              </label>
+              <label htmlFor="growth-card-milestone-label">
+                {t("growth.cardsMilestoneLabel")}
+                <input
+                  id="growth-card-milestone-label"
+                  required
+                  maxLength={80}
+                  value={cardFields.milestoneLabel}
+                  onChange={(event) => updateCardField("milestoneLabel", event.target.value)}
+                />
+              </label>
+              <label className="growth-card-wide-field" htmlFor="growth-card-milestone-detail">
+                {t("growth.cardsMilestoneDetail")}
+                <textarea
+                  id="growth-card-milestone-detail"
+                  required
+                  maxLength={160}
+                  rows={2}
+                  value={cardFields.milestoneDetail}
+                  onChange={(event) => updateCardField("milestoneDetail", event.target.value)}
+                />
+              </label>
+            </>
+          ) : null}
+
+          {cardTemplate === "stats" ? (
+            <label className="growth-card-wide-field" htmlFor="growth-card-stats">
+              {t("growth.cardsStats")}
+              <textarea
+                id="growth-card-stats"
+                required
+                maxLength={260}
+                rows={4}
+                value={cardFields.stats}
+                onChange={(event) => updateCardField("stats", event.target.value)}
+              />
+              <small>{t("growth.cardsStatsHint")}</small>
+            </label>
+          ) : null}
+
+          {cardTemplate === "quote" ? (
+            <>
+              <label className="growth-card-wide-field" htmlFor="growth-card-quote">
+                {t("growth.cardsQuote")}
+                <textarea
+                  id="growth-card-quote"
+                  required
+                  maxLength={280}
+                  rows={4}
+                  value={cardFields.quote}
+                  onChange={(event) => updateCardField("quote", event.target.value)}
+                />
+              </label>
+              <label htmlFor="growth-card-attribution">
+                {t("growth.cardsAttribution")}
+                <input
+                  id="growth-card-attribution"
+                  required
+                  maxLength={100}
+                  value={cardFields.attribution}
+                  onChange={(event) => updateCardField("attribution", event.target.value)}
+                />
+              </label>
+            </>
+          ) : null}
+
+          {cardTemplate === "whats-new" ? (
+            <label className="growth-card-wide-field" htmlFor="growth-card-whats-new">
+              {t("growth.cardsWhatsNewItems")}
+              <textarea
+                id="growth-card-whats-new"
+                required
+                maxLength={604}
+                rows={5}
+                value={cardFields.whatsNewItems}
+                onChange={(event) => updateCardField("whatsNewItems", event.target.value)}
+              />
+              <small>{t("growth.cardsWhatsNewHint")}</small>
+            </label>
+          ) : null}
+        </div>
+        <button className="btn primary" type="submit" disabled={cardCreating}>
+          {cardCreating ? t("growth.cardsCreating") : t("growth.cardsCreate")}
+        </button>
+        {cardError ? <p className="growth-asset-error" role="alert">{cardError}</p> : null}
+        {cardCreated ? (
+          <div className="growth-card-created" role="status">
+            <p>{t("growth.cardsCreated")}</p>
+            <img src={buildGrowthAssetFileUrl(cardCreated.id)} alt={cardCreated.alt} />
+          </div>
+        ) : null}
       </form>
 
       <section className="growth-asset-import" aria-labelledby="growth-assets-import-title">

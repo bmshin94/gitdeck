@@ -27,7 +27,13 @@ import {
   readPublicMedia,
   UnsupportedPublicMediaTypeError,
 } from "./signals";
-import { createGrowthAsset, findGrowthAssetByUrl, getGrowthAsset } from "./store";
+import {
+  GROWTH_CARD_HEIGHT,
+  GROWTH_CARD_WIDTH,
+  normalizeGrowthCard,
+  renderGrowthCard,
+} from "./cards";
+import { createGrowthAsset, findGrowthAssetByUrl, getGrowthAsset, getGrowthProfile } from "./store";
 
 export { GROWTH_ASSET_MIME_TYPES, MAX_GROWTH_ASSET_BYTES } from "../../types/growth";
 export type { GrowthAssetMimeType } from "../../types/growth";
@@ -89,8 +95,17 @@ export interface UploadGrowthAssetOptions extends GrowthAssetUploadMetadata {
 
 export interface GrowthAssetFile {
   body: Buffer;
-  contentType: GrowthAssetMimeType;
+  contentType: GrowthAssetMimeType | "image/svg+xml";
   length: number;
+}
+
+export interface GenerateGrowthCardOptions {
+  accountId: string;
+  repository: string;
+  template: unknown;
+  title: string;
+  alt: string;
+  data: unknown;
 }
 
 export interface ImportGrowthAssetOptions {
@@ -319,10 +334,54 @@ export async function persistImportedGrowthAsset(
   };
 }
 
-/** Reads one local upload or revalidates and proxies one URL-backed asset owned by the account. */
+/** Persists validated card metadata without writing SVG or raster bytes to disk. */
+export function persistGeneratedGrowthCard(options: GenerateGrowthCardOptions): GrowthAsset {
+  if (!options.accountId.trim()) throw new GrowthAssetValidationError("invalid account");
+  if (!parseRepositoryName(options.repository)) throw new GrowthAssetValidationError("invalid repository");
+  const title = normalizeText(options.title, "title", 500);
+  const alt = normalizeText(options.alt, "alt", 2_000);
+  const normalized = normalizeGrowthCard(options.template, options.data);
+  return createGrowthAsset({
+    accountId: options.accountId,
+    repository: options.repository,
+    kind: "image",
+    origin: "generated",
+    title,
+    alt,
+    width: GROWTH_CARD_WIDTH,
+    height: GROWTH_CARD_HEIGHT,
+    cardTemplate: normalized.template,
+    cardData: { ...normalized.data },
+  });
+}
+
+/** Reads an account-owned upload, remote import, or safely rendered generated card. */
 export async function readGrowthAssetFile(accountId: string, id: string): Promise<GrowthAssetFile | null> {
   const asset = getGrowthAsset(accountId, id);
   if (!asset) return null;
+  if (
+    asset.origin === "generated"
+    && asset.kind === "image"
+    && asset.path === null
+    && asset.url === null
+    && asset.cardTemplate !== null
+    && asset.cardData !== null
+  ) {
+    try {
+      const profile = getGrowthProfile(accountId, asset.repository);
+      const body = Buffer.from(renderGrowthCard({
+        repository: asset.repository,
+        color: profile.color,
+        template: asset.cardTemplate,
+        title: asset.title,
+        alt: asset.alt,
+        data: asset.cardData,
+      }), "utf8");
+      return { body, contentType: "image/svg+xml", length: body.byteLength };
+    } catch {
+      return null;
+    }
+  }
   if ((asset.origin === "readme" || asset.origin === "website") && asset.path === null && asset.url !== null) {
     try {
       const media = await readPublicMedia(asset.url);

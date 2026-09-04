@@ -37,12 +37,14 @@ import {
   discoverGrowthAssetImportCandidates,
   GrowthAssetTooLargeError,
   GrowthAssetValidationError,
+  persistGeneratedGrowthCard,
   persistImportedGrowthAsset,
   persistUploadedGrowthAsset,
   readGrowthAssetFile,
   toGrowthAssetMetadata,
   UnsupportedGrowthAssetTypeError,
 } from "../growth/assets";
+import { GrowthCardValidationError } from "../growth/cards";
 import {
   draftGrowthContentItem,
   GrowthContentDraftConflictError,
@@ -687,6 +689,42 @@ async function importAsset(ctx: RouteContext): Promise<void> {
   }
 }
 
+async function createCardAsset(ctx: RouteContext): Promise<void> {
+  const account = await requireAccount(ctx);
+  if (!account) return;
+  const body = await parseJsonBody<Record<string, unknown>>(ctx.req, ctx.res);
+  if (!body) return;
+  const fields = ["repository", "template", "title", "alt", "data"] as const;
+  if (
+    !isRecord(body)
+    || Object.keys(body).length !== fields.length
+    || !hasOnlyKeys(body, fields)
+    || typeof body.repository !== "string"
+    || typeof body.template !== "string"
+    || typeof body.title !== "string"
+    || typeof body.alt !== "string"
+  ) return badRequest(ctx, "invalid card asset body");
+  const repository = repositoryFromValue(body.repository);
+  if (!repository) return badRequest(ctx, "invalid repository");
+
+  try {
+    const asset = persistGeneratedGrowthCard({
+      accountId: account.id,
+      repository,
+      template: body.template,
+      title: body.title,
+      alt: body.alt,
+      data: body.data,
+    });
+    sendJson(ctx.res, 201, { ok: true, asset: toGrowthAssetMetadata(asset) });
+  } catch (error) {
+    if (error instanceof GrowthAssetValidationError || error instanceof GrowthCardValidationError) {
+      return badRequest(ctx, error.message);
+    }
+    sendJson(ctx.res, 500, { ok: false, error: "card asset creation failed" });
+  }
+}
+
 async function assetFile(ctx: RouteContext): Promise<void> {
   const account = await requireAccount(ctx);
   if (!account) return;
@@ -1015,6 +1053,7 @@ export function registerGrowthRoutes(router: AppRouter): void {
   router.post("/api/growth/assets", assets);
   router.get("/api/growth/assets/import-candidates", assetImportCandidates);
   router.post("/api/growth/assets/import", importAsset);
+  router.post("/api/growth/assets/cards", createCardAsset);
   router.get("/api/growth/assets/:id/file", assetFile);
   router.get("/api/growth/plans", plans);
   router.post("/api/growth/plans/generate", generatePlan);

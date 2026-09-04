@@ -1,5 +1,6 @@
 import { AuthRequiredClientError } from "./github";
 import type {
+  CreateGrowthCardInput,
   CreateGrowthContentItemInput,
   GenerateGrowthContentPlanInput,
   GrowthArchivedContentPlanData,
@@ -129,6 +130,15 @@ export async function importGrowthAsset(input: ImportGrowthAssetInput, signal?: 
     "/api/growth/assets/import",
     jsonRequest("POST", input, signal),
   );
+}
+
+export async function createGrowthCard(input: CreateGrowthCardInput, signal?: AbortSignal) {
+  if (!parseRepositoryName(input.repository)) throw new Error("invalid repository");
+  const data = await requestJson<GrowthAssetData>(
+    "/api/growth/assets/cards",
+    jsonRequest("POST", input, signal),
+  );
+  return data.asset;
 }
 
 export async function uploadGrowthAsset(input: UploadGrowthAssetInput, signal?: AbortSignal) {

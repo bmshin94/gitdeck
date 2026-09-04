@@ -620,6 +620,14 @@ export function archiveContentPlan(accountId: string, id: string): GrowthContent
   return result.changes > 0 ? getContentPlan(accountId, id) : null;
 }
 
+function parseGrowthAssetCardData(value: string | null): Record<string, unknown> | null {
+  if (value === null) return null;
+  const parsed = parseJson<unknown>(value, null);
+  return parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)
+    ? parsed as Record<string, unknown>
+    : null;
+}
+
 function growthAssetFromRow(row: GrowthAssetRow): GrowthAsset {
   return {
     id: row.id,
@@ -634,7 +642,7 @@ function growthAssetFromRow(row: GrowthAssetRow): GrowthAsset {
     width: row.width,
     height: row.height,
     cardTemplate: row.card_template,
-    cardData: row.card_data === null ? null : parseJson(row.card_data, {} as Record<string, unknown>),
+    cardData: parseGrowthAssetCardData(row.card_data),
     createdAt: row.created_at,
   };
 }

@@ -7,6 +7,7 @@ import type { GrowthAssetMetadata } from "../../../src/types/growth";
 
 const mocks = vi.hoisted(() => ({
   buildGrowthAssetFileUrl: vi.fn((id: string) => `/api/growth/assets/${id}/file`),
+  createGrowthCard: vi.fn(),
   fetchGrowthAssetImportCandidates: vi.fn(),
   fetchGrowthAssets: vi.fn(),
   importGrowthAsset: vi.fn(),
@@ -15,6 +16,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("../../../src/api/growth", () => ({
   buildGrowthAssetFileUrl: mocks.buildGrowthAssetFileUrl,
+  createGrowthCard: mocks.createGrowthCard,
   fetchGrowthAssetImportCandidates: mocks.fetchGrowthAssetImportCandidates,
   fetchGrowthAssets: mocks.fetchGrowthAssets,
   importGrowthAsset: mocks.importGrowthAsset,
@@ -51,6 +53,11 @@ function selectFile(input: HTMLInputElement, file: File) {
   input.dispatchEvent(new Event("change", { bubbles: true }));
 }
 
+function selectValue(select: HTMLSelectElement, value: string) {
+  Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")?.set?.call(select, value);
+  select.dispatchEvent(new Event("change", { bubbles: true }));
+}
+
 async function flush() {
   await Promise.resolve();
   await Promise.resolve();
@@ -71,6 +78,16 @@ beforeEach(() => {
   mocks.fetchGrowthAssets.mockResolvedValue([]);
   mocks.importGrowthAsset.mockResolvedValue({ asset: asset({ origin: "readme" }), duplicate: false });
   mocks.uploadGrowthAsset.mockResolvedValue(asset());
+  mocks.createGrowthCard.mockResolvedValue(asset({
+    id: "generated-card",
+    origin: "generated",
+    title: "Release card",
+    alt: "A release summary card",
+    width: 1200,
+    height: 675,
+    cardTemplate: "release",
+    cardData: { version: "v2.4.0", highlights: ["Faster plans"] },
+  }));
 
   originalCreateObjectUrl = Object.getOwnPropertyDescriptor(URL, "createObjectURL");
   originalRevokeObjectUrl = Object.getOwnPropertyDescriptor(URL, "revokeObjectURL");
@@ -257,6 +274,113 @@ describe("GrowthAssetLibrary", () => {
     expect(container.textContent).toContain("Release dashboard");
     expect((field("growth-asset-title") as HTMLInputElement).value).toBe("");
     expect((field("growth-asset-alt") as HTMLTextAreaElement).value).toBe("");
+  });
+
+  it("validates template-specific card fields and exposes each creator through labeled controls", async () => {
+    await renderLibrary();
+    await act(async () => {
+      container.querySelector(".growth-card-creator")?.dispatchEvent(new Event("submit", {
+        bubbles: true,
+        cancelable: true,
+      }));
+      await flush();
+    });
+    expect(container.textContent).toContain("Complete the card fields");
+    expect(mocks.createGrowthCard).not.toHaveBeenCalled();
+
+    const template = container.querySelector<HTMLSelectElement>("#growth-card-template");
+    if (!template) throw new Error("Missing card template field");
+    const expectedFields = [
+      ["release", "growth-card-version"],
+      ["milestone", "growth-card-milestone-value"],
+      ["stats", "growth-card-stats"],
+      ["quote", "growth-card-quote"],
+      ["whats-new", "growth-card-whats-new"],
+    ];
+    for (const [value, id] of expectedFields) {
+      await act(async () => selectValue(template, value));
+      expect(field(id).closest("label")?.textContent?.trim()).not.toBe("");
+    }
+  });
+
+  it("creates a generated card, shows its authenticated preview, and refreshes the asset list", async () => {
+    const generated = asset({
+      id: "generated-card",
+      origin: "generated",
+      title: "Release card",
+      alt: "A release summary card",
+      width: 1200,
+      height: 675,
+      cardTemplate: "release",
+      cardData: { version: "v2.4.0", highlights: ["Faster plans", "Safe previews"] },
+    });
+    let resolveCard: ((value: GrowthAssetMetadata) => void) | undefined;
+    mocks.createGrowthCard.mockImplementationOnce(() => new Promise<GrowthAssetMetadata>((resolve) => {
+      resolveCard = resolve;
+    }));
+    mocks.fetchGrowthAssets.mockResolvedValueOnce([]).mockResolvedValueOnce([generated]);
+    await renderLibrary();
+    await act(async () => {
+      setValue(field("growth-card-title"), "Release card");
+      setValue(field("growth-card-alt"), "A release summary card");
+      setValue(field("growth-card-version"), "v2.4.0");
+      setValue(field("growth-card-highlights"), "Faster plans\nSafe previews");
+      container.querySelector(".growth-card-creator")?.dispatchEvent(new Event("submit", {
+        bubbles: true,
+        cancelable: true,
+      }));
+      await flush();
+    });
+    expect(container.textContent).toContain("Creating card");
+    expect(mocks.createGrowthCard).toHaveBeenCalledWith({
+      repository: "acme/rocket",
+      template: "release",
+      title: "Release card",
+      alt: "A release summary card",
+      data: { version: "v2.4.0", highlights: ["Faster plans", "Safe previews"] },
+    }, expect.any(AbortSignal));
+
+    await act(async () => {
+      resolveCard?.(generated);
+      await flush();
+    });
+    expect(mocks.fetchGrowthAssets).toHaveBeenCalledTimes(2);
+    expect(container.textContent).toContain("Card created and added");
+    expect(container.querySelector<HTMLImageElement>(".growth-card-created img")?.src)
+      .toContain("/api/growth/assets/generated-card/file");
+    expect(container.textContent).toContain("1200 × 675 px");
+  });
+
+  it("localizes card request errors and aborts stale creation on account changes", async () => {
+    mocks.createGrowthCard.mockRejectedValueOnce(new Error("renderer unavailable"));
+    await renderLibrary();
+    await act(async () => {
+      setValue(field("growth-card-title"), "Release card");
+      setValue(field("growth-card-alt"), "Release card description");
+      setValue(field("growth-card-version"), "v1");
+      setValue(field("growth-card-highlights"), "Shipped");
+      container.querySelector(".growth-card-creator")?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+      await flush();
+    });
+    expect(container.textContent).toContain("Could not create the card: renderer unavailable");
+
+    let resolveCard: ((value: GrowthAssetMetadata) => void) | undefined;
+    mocks.createGrowthCard.mockImplementationOnce((_input, signal: AbortSignal) => new Promise((resolve) => {
+      resolveCard = resolve;
+      expect(signal.aborted).toBe(false);
+    }));
+    await act(async () => {
+      container.querySelector(".growth-card-creator")?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+      await flush();
+    });
+    const staleSignal = mocks.createGrowthCard.mock.calls[1][1] as AbortSignal;
+    await renderLibrary("account-b");
+    expect(staleSignal.aborted).toBe(true);
+    await act(async () => {
+      resolveCard?.(asset({ id: "stale-card", title: "Stale card" }));
+      await flush();
+    });
+    expect(container.textContent).not.toContain("Stale card");
   });
 
   it("aborts an active upload when the account changes", async () => {

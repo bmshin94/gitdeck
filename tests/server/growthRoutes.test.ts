@@ -275,6 +275,102 @@ describe("Growth API routes", () => {
     expect((await dispatch("GET", `/api/growth/assets/${id}/file`)).status).toBe(401);
   });
 
+  it("creates and privately renders every account-scoped SVG card template", async () => {
+    await dispatch("PUT", "/api/growth/profiles/acme/rocket", {
+      ...profileInput(),
+      color: "#BE123C",
+    });
+    const templates = [
+      ["release", { version: "v2.4.0", highlights: ["Faster plans"] }],
+      ["milestone", { value: 10000, label: "Stars", detail: "Community powered" }],
+      ["stats", { stats: [{ label: "Stars", value: 5120 }, { label: "Forks", value: 340 }] }],
+      ["quote", { quote: "A focused workflow", attribution: "A maintainer" }],
+      ["whats-new", { items: ["Calendar", "Media library"] }],
+    ] as const;
+    const ids: string[] = [];
+
+    for (const [template, data] of templates) {
+      const created = await dispatch("POST", "/api/growth/assets/cards", {
+        repository: "acme/rocket",
+        template,
+        title: `${template} card`,
+        alt: `${template} card description`,
+        data,
+      });
+      expect(created.status).toBe(201);
+      expect(created.body.asset).toMatchObject({
+        accountId: "account-a",
+        repository: "acme/rocket",
+        kind: "image",
+        origin: "generated",
+        url: null,
+        width: 1200,
+        height: 675,
+        cardTemplate: template,
+        cardData: data,
+      });
+      expect(created.body.asset).not.toHaveProperty("path");
+      ids.push(created.body.asset.id as string);
+    }
+
+    expect(growthStore.listGrowthAssets("account-a", "acme/rocket")).toHaveLength(5);
+    const rendered = await dispatchRaw("GET", `/api/growth/assets/${ids[0]}/file`);
+    expect(rendered.status).toBe(200);
+    expect(rendered.headers).toMatchObject({
+      "content-type": "image/svg+xml",
+      "content-length": String(rendered.buffer.byteLength),
+      "cache-control": "private, no-store",
+      "x-content-type-options": "nosniff",
+    });
+    expect(rendered.body).toContain("#BE123C");
+    expect(rendered.body).toContain("release card");
+    expect(rendered.body).not.toContain("<script");
+
+    state.activeAccountId = "account-b";
+    expect((await dispatch("GET", `/api/growth/assets/${ids[0]}/file`)).status).toBe(404);
+    expect((await dispatch("GET", "/api/growth/assets?repo=acme%2Frocket")).body.assets).toEqual([]);
+  });
+
+  it("rejects malformed card bodies and stored metadata without serving SVG", async () => {
+    const base = {
+      repository: "acme/repo",
+      template: "release",
+      title: "Release",
+      alt: "Release card",
+      data: { version: "v1", highlights: ["Shipped"] },
+    };
+    const invalid = [
+      { ...base, extra: true },
+      { ...base, repository: "bad" },
+      { ...base, template: "unknown" },
+      { ...base, title: " " },
+      { ...base, data: { version: "v1", highlights: [] } },
+      { ...base, data: { version: "v1", highlights: ["Shipped"], unknown: true } },
+      { ...base, template: "milestone", data: { value: -1, label: "Stars", detail: "Invalid" } },
+      { ...base, template: "stats", data: { stats: [{ label: "Stars", value: "many" }] } },
+      { ...base, template: "quote", data: { quote: "Missing attribution" } },
+      { ...base, template: "whats-new", data: { items: Array.from({ length: 6 }, () => "Update") } },
+    ];
+    for (const body of invalid) {
+      expect((await dispatch("POST", "/api/growth/assets/cards", body)).status).toBe(400);
+    }
+    expect(growthStore.listGrowthAssets("account-a", "acme/repo")).toEqual([]);
+
+    const malformed = growthStore.createGrowthAsset({
+      accountId: "account-a",
+      repository: "acme/repo",
+      kind: "image",
+      origin: "generated",
+      title: "Malformed",
+      alt: "Malformed",
+      cardTemplate: "quote",
+      cardData: { quote: "Missing attribution" },
+    });
+    const response = await dispatch("GET", `/api/growth/assets/${malformed.id}/file`);
+    expect(response).toEqual({ status: 404, body: { ok: false, error: "asset not found" } });
+    expect(JSON.stringify(response.body)).not.toContain("<svg");
+  });
+
   it("rejects malformed asset requests without creating rows or files", async () => {
     const validQuery = "repo=acme%2Frepo&filename=release.png&title=Release&alt=Release";
     const invalidRequests: Array<[string, string, Buffer | undefined, Record<string, string> | undefined, number]> = [
@@ -396,7 +492,7 @@ describe("Growth API routes", () => {
     expect((await dispatch("POST", "/api/growth/assets/import", valid)).status).toBe(422);
   });
 
-  it("returns a generic not-found response for missing, traversing, and generated asset files", async () => {
+  it("returns a generic not-found response for missing, traversing, and malformed generated asset files", async () => {
     await mkdir(state.tmpDir, { recursive: true });
     await writeFile(resolve(state.tmpDir, "secret.png"), "secret");
     const traversal = growthStore.createGrowthAsset({
