@@ -47,7 +47,7 @@ phase-closing tasks) are appended with `PENDING` rows and matching task files.
 | GS-050 | COMPLETED | Added deterministic six-rule opportunity detection, bounded merged-PR signals, stable account-scoped upserts, and the explicit scan API | VALIDATION OK; typecheck; 68 test files and 391 tests; production build; threshold, ordering, source suppression, unavailable forge data, account scope, status preservation, and repeated scan coverage; git diff --check | 2026-09-04 |
 | GS-051 | COMPLETED | Added explicit account-safe opportunity scanning with localized rule kinds, scan states, deduplicated reconciliation, and responsive backlog controls | VALIDATION OK; typecheck; 68 test files and 399 tests; production build; keyboard, repeated scan, status preservation, empty, error, cancellation, AI coexistence, and 390px dark and light coverage; git diff --check | 2026-09-04 |
 | GS-052 | COMPLETED | Added bounded snapshot attribution with account-scoped refresh, pending windows, persisted 48-hour and 7-day deltas, and typed performance APIs | VALIDATION OK; typecheck; 70 test files and 414 tests; production build; exact, jittered, negative, stale, due-window, refresh, filter, account-scope, and cascade coverage; git diff --check | 2026-09-04 |
-| GS-053 | PENDING | — | — | — |
+| GS-053 | COMPLETED | Added deterministic account-scoped channel and pillar performance summaries with strict publication filters and typed APIs | VALIDATION OK; typecheck; 73 test files and 424 tests; production build; mixed metrics, dedupe, ordering, date-edge, repository, account, empty, route, and client validation coverage; git diff --check | 2026-09-04 |
 | GS-054 | PENDING | — | — | — |
 | GS-055 | PENDING | — | — | — |
 | GS-056 | PENDING | — | — | — |

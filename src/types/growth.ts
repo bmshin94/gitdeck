@@ -462,6 +462,50 @@ export interface GrowthContentPerformanceRefreshData extends GrowthContentPerfor
   refreshedAt: string;
 }
 
+export const GROWTH_PERFORMANCE_METRIC_KEYS = [
+  "starsDelta",
+  "forksDelta",
+  "closedPrsDelta",
+  "releaseDownloadsDelta",
+] as const;
+export type GrowthPerformanceMetricKey = (typeof GROWTH_PERFORMANCE_METRIC_KEYS)[number];
+export type GrowthPerformanceMetricTotals = Required<Pick<
+  GrowthPerformanceMetrics,
+  GrowthPerformanceMetricKey
+>> & Record<string, number>;
+
+/** Collision-safe grouping key that display consumers can replace with localized copy. */
+export const GROWTH_UNASSIGNED_PILLAR_KEY = "__unassigned__" as const;
+
+export interface GrowthPerformanceGroupSummary {
+  key: string;
+  measuredItems: number;
+  metrics: GrowthPerformanceMetricTotals;
+}
+
+export interface GrowthPerformanceWindowSummary {
+  window: GrowthPerformanceWindow;
+  measuredItems: number;
+  metrics: GrowthPerformanceMetricTotals;
+  channels: GrowthPerformanceGroupSummary[];
+  pillars: GrowthPerformanceGroupSummary[];
+}
+
+export interface GrowthPerformanceSummary {
+  windows: GrowthPerformanceWindowSummary[];
+}
+
+export interface GrowthPerformanceSummaryFilters {
+  repository?: string;
+  from?: string;
+  to?: string;
+}
+
+export interface GrowthPerformanceSummaryData {
+  ok: true;
+  summary: GrowthPerformanceSummary;
+}
+
 export interface GrowthWorkspaceSummary {
   repository: string;
   interventionsByStatus: Record<GrowthInterventionStatus, number>;

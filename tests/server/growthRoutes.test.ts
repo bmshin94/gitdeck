@@ -1029,6 +1029,102 @@ describe("Growth API routes", () => {
     expect(state.refreshContentPerformance).toHaveBeenCalledTimes(1);
   });
 
+  it("returns account-scoped performance summaries with strict inclusive filters", async () => {
+    const media = [{ kind: "image" as const, url: "https://example.com/card.png", alt: "Card" }];
+    const fromEdge = growthStore.createContentItem({
+      accountId: "account-a",
+      repository: "acme/repo",
+      channel: "x",
+      format: "x-thread",
+      pillar: "product",
+      status: "published",
+      publishedAt: "2026-09-01T00:00:00.000Z",
+      media,
+    });
+    const toEdge = growthStore.createContentItem({
+      accountId: "account-a",
+      repository: "acme/repo",
+      channel: "linkedin",
+      format: "linkedin-post",
+      pillar: "community",
+      status: "published",
+      publishedAt: "2026-09-03T00:00:00.000Z",
+      media,
+    });
+    const otherAccount = growthStore.createContentItem({
+      accountId: "account-b",
+      repository: "acme/repo",
+      channel: "x",
+      format: "x-thread",
+      status: "published",
+      publishedAt: "2026-09-02T00:00:00.000Z",
+      media,
+    });
+    growthStore.upsertContentPerformance("account-a", {
+      contentId: fromEdge.id,
+      window: "48h",
+      measuredAt: "2026-09-10T00:00:00.000Z",
+      metrics: { starsDelta: 4, forksDelta: -1 },
+    });
+    growthStore.upsertContentPerformance("account-a", {
+      contentId: toEdge.id,
+      window: "7d",
+      measuredAt: "2026-09-10T00:00:00.000Z",
+      metrics: { starsDelta: -2 },
+    });
+    growthStore.upsertContentPerformance("account-b", {
+      contentId: otherAccount.id,
+      window: "48h",
+      measuredAt: "2026-09-10T00:00:00.000Z",
+      metrics: { starsDelta: 100 },
+    });
+
+    const query = new URLSearchParams({
+      repo: "acme/repo",
+      from: "2026-09-01T00:00:00.000Z",
+      to: "2026-09-03T00:00:00.000Z",
+    });
+    const response = await dispatch("GET", `/api/growth/performance/summary?${query}`);
+    expect(response.status).toBe(200);
+    expect(response.body.summary.windows).toEqual([
+      expect.objectContaining({
+        window: "48h",
+        measuredItems: 1,
+        metrics: expect.objectContaining({ starsDelta: 4, forksDelta: -1 }),
+        channels: [expect.objectContaining({ key: "x", measuredItems: 1 })],
+        pillars: [expect.objectContaining({ key: "product", measuredItems: 1 })],
+      }),
+      expect.objectContaining({
+        window: "7d",
+        measuredItems: 1,
+        metrics: expect.objectContaining({ starsDelta: -2, forksDelta: 0 }),
+        channels: [expect.objectContaining({ key: "linkedin", measuredItems: 1 })],
+        pillars: [expect.objectContaining({ key: "community", measuredItems: 1 })],
+      }),
+    ]);
+    expect(state.refreshContentPerformance).not.toHaveBeenCalled();
+
+    state.activeAccountId = "account-b";
+    expect((await dispatch("GET", `/api/growth/performance/summary?${query}`)).body.summary.windows[0])
+      .toMatchObject({ measuredItems: 1, metrics: { starsDelta: 100 } });
+    state.activeAccountId = "account-a";
+
+    const malformedFilters = [
+      "/api/growth/performance/summary?unknown=1",
+      "/api/growth/performance/summary?repo=invalid",
+      "/api/growth/performance/summary?repo=acme%2Frepo&repo=acme%2Fother",
+      "/api/growth/performance/summary?from=2026-09-01T00%3A00%3A00%2B00%3A00",
+      "/api/growth/performance/summary?to=not-a-date",
+      "/api/growth/performance/summary?from=2026-09-03T00%3A00%3A00.000Z&to=2026-09-01T00%3A00%3A00.000Z",
+    ];
+    for (const path of malformedFilters) {
+      expect((await dispatch("GET", path)).status, path).toBe(400);
+    }
+
+    state.activeAccountId = null;
+    expect((await dispatch("GET", "/api/growth/performance/summary")).status).toBe(401);
+  });
+
   it("deduplicates repeated manual interventions without resetting their status", async () => {
     const first = await dispatch("POST", "/api/growth/interventions", {
       repository: "acme/repo",

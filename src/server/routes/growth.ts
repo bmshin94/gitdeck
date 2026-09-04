@@ -53,6 +53,7 @@ import {
 } from "../growth/drafter";
 import { scanRepositoryGrowthOpportunities } from "../growth/rules";
 import { refreshContentPerformance } from "../growth/attribution";
+import { getGrowthPerformanceSummary } from "../growth/performance";
 import { parseJsonBody, send, sendJson } from "../http";
 import type { AppRouter, RouteContext } from "../router";
 import {
@@ -65,6 +66,7 @@ import {
   type GrowthContentMedia,
   type GrowthContentItemStatus,
   type GrowthContentPerformanceFilters,
+  type GrowthPerformanceSummaryFilters,
   type GrowthInterventionCategory,
   type GrowthInterventionStatus,
   type UpdateGrowthContentItemInput,
@@ -74,6 +76,7 @@ import { GOAL_PROPOSAL_FORMATS, type GoalProposal, type GoalProposalFormat } fro
 import { createGrowthInterventionDedupeKey } from "../../utils/growth/interventions";
 import { buildGrowthCalendarIcs } from "../../utils/growth/ics";
 import { legacyMediaToContentMedia, legacyProposalChannel } from "../../utils/growth/legacySuggestions";
+import { parseUtcIsoDateTime } from "../../utils/growth/performanceSummary";
 import {
   GrowthProfileValidationError,
   normalizeGrowthProfileInput,
@@ -491,15 +494,6 @@ interface CalendarExportFilters {
   repository?: string;
   from?: number;
   to?: number;
-}
-
-function parseUtcIsoDateTime(value: string): number | null {
-  const match = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d{1,3}))?Z$/.exec(value);
-  if (!match) return null;
-  const timestamp = Date.parse(value);
-  if (Number.isNaN(timestamp)) return null;
-  const normalized = `${match[1]}.${(match[2] ?? "").padEnd(3, "0")}Z`;
-  return new Date(timestamp).toISOString() === normalized ? timestamp : null;
 }
 
 function parseCalendarExportFilters(ctx: RouteContext): CalendarExportFilters | null {
@@ -1112,6 +1106,45 @@ async function performance(ctx: RouteContext): Promise<void> {
   });
 }
 
+function parsePerformanceSummaryFilters(ctx: RouteContext): GrowthPerformanceSummaryFilters | null {
+  const allowed = new Set(["repo", "from", "to"]);
+  const keys = [...ctx.url.searchParams.keys()];
+  if (keys.some((key) => !allowed.has(key)) || [...allowed].some((key) => ctx.url.searchParams.getAll(key).length > 1)) {
+    badRequest(ctx, "invalid performance summary filter");
+    return null;
+  }
+  const repositoryValue = ctx.url.searchParams.get("repo");
+  const repository = repositoryValue === null ? undefined : repositoryFromValue(repositoryValue);
+  if (repositoryValue !== null && !repository) {
+    badRequest(ctx, "invalid repository");
+    return null;
+  }
+  const from = ctx.url.searchParams.get("from") ?? undefined;
+  const to = ctx.url.searchParams.get("to") ?? undefined;
+  const fromTimestamp = from === undefined ? undefined : parseUtcIsoDateTime(from);
+  const toTimestamp = to === undefined ? undefined : parseUtcIsoDateTime(to);
+  if (
+    (from !== undefined && fromTimestamp === null)
+    || (to !== undefined && toTimestamp === null)
+    || (typeof fromTimestamp === "number" && typeof toTimestamp === "number" && fromTimestamp > toTimestamp)
+  ) {
+    badRequest(ctx, "invalid performance summary date range");
+    return null;
+  }
+  return { repository: repository ?? undefined, from, to };
+}
+
+async function performanceSummary(ctx: RouteContext): Promise<void> {
+  const account = await requireAccount(ctx);
+  if (!account) return;
+  const filters = parsePerformanceSummaryFilters(ctx);
+  if (!filters) return;
+  sendJson(ctx.res, 200, {
+    ok: true,
+    summary: getGrowthPerformanceSummary(account.id, filters),
+  });
+}
+
 async function refreshPerformance(ctx: RouteContext): Promise<void> {
   const account = await requireAccount(ctx);
   if (!account) return;
@@ -1154,6 +1187,7 @@ export function registerGrowthRoutes(router: AppRouter): void {
   router.post("/api/growth/plans/:id/regenerate", regeneratePlan);
   router.post("/api/growth/plans/:id/archive", archivePlan);
   router.get("/api/growth/calendar.ics", exportCalendar);
+  router.get("/api/growth/performance/summary", performanceSummary);
   router.get("/api/growth/performance", performance);
   router.post("/api/growth/performance/refresh", refreshPerformance);
   router.get("/api/growth/content", content);

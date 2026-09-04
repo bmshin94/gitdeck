@@ -14,6 +14,8 @@ import type {
   GrowthContentPerformanceFilters,
   GrowthContentPerformanceRefreshData,
   GrowthContentPlansData,
+  GrowthPerformanceSummaryData,
+  GrowthPerformanceSummaryFilters,
   GrowthDraftContentData,
   GrowthDraftContentItemData,
   GrowthGeneratedContentPlanData,
@@ -36,6 +38,7 @@ import type {
   UploadGrowthAssetInput,
 } from "../types/growth";
 import { GROWTH_PERFORMANCE_WINDOWS } from "../types/growth";
+import { parseUtcIsoDateTime } from "../utils/growth/performanceSummary";
 import { parseRepositoryName } from "../utils/repository";
 
 async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
@@ -247,6 +250,29 @@ export async function scanGrowthOpportunities(repository: string, signal?: Abort
 }
 
 export const scanGrowthInterventions = scanGrowthOpportunities;
+
+export async function fetchGrowthPerformanceSummary(
+  filters: GrowthPerformanceSummaryFilters = {},
+  signal?: AbortSignal,
+) {
+  if (filters.repository !== undefined && !parseRepositoryName(filters.repository)) {
+    throw new Error("invalid repository");
+  }
+  const from = filters.from === undefined ? undefined : parseUtcIsoDateTime(filters.from);
+  const to = filters.to === undefined ? undefined : parseUtcIsoDateTime(filters.to);
+  if (
+    (filters.from !== undefined && from === null)
+    || (filters.to !== undefined && to === null)
+    || (typeof from === "number" && typeof to === "number" && from > to)
+  ) {
+    throw new Error("invalid performance summary date range");
+  }
+  const data = await requestJson<GrowthPerformanceSummaryData>(addFilters(
+    "/api/growth/performance/summary",
+    { repo: filters.repository, from: filters.from, to: filters.to },
+  ), { signal });
+  return data.summary;
+}
 
 export async function fetchGrowthContentPerformance(
   filters: GrowthContentPerformanceFilters = {},
