@@ -1,0 +1,140 @@
+import { useMemo } from "react";
+import { Link } from "react-router-dom";
+import { useI18n } from "../../i18n/I18nProvider";
+import { useGoals } from "../../hooks/useGoals";
+import type { GhRepo } from "../../types/github";
+import { buildGrowthHomeSummary } from "../../utils/growthHome";
+import { growthRepositoryPath } from "../../utils/growthRoutes";
+import { Avatar } from "../common/Avatar";
+import { RepositoryPicker } from "../common/RepositoryPicker";
+import { GoalsLoadingState } from "../views/GoalsLoadingState";
+
+interface GrowthHomeProps {
+  accountId: string | null;
+  enabled: boolean;
+  repos: GhRepo[];
+  repositoriesLoading: boolean;
+  onSelectRepository: (repository: string) => void;
+}
+
+export function GrowthHome({
+  accountId,
+  enabled,
+  repos,
+  repositoriesLoading,
+  onSelectRepository,
+}: GrowthHomeProps) {
+  const { t } = useI18n();
+  const { goals, loading: goalsLoading, error } = useGoals({ accountId, enabled });
+  const summary = useMemo(() => buildGrowthHomeSummary(goals, repos), [goals, repos]);
+  const loading = repositoriesLoading || goalsLoading;
+
+  return (
+    <section className="growth-home">
+      <header className="growth-home-hero">
+        <div className="growth-home-intro">
+          <span>{t("growth.homeEyebrow")}</span>
+          <h1>{t("growth.homeTitle")}</h1>
+          <p>{t("growth.homeDescription")}</p>
+        </div>
+        {!loading ? (
+          <dl className="growth-home-stats">
+            <div><dt>{t("growth.homeWorkspaces")}</dt><dd>{summary.workspaces.length}</dd></div>
+            <div><dt>{t("growth.homeMissions")}</dt><dd>{summary.totalGoals}</dd></div>
+            <div><dt>{t("growth.homeCompleted")}</dt><dd>{summary.completedGoals}</dd></div>
+          </dl>
+        ) : null}
+      </header>
+
+      {loading ? (
+        <div className="growth-home-loading">
+          <GoalsLoadingState label={t("growth.homeLoading")} />
+        </div>
+      ) : (
+        <>
+          {error ? <div className="growth-home-error" role="alert">{t("growth.goalsLoadError", { message: error })}</div> : null}
+
+          {summary.workspaces.length ? (
+            <div className="growth-home-section">
+              <div className="growth-home-section-heading">
+                <div>
+                  <h2>{t("growth.activeRepositories")}</h2>
+                  <p>{t("growth.activeRepositoriesDescription")}</p>
+                </div>
+                <span>{summary.workspaces.length}</span>
+              </div>
+              <div className="growth-home-grid">
+                {summary.workspaces.map((workspace) => {
+                  const owner = workspace.repo?.owner.login ?? workspace.repository.split("/")[0];
+                  const workspacePath = growthRepositoryPath(workspace.repository) ?? "/growth";
+                  const missionsPath = growthRepositoryPath(workspace.repository, "missions") ?? "/growth";
+                  return (
+                    <article className="growth-home-card" key={workspace.repository}>
+                      <div className="growth-home-card-identity">
+                        <Avatar login={owner} avatarUrl={workspace.repo?.owner.avatarUrl} size={46} />
+                        <div>
+                          <h3>{workspace.repository}</h3>
+                          <p>{workspace.repo?.description || t("growth.noRepositoryDescription")}</p>
+                        </div>
+                      </div>
+                      <div className="growth-home-card-progress">
+                        <span>{t("growth.missionsCount", { count: workspace.goals.length })}</span>
+                        <strong>{workspace.completedGoals}<small>/{workspace.goals.length}</small></strong>
+                        <span>{t("growth.completedMissionsCount")}</span>
+                      </div>
+                      <div className="growth-home-card-actions">
+                        <Link className="btn primary" to={workspacePath}>{t("growth.openWorkspace")}</Link>
+                        <Link className="btn" to={missionsPath}>{t("growth.openMissions")}</Link>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            </div>
+          ) : !error ? (
+            <div className="growth-home-empty">
+              <span aria-hidden="true"><TargetIcon /></span>
+              <div>
+                <h2>{t("growth.homeEmptyTitle")}</h2>
+                <p>{t("growth.homeEmptyDescription")}</p>
+              </div>
+              <a className="btn primary" href="#growth-start-repository">{t("growth.chooseRepository")}</a>
+            </div>
+          ) : null}
+
+          <div className="growth-home-start" id="growth-start-repository">
+            <div>
+              <span>{t("growth.startRepositoryEyebrow")}</span>
+              <h2>{t("growth.startRepositoryTitle")}</h2>
+              <p>{t("growth.startRepositoryDescription")}</p>
+            </div>
+            {summary.starterRepositories.length ? (
+              <RepositoryPicker
+                repos={summary.starterRepositories}
+                value=""
+                placeholder={t("growth.startRepositoryPlaceholder")}
+                onChange={(repository) => {
+                  if (repository) onSelectRepository(repository);
+                }}
+              />
+            ) : (
+              <p className="growth-home-all-active">
+                {repos.length ? t("growth.allRepositoriesActive") : t("growth.noRepositoriesAvailable")}
+              </p>
+            )}
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
+function TargetIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="8" />
+      <circle cx="12" cy="12" r="4" />
+      <path d="m15 9 6-6M17 3h4v4" />
+    </svg>
+  );
+}

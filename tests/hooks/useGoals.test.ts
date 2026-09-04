@@ -14,7 +14,7 @@ vi.mock("../../src/api/github", () => ({
 
 interface HarnessProps {
   accountId: string;
-  repository: string;
+  repository?: string;
 }
 
 let latest: GoalsState;
@@ -61,6 +61,18 @@ afterEach(async () => {
 });
 
 describe("useGoals", () => {
+  it("loads every goal when no repository scope is provided", async () => {
+    api.fetchGoals.mockResolvedValueOnce({
+      ok: true,
+      goals: [goal("one", "owner/one"), goal("two", "owner/two")],
+    });
+
+    await render({ accountId: "account-a" });
+
+    expect(latest.goals.map((entry) => entry.id)).toEqual(["one", "two"]);
+    expect(latest.loading).toBe(false);
+  });
+
   it("loads only goals for the selected repository and supports refresh", async () => {
     api.fetchGoals
       .mockResolvedValueOnce({ ok: true, goals: [goal("one", "owner/one"), goal("two", "owner/two")] })

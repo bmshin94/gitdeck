@@ -18,6 +18,7 @@ import {
 } from "../../utils/growthRoutes";
 import { AuthGate } from "../AuthGate";
 import { GoalsView } from "../views/GoalsView";
+import { GrowthHome } from "./GrowthHome";
 import { GrowthSidebar } from "./GrowthSidebar";
 import { GrowthTopBar, type GrowthTheme } from "./GrowthTopBar";
 
@@ -214,7 +215,18 @@ export function GrowthStudioApp() {
             </div>
           ) : null}
           <Routes>
-            <Route path="/growth" element={<GrowthPlaceholder titleKey="growth.home" />} />
+            <Route
+              path="/growth"
+              element={(
+                <GrowthHome
+                  accountId={activeAccount?.id ?? null}
+                  enabled={!accountsLoading}
+                  repos={repos}
+                  repositoriesLoading={repositoriesLoading}
+                  onSelectRepository={handleRepositoryChange}
+                />
+              )}
+            />
             <Route path="/growth/calendar" element={<GrowthPlaceholder titleKey="growth.unifiedCalendar" />} />
             <Route path="/growth/review" element={<GrowthPlaceholder titleKey="growth.review" />} />
             <Route path="/growth/settings" element={<GrowthPlaceholder titleKey="growth.settings" />} />

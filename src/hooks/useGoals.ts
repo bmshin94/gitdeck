@@ -5,7 +5,8 @@ import type { RepositoryGoal } from "../types/goals";
 interface UseGoalsOptions {
   accountId: string | null;
   enabled: boolean;
-  repository: string;
+  /** Omit the repository to load goals across the active account. */
+  repository?: string;
 }
 
 export interface GoalsState {
@@ -15,17 +16,18 @@ export interface GoalsState {
   refresh: () => Promise<void>;
 }
 
-/** Loads the goals for one repository and cancels stale account or route requests. */
+/** Loads repository-scoped or account-wide goals and cancels stale requests. */
 export function useGoals({ accountId, enabled, repository }: UseGoalsOptions): GoalsState {
+  const shouldLoad = enabled && repository !== "";
   const [goals, setGoals] = useState<RepositoryGoal[]>([]);
-  const [loading, setLoading] = useState(enabled);
+  const [loading, setLoading] = useState(shouldLoad);
   const [error, setError] = useState("");
   const [loadedKey, setLoadedKey] = useState("");
   const requestRef = useRef<AbortController | null>(null);
-  const requestKey = JSON.stringify([accountId, repository]);
+  const requestKey = JSON.stringify([accountId, repository ?? "*"]);
 
   const refresh = useCallback(async () => {
-    if (!enabled || !repository) return;
+    if (!shouldLoad) return;
 
     requestRef.current?.abort();
     const controller = new AbortController();
@@ -36,7 +38,9 @@ export function useGoals({ accountId, enabled, repository }: UseGoalsOptions): G
     try {
       const result = await fetchGoals(controller.signal);
       if (!controller.signal.aborted && requestRef.current === controller) {
-        setGoals(result.goals.filter((goal) => goal.repository === repository));
+        setGoals(repository === undefined
+          ? result.goals
+          : result.goals.filter((goal) => goal.repository === repository));
       }
     } catch (cause) {
       if (!controller.signal.aborted && (cause as Error).name !== "AbortError" && requestRef.current === controller) {
@@ -49,14 +53,14 @@ export function useGoals({ accountId, enabled, repository }: UseGoalsOptions): G
         setLoading(false);
       }
     }
-  }, [enabled, repository, requestKey]);
+  }, [repository, requestKey, shouldLoad]);
 
   useEffect(() => {
     requestRef.current?.abort();
     requestRef.current = null;
     setGoals([]);
     setError("");
-    if (!enabled || !repository) {
+    if (!shouldLoad) {
       setLoading(false);
       return;
     }
@@ -66,11 +70,11 @@ export function useGoals({ accountId, enabled, repository }: UseGoalsOptions): G
       requestRef.current?.abort();
       requestRef.current = null;
     };
-  }, [enabled, repository, refresh]);
+  }, [refresh, shouldLoad]);
 
   return {
     goals,
-    loading: loading || Boolean(enabled && repository && loadedKey !== requestKey),
+    loading: loading || Boolean(shouldLoad && loadedKey !== requestKey),
     error,
     refresh,
   };
