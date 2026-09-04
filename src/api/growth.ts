@@ -4,6 +4,7 @@ import type {
   GrowthContentItemData,
   GrowthContentItemFilters,
   GrowthContentItemsData,
+  GrowthDraftContentData,
   GrowthGeneratedInterventionsData,
   GrowthInterventionData,
   GrowthInterventionFilters,
@@ -136,6 +137,14 @@ type GrowthContentUpdateRequest = Omit<
   UpdateGrowthContentItemInput,
   "publishedAt" | "publishedUrl"
 >;
+
+export async function draftGrowthContentFromIntervention(interventionId: string, refresh = false) {
+  const data = await requestJson<GrowthDraftContentData>(
+    "/api/growth/content/draft",
+    jsonRequest("POST", { interventionId, refresh }),
+  );
+  return data;
+}
 
 export async function fetchGrowthContentItems(
   filters: GrowthContentItemFilters = {},

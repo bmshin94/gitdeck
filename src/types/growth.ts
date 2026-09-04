@@ -303,3 +303,7 @@ export interface GrowthContentItemData {
   ok: true;
   contentItem: GrowthContentItem;
 }
+
+export interface GrowthDraftContentData extends GrowthContentItemsData {
+  cached: boolean;
+}

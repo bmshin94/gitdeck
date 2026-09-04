@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react
 import { fetchAiSettings } from "../../api/github";
 import {
   createGrowthIntervention,
+  draftGrowthContentFromIntervention,
   fetchGrowthContentItems,
   fetchGrowthInterventions,
   generateGrowthInterventions,
@@ -20,6 +21,7 @@ import {
 } from "../../types/growth";
 import { GOAL_METRIC_DEFINITIONS, type GoalMetric } from "../../types/goals";
 import { formatNumber } from "../../utils/format";
+import { ContentItemDrawer } from "./ContentItemDrawer";
 
 interface GrowthInterventionsProps {
   accountId: string | null;
@@ -65,6 +67,8 @@ export function GrowthInterventions({ accountId, enabled, repository }: GrowthIn
   const [manualAction, setManualAction] = useState("");
   const [dismissedOpen, setDismissedOpen] = useState(false);
   const [aiEnabled, setAiEnabled] = useState<boolean | null>(null);
+  const [selectedContentItem, setSelectedContentItem] = useState<GrowthContentItem | null>(null);
+  const [draftErrors, setDraftErrors] = useState<Record<string, string>>({});
 
   const load = useCallback(async (signal?: AbortSignal) => {
     if (!enabled || !repository) return;
@@ -106,6 +110,8 @@ export function GrowthInterventions({ accountId, enabled, repository }: GrowthIn
     setContentItems([]);
     setNotice("");
     setDismissedOpen(false);
+    setSelectedContentItem(null);
+    setDraftErrors({});
     if (!enabled || !repository) {
       setLoading(false);
       return;
@@ -161,6 +167,30 @@ export function GrowthInterventions({ accountId, enabled, repository }: GrowthIn
     }
   }
 
+  async function draftFromIntervention(intervention: GrowthIntervention) {
+    setBusy(`draft-${intervention.id}`);
+    setError("");
+    setNotice("");
+    setDraftErrors((current) => ({ ...current, [intervention.id]: "" }));
+    try {
+      const result = await draftGrowthContentFromIntervention(intervention.id);
+      setContentItems((current) => {
+        const returnedIds = new Set(result.contentItems.map((item) => item.id));
+        return [...current.filter((item) => !returnedIds.has(item.id)), ...result.contentItems];
+      });
+      if (result.contentItems[0]) setSelectedContentItem(result.contentItems[0]);
+    } catch (cause) {
+      setDraftErrors((current) => ({ ...current, [intervention.id]: (cause as Error).message }));
+    } finally {
+      setBusy("");
+    }
+  }
+
+  function updateContentItem(updated: GrowthContentItem) {
+    setContentItems((current) => current.map((item) => item.id === updated.id ? updated : item));
+    setSelectedContentItem(updated);
+  }
+
   async function createManual(event: FormEvent) {
     event.preventDefault();
     setBusy("manual");
@@ -209,14 +239,25 @@ export function GrowthInterventions({ accountId, enabled, repository }: GrowthIn
             <ul>
               {linkedContent.map((item) => (
                 <li key={item.id}>
-                  <span>{item.title || item.format}</span>
-                  <small>{t(`growth.status.${item.status}` as TranslationKey)}</small>
+                  <button type="button" onClick={() => setSelectedContentItem(item)}>
+                    <span>{item.title || item.format}</span>
+                    <small>{t(`growth.status.${item.status}` as TranslationKey)}</small>
+                  </button>
                 </li>
               ))}
             </ul>
           </div>
         ) : null}
+        {draftErrors[intervention.id] ? (
+          <p className="growth-intervention-draft-error" role="alert">
+            {t("growth.contentDraftError", { message: draftErrors[intervention.id] })}
+            {/not configured/i.test(draftErrors[intervention.id]) ? <> <a href="/preferences#preferences-ai" target="_blank" rel="noopener">{t("growth.interventionsOpenPreferences")}</a></> : null}
+          </p>
+        ) : null}
         <div className="growth-intervention-actions">
+          <button className="btn" type="button" disabled={busy !== ""} onClick={() => void draftFromIntervention(intervention)}>
+            {busy === `draft-${intervention.id}` ? t("growth.contentDrafting") : t("growth.contentDraftFromIntervention")}
+          </button>
           {intervention.status === "proposed" || intervention.status === "dismissed" ? (
             <button className="btn primary" type="button" disabled={busy === intervention.id} onClick={() => void changeStatus(intervention, "accepted")}>
               {t("growth.interventionsAccept")}
@@ -343,6 +384,13 @@ export function GrowthInterventions({ accountId, enabled, repository }: GrowthIn
           );
         })()}
       </div>
+      {selectedContentItem ? (
+        <ContentItemDrawer
+          item={selectedContentItem}
+          onClose={() => setSelectedContentItem(null)}
+          onUpdate={updateContentItem}
+        />
+      ) : null}
     </section>
   );
 }

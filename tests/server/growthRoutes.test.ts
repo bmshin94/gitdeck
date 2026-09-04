@@ -12,6 +12,7 @@ const state = vi.hoisted(() => {
     activeAccountId: "account-a" as string | null,
     tmpDir: resolve(tmpdir(), `gitdeck-growth-routes-${process.pid}-${Date.now()}`),
     generateSuggestions: vi.fn(),
+    generateProposals: vi.fn(),
   };
 });
 
@@ -30,11 +31,14 @@ vi.mock("../../src/server/accountStore", () => ({
   }) : null),
 }));
 vi.mock("../../src/server/goals", () => ({
+  generateGoalProposals: state.generateProposals,
   generateRepositoryInterventionSuggestions: state.generateSuggestions,
   refreshGoal: vi.fn(async (goal) => goal),
+  SOCIAL_PROPOSALS_VERSION: 4,
 }));
 
 const { registerGrowthRoutes } = await import("../../src/server/routes/growth");
+const { AiNotConfiguredError } = await import("../../src/server/ai/client");
 const goalStore = await import("../../src/server/goalStore");
 const growthStore = await import("../../src/server/growth/store");
 const { closeDatabase } = await import("../../src/server/sqlite");
@@ -93,6 +97,33 @@ beforeEach(async () => {
     title: "Share the release",
     action: "Publish a grounded release story.",
   }]);
+  state.generateProposals.mockReset();
+  state.generateProposals.mockResolvedValue([
+    {
+      title: "Release thread",
+      format: "x-thread",
+      summary: "Maintainers and contributors",
+      content: "One\n\n---\n\nTwo",
+      threadPosts: ["One", "Two"],
+      mediaSuggestions: [{ kind: "image", title: "Release", sourceUrl: "https://example.com/release.png", guidance: "Show the release." }],
+    },
+    {
+      title: "Release on LinkedIn",
+      format: "linkedin-post",
+      summary: "Engineering leaders",
+      content: "A grounded release update.",
+      threadPosts: [],
+      mediaSuggestions: [{ kind: "image", title: "Release", sourceUrl: "https://example.com/release.png", guidance: "Show the release." }],
+    },
+    {
+      title: "Release on Mastodon",
+      format: "mastodon-post",
+      summary: "Open-source community",
+      content: "A community release update.",
+      threadPosts: [],
+      mediaSuggestions: [{ kind: "image", title: "Release", sourceUrl: "https://example.com/release.png", guidance: "Show the release." }],
+    },
+  ]);
 });
 
 afterAll(async () => {
@@ -279,6 +310,101 @@ describe("Growth API routes", () => {
       action: "Document one clear contribution path.",
     });
     expect(growthStore.listGrowthInterventions("account-a", { repository: "acme/repo" })).toHaveLength(1);
+  });
+
+  it("drafts intervention content idempotently and refreshes only editable items", async () => {
+    const interventionResponse = await dispatch("POST", "/api/growth/interventions", {
+      repository: "acme/repo",
+      category: "marketing",
+      title: "Announce the release",
+      action: "Draft a verified release campaign.",
+    });
+    const interventionId = interventionResponse.body.intervention.id as string;
+
+    const first = await dispatch("POST", "/api/growth/content/draft", { interventionId });
+    expect(first.status).toBe(200);
+    expect(first.body.cached).toBe(false);
+    expect(first.body.contentItems).toHaveLength(3);
+    expect(first.body.contentItems[0]).toMatchObject({
+      interventionId,
+      goalIds: [],
+      channel: "x",
+      format: "x-thread",
+      status: "draft",
+      generationVersion: 4,
+    });
+    expect(first.body.contentItems[0].media).toEqual([
+      expect.objectContaining({ url: "https://example.com/release.png", alt: "Release" }),
+    ]);
+    expect(state.generateProposals).toHaveBeenCalledWith(
+      { accountId: "account-a", repository: "acme/repo" },
+      expect.objectContaining({ title: "Announce the release", category: "marketing" }),
+      [],
+    );
+
+    const cached = await dispatch("POST", "/api/growth/content/draft", { interventionId });
+    expect(cached.body.cached).toBe(true);
+    expect(cached.body.contentItems.map((item: { id: string }) => item.id))
+      .toEqual(first.body.contentItems.map((item: { id: string }) => item.id));
+    expect(state.generateProposals).toHaveBeenCalledTimes(1);
+
+    state.generateProposals.mockResolvedValueOnce(state.generateProposals.mock.results[0].value.then(
+      (proposals: Array<Record<string, unknown>>) => proposals.map((proposal) => ({ ...proposal, title: `${proposal.title} refreshed` })),
+    ));
+    const refreshed = await dispatch("POST", "/api/growth/content/draft", { interventionId, refresh: true });
+    expect(refreshed.body.cached).toBe(false);
+    expect(refreshed.body.contentItems.map((item: { id: string }) => item.id))
+      .toEqual(first.body.contentItems.map((item: { id: string }) => item.id));
+    expect(refreshed.body.contentItems[0].title).toBe("Release thread refreshed");
+    expect(growthStore.listContentItems("account-a", { repository: "acme/repo" })).toHaveLength(3);
+
+    const protectedId = refreshed.body.contentItems[0].id as string;
+    expect((await dispatch("PATCH", `/api/growth/content/${protectedId}`, { status: "ready" })).status).toBe(200);
+    const refreshWithProtectedItem = await dispatch("POST", "/api/growth/content/draft", { interventionId, refresh: true });
+    expect(refreshWithProtectedItem.body.contentItems[0].id).not.toBe(protectedId);
+    expect(growthStore.getContentItem("account-a", protectedId)).toMatchObject({
+      status: "ready",
+      title: "Release thread refreshed",
+    });
+    expect(growthStore.listContentItems("account-a", { repository: "acme/repo" })).toHaveLength(4);
+
+    const latestCached = await dispatch("POST", "/api/growth/content/draft", { interventionId });
+    expect(latestCached.body.contentItems).toHaveLength(3);
+    expect(latestCached.body.contentItems.map((item: { id: string }) => item.id))
+      .toEqual(refreshWithProtectedItem.body.contentItems.map((item: { id: string }) => item.id));
+  });
+
+  it("returns the existing AI-not-configured response without creating drafts", async () => {
+    const intervention = await dispatch("POST", "/api/growth/interventions", {
+      repository: "acme/repo",
+      category: "marketing",
+      title: "Draft a campaign",
+      action: "Use verified repository signals.",
+    });
+    state.generateProposals.mockRejectedValueOnce(new AiNotConfiguredError());
+
+    const response = await dispatch("POST", "/api/growth/content/draft", {
+      interventionId: intervention.body.intervention.id,
+    });
+
+    expect(response.status).toBe(409);
+    expect(response.body).toMatchObject({ ok: false, aiEnabled: false });
+    expect(growthStore.listContentItems("account-a", { repository: "acme/repo" })).toEqual([]);
+  });
+
+  it("keeps intervention drafting account-scoped and validates its body", async () => {
+    const intervention = await dispatch("POST", "/api/growth/interventions", {
+      repository: "acme/private",
+      category: "marketing",
+      title: "Private campaign",
+      action: "Draft it.",
+    });
+    const id = intervention.body.intervention.id as string;
+    expect((await dispatch("POST", "/api/growth/content/draft", { interventionId: "" })).status).toBe(400);
+    expect((await dispatch("POST", "/api/growth/content/draft", { interventionId: id, unknown: true })).status).toBe(400);
+    state.activeAccountId = "account-b";
+    expect((await dispatch("POST", "/api/growth/content/draft", { interventionId: id })).status).toBe(404);
+    expect(state.generateProposals).not.toHaveBeenCalled();
   });
 
   it("supports allowlisted updates, scheduling, publishing, and deletion", async () => {

@@ -1,7 +1,13 @@
 import { getActive as getActiveAccount } from "../accountStore";
+import { AiNotConfiguredError, AiRequestError } from "../ai/client";
 import { isAiConfigured } from "../ai/settings";
-import { findGoal, listGoalRepositories } from "../goalStore";
-import { generateRepositoryInterventionSuggestions, refreshGoal } from "../goals";
+import { findGoal, getRepositoryContentSources, listGoalRepositories } from "../goalStore";
+import {
+  generateGoalProposals,
+  generateRepositoryInterventionSuggestions,
+  refreshGoal,
+  SOCIAL_PROPOSALS_VERSION,
+} from "../goals";
 import {
   createContentItem,
   deleteContentItem,
@@ -33,13 +39,15 @@ import {
   type UpdateGrowthContentItemInput,
   type UpdateGrowthInterventionInput,
 } from "../../types/growth";
-import { GOAL_PROPOSAL_FORMATS, type GoalProposalFormat } from "../../types/goals";
+import { GOAL_PROPOSAL_FORMATS, type GoalProposal, type GoalProposalFormat } from "../../types/goals";
 import { createGrowthInterventionDedupeKey } from "../../utils/growth/interventions";
+import { legacyMediaToContentMedia, legacyProposalChannel } from "../../utils/growth/legacySuggestions";
 import {
   GrowthProfileValidationError,
   normalizeGrowthProfileInput,
 } from "../../utils/growth/profileValidation";
 import { parseRepositoryName } from "../../utils/repository";
+import { SOCIAL_PROPOSAL_FORMATS } from "../../utils/socialProposals";
 
 const INTERVENTION_CATEGORIES = ["product", "community", "engineering", "marketing"] as const;
 const CONTENT_CHANNELS = [...GROWTH_CHANNELS, "other"] as const;
@@ -487,6 +495,102 @@ async function content(ctx: RouteContext): Promise<void> {
   }
 }
 
+function proposalSources(proposal: GoalProposal, repositorySources: ReturnType<typeof getRepositoryContentSources>): string[] {
+  return [...new Set([
+    ...repositorySources.flatMap((source) => source.type === "website" ? [source.value] : []),
+    ...(proposal.mediaSuggestions ?? []).map((media) => media.sourceUrl),
+  ])];
+}
+
+function reconcileDraftedContent(
+  accountId: string,
+  intervention: NonNullable<ReturnType<typeof getGrowthIntervention>>,
+  proposals: GoalProposal[],
+  repositorySources: ReturnType<typeof getRepositoryContentSources>,
+  refresh: boolean,
+): ReturnType<typeof listContentItems> {
+  const existing = listContentItems(accountId, { repository: intervention.repository })
+    .filter((item) => item.interventionId === intervention.id);
+  const generatedAt = new Date().toISOString();
+
+  return proposals.map((proposal) => {
+    const formatItems = existing.filter((item) => item.format === proposal.format);
+    const current = [...formatItems].reverse().find((item) => item.generationVersion === SOCIAL_PROPOSALS_VERSION);
+    if (!refresh && current) return current;
+    const editable = [...formatItems].reverse().find((item) => item.status === "idea" || item.status === "draft");
+    const fields = {
+      goalIds: intervention.goalId ? [intervention.goalId] : [],
+      channel: legacyProposalChannel(proposal.format),
+      format: proposal.format,
+      title: proposal.title,
+      summary: proposal.summary,
+      body: proposal.content,
+      threadPosts: proposal.threadPosts ?? [],
+      media: legacyMediaToContentMedia(proposal.mediaSuggestions),
+      sources: proposalSources(proposal, repositorySources),
+      status: "draft" as const,
+      scheduledFor: null,
+      generatedAt,
+      generationVersion: SOCIAL_PROPOSALS_VERSION,
+    };
+    if (editable) return updateContentItem(accountId, editable.id, fields)!;
+    return createContentItem({
+      accountId,
+      repository: intervention.repository,
+      interventionId: intervention.id,
+      ...fields,
+    });
+  });
+}
+
+async function draftContent(ctx: RouteContext): Promise<void> {
+  const account = await requireAccount(ctx);
+  if (!account) return;
+  const body = await parseJsonBody<Record<string, unknown>>(ctx.req, ctx.res);
+  if (!body) return;
+  if (
+    !isRecord(body)
+    || !hasOnlyKeys(body, ["interventionId", "refresh"])
+    || typeof body.interventionId !== "string"
+    || !body.interventionId.trim()
+    || (body.refresh !== undefined && typeof body.refresh !== "boolean")
+  ) return badRequest(ctx, "invalid content draft body");
+
+  const intervention = getGrowthIntervention(account.id, body.interventionId.trim());
+  if (!intervention) return sendJson(ctx.res, 404, { ok: false, error: "intervention not found" });
+  const refresh = body.refresh === true;
+  const existing = listContentItems(account.id, { repository: intervention.repository })
+    .filter((item) => item.interventionId === intervention.id && item.generationVersion === SOCIAL_PROPOSALS_VERSION);
+  const currentSocialItems = SOCIAL_PROPOSAL_FORMATS.flatMap((format) => {
+    const item = [...existing].reverse().find((candidate) => candidate.format === format);
+    return item ? [item] : [];
+  });
+  if (!refresh && currentSocialItems.length === SOCIAL_PROPOSAL_FORMATS.length) {
+    return sendJson(ctx.res, 200, { ok: true, contentItems: currentSocialItems, cached: true });
+  }
+
+  const goal = intervention.goalId ? findGoal(account.id, intervention.goalId) : null;
+  if (intervention.goalId && (!goal || goal.repository !== intervention.repository)) {
+    return badRequest(ctx, "intervention has an invalid goal");
+  }
+  const repositorySources = getRepositoryContentSources(account.id, intervention.repository);
+  try {
+    const proposals = await generateGoalProposals(
+      goal ?? { accountId: account.id, repository: intervention.repository },
+      { title: intervention.title, action: intervention.action, category: intervention.category },
+      repositorySources,
+    );
+    if (!proposals.length) return sendJson(ctx.res, 502, { ok: false, error: "AI returned no proposals" });
+    const contentItems = reconcileDraftedContent(account.id, intervention, proposals, repositorySources, refresh);
+    sendJson(ctx.res, 200, { ok: true, contentItems, cached: false });
+  } catch (error) {
+    if (error instanceof AiNotConfiguredError) {
+      return sendJson(ctx.res, 409, { ok: false, error: error.message, aiEnabled: false });
+    }
+    sendJson(ctx.res, error instanceof AiRequestError ? 502 : 500, { ok: false, error: (error as Error).message });
+  }
+}
+
 async function patchContent(ctx: RouteContext): Promise<void> {
   const account = await requireAccount(ctx);
   if (!account) return;
@@ -551,6 +655,7 @@ export function registerGrowthRoutes(router: AppRouter): void {
   router.on("PATCH", "/api/growth/interventions/:id", patchIntervention);
   router.get("/api/growth/content", content);
   router.post("/api/growth/content", content);
+  router.post("/api/growth/content/draft", draftContent);
   router.on("PATCH", "/api/growth/content/:id", patchContent);
   router.post("/api/growth/content/:id/published", publishContent);
   router.delete("/api/growth/content/:id", removeContent);

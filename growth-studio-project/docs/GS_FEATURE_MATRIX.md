@@ -11,7 +11,7 @@ Authoritative inventory of Growth Studio capabilities. Statuses: `EXISTING`
 | Phase 1 and phase 2 implementation decisions | `growth-studio-project/docs/GS_DECISIONS.md` | DONE | GS-002 |
 | Goals CRUD with metric refresh (stars, forks, closed PRs, downloads) | `src/components/views/GoalsView.tsx`, `src/api/github.ts`, `src/server/goalStore.ts`, `src/server/goals.ts`, `src/server/routes/goals.ts` | EXISTING | — |
 | AI suggestions per goal (3–5 actions); four deterministic actions when AI is not configured | `src/server/goals.ts` `generateGoalSuggestions`, `src/server/growth/signals.ts`, `src/server/goalStore.ts` compatibility projection, `src/server/growth/store.ts` interventions, `src/components/growth/GrowthInterventions.tsx` | EXISTING | GS-021 and GS-023 |
-| AI proposals per suggestion (X thread, LinkedIn, Mastodon) with source-backed media suggestions when assets are available | `src/server/goals.ts` `generateGoalProposals`, `src/server/growth/signals.ts`, `src/utils/socialProposals.ts`, `src/server/goalStore.ts` compatibility projection, `src/server/growth/store.ts` content items, `src/components/modals/GoalProposalsModal.tsx` | EXISTING | GS-021 and GS-023 |
+| AI proposals per suggestion (X thread, LinkedIn, Mastodon) with source-backed media suggestions when assets are available | `src/server/goals.ts` `generateGoalProposals`, `src/server/growth/signals.ts`, `src/utils/socialProposals.ts`, `src/server/goalStore.ts` compatibility projection, `src/server/growth/store.ts` content items, `src/components/modals/GoalProposalsModal.tsx`, `/api/growth/content/draft` | EXISTING | GS-021, GS-023, and GS-024 |
 | Repository content sources (repositories and websites) with SSRF-guarded website reads during generation | `src/server/goalStore.ts`, `src/server/routes/repository.ts`, `src/server/growth/signals.ts`, `src/api/github.ts`, `src/components/common/RepositoryContentSources.tsx`, `src/components/common/ContentSourcePicker.tsx`, `src/utils/socialProposals.ts` | EXISTING | GS-023 and GS-025 moves to Library |
 | AI provider settings and connection test | `src/components/preferences/AiIntegrationSettings.tsx`, `src/api/github.ts`, `src/server/routes/ai.ts`, `src/server/ai/client.ts`, `src/server/ai/settings.ts`, `src/server/ai/providers.ts` | EXISTING | — |
 | `/growth` client routes served by the SPA | `src/server/spa.ts`, `src/main.tsx`, `src/components/growth/GrowthStudioApp.tsx`, `tests/server/spa.test.ts` | DONE | GS-010 |
@@ -27,7 +27,7 @@ Authoritative inventory of Growth Studio capabilities. Statuses: `EXISTING`
 | Growth API routes and account-wide workspace summaries | `src/server/routes/growth.ts`, `src/server/growth/store.ts`, `src/api/growth.ts`, `tests/server/growthRoutes.test.ts` | DONE | GS-022 |
 | Shared repository signal collection with SSRF-guarded sources | `src/server/growth/signals.ts`, `src/server/snapshots.ts`, `tests/server/growthSignals.test.ts` | DONE | GS-023 |
 | Interventions backlog with statuses, AI and fallback generation, dedupe, manual creation, filters, and linked content | `src/components/growth/GrowthInterventions.tsx`, `src/server/routes/growth.ts`, `src/server/growth/store.ts`, `/growth/r/:owner/:repo/interventions` | DONE | GS-023 |
-| Content items list and drawer with copy actions | Interventions and Calendar panels | PLANNED | GS-024 |
+| Content items list and drawer with editing, copy, scheduling, and publication actions | `src/components/growth/ContentItemDrawer.tsx`, `src/components/growth/GrowthInterventions.tsx`, `/api/growth/content/draft`; later reused by Calendar | DONE | GS-024 |
 | Library panel: sources, profile (voice, audience, channels), pillars, cadence | `/growth/r/:owner/:repo/library` | PLANNED | GS-025 |
 | Deterministic slot builder from cadence, pillars, posting windows | `utils/growth/planSlots.ts` | PLANNED | Phase 3 |
 | AI planner assigning angles to slots | `server/growth/planner.ts` | PLANNED | Phase 3 |
@@ -38,7 +38,7 @@ Authoritative inventory of Growth Studio capabilities. Statuses: `EXISTING`
 | Assets library with uploads and imports from README and web sources | `server/growth/assets.ts` | PLANNED | Phase 4 |
 | Generated SVG cards (release, milestone, stats, quote, what's new) | `server/growth/cards.ts` | PLANNED | Phase 4 |
 | Client rasterization, copy image to clipboard, download | `utils/growth/rasterize.ts` | PLANNED | Phase 4 |
-| Media gate: `ready` requires media | `src/server/growth/store.ts`; UI planned for Phase 4 | IN_PROGRESS | GS-020 and Phase 4 |
+| Media gate: `ready` requires media | `src/server/growth/store.ts`, `src/components/growth/ContentItemDrawer.tsx`; media attachment UI planned for Phase 4 | IN_PROGRESS | GS-020, GS-024, and Phase 4 |
 | Opportunity rules producing interventions | `utils/growth/opportunityRules.ts`, `server/growth/rules.ts` | PLANNED | Phase 5 |
 | Attribution of published items to metric deltas (48h, 7d) | `server/growth/attribution.ts` | PLANNED | Phase 5 |
 | Weekly Growth Review | `server/growth/review.ts`, `/growth/review` | PLANNED | Phase 5 |

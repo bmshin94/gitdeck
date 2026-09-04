@@ -11,8 +11,11 @@ const mocks = vi.hoisted(() => ({
   fetchGrowthInterventions: vi.fn(),
   fetchGrowthContentItems: vi.fn(),
   createGrowthIntervention: vi.fn(),
+  draftGrowthContentFromIntervention: vi.fn(),
   generateGrowthInterventions: vi.fn(),
   patchGrowthIntervention: vi.fn(),
+  patchGrowthContentItem: vi.fn(),
+  markGrowthContentPublished: vi.fn(),
   useGoals: vi.fn(),
 }));
 
@@ -21,8 +24,11 @@ vi.mock("../../../src/api/growth", () => ({
   fetchGrowthInterventions: mocks.fetchGrowthInterventions,
   fetchGrowthContentItems: mocks.fetchGrowthContentItems,
   createGrowthIntervention: mocks.createGrowthIntervention,
+  draftGrowthContentFromIntervention: mocks.draftGrowthContentFromIntervention,
   generateGrowthInterventions: mocks.generateGrowthInterventions,
   patchGrowthIntervention: mocks.patchGrowthIntervention,
+  patchGrowthContentItem: mocks.patchGrowthContentItem,
+  markGrowthContentPublished: mocks.markGrowthContentPublished,
 }));
 vi.mock("../../../src/hooks/useGoals", () => ({ useGoals: mocks.useGoals }));
 
@@ -59,13 +65,35 @@ beforeEach(() => {
   ];
   mocks.fetchAiSettings.mockResolvedValue({ settings: { enabled: false } });
   mocks.fetchGrowthInterventions.mockResolvedValue(interventions);
-  mocks.fetchGrowthContentItems.mockResolvedValue([{
+  const contentItem = {
     id: "content-1",
+    accountId: "account-a",
+    repository: "acme/rocket",
+    planId: null,
     interventionId: "proposed",
-    title: "Launch thread",
+    goalIds: ["goal-1"],
+    channel: "x",
     format: "x-thread",
+    pillar: "",
+    angle: "",
+    title: "Launch thread",
+    summary: "A launch campaign",
+    body: "Launch body",
+    threadPosts: ["First launch post", "Second launch post"],
+    media: [{ kind: "image", url: "https://example.com/launch.png", alt: "Launch" }],
+    sources: [],
     status: "draft",
-  }]);
+    scheduledFor: null,
+    publishedAt: null,
+    publishedUrl: null,
+    generatedAt: "2026-09-04T00:00:00.000Z",
+    generationVersion: 4,
+    evergreen: 0,
+    createdAt: "2026-09-04T00:00:00.000Z",
+    updatedAt: "2026-09-04T00:00:00.000Z",
+  };
+  mocks.fetchGrowthContentItems.mockResolvedValue([contentItem]);
+  mocks.draftGrowthContentFromIntervention.mockResolvedValue({ ok: true, contentItems: [contentItem], cached: true });
   mocks.useGoals.mockReturnValue({
     goals: [{ id: "goal-1", metric: "stars", currentValue: 50, targetValue: 100 }],
   });
@@ -113,6 +141,35 @@ describe("GrowthInterventions", () => {
       .find((button) => button.textContent?.includes("Dismissed"));
     await act(async () => dismissedToggle?.click());
     expect(container.textContent).toContain("dismissed action");
+  });
+
+  it("drafts content from an intervention and opens the returned item drawer", async () => {
+    await renderPanel();
+    const draft = [...container.querySelectorAll("button")]
+      .find((button) => button.textContent === "Draft from intervention");
+
+    await act(async () => {
+      draft?.click();
+      await Promise.resolve();
+    });
+
+    expect(mocks.draftGrowthContentFromIntervention).toHaveBeenCalledWith("proposed");
+    expect(document.body.querySelector('[role="dialog"]')?.textContent).toContain("Launch thread");
+  });
+
+  it("shows drafting failures and the AI preferences handoff inline", async () => {
+    mocks.draftGrowthContentFromIntervention.mockRejectedValueOnce(new Error("AI is not configured"));
+    await renderPanel();
+    const draft = [...container.querySelectorAll("button")]
+      .find((button) => button.textContent === "Draft from intervention");
+
+    await act(async () => {
+      draft?.click();
+      await Promise.resolve();
+    });
+
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain("AI is not configured");
+    expect(container.querySelector<HTMLAnchorElement>('a[href="/preferences#preferences-ai"]')?.target).toBe("_blank");
   });
 
   it("updates an intervention status through the account-scoped API", async () => {

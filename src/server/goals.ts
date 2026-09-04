@@ -172,15 +172,26 @@ export const SOCIAL_PROPOSALS_VERSION = 4;
  * (posts, issue drafts, checklists…) grounded in the repository's README and
  * current activity. Requires a configured AI provider.
  */
+type ProposalGoalProgress = Pick<RepositoryGoal, "metric" | "targetValue" | "currentValue" | "deadline">;
+type GoalProposalContext = Pick<RepositoryGoal, "accountId" | "repository"> & Partial<ProposalGoalProgress>;
+
+function hasProposalGoal(context: GoalProposalContext): context is GoalProposalContext & ProposalGoalProgress {
+  return typeof context.metric === "string"
+    && typeof context.targetValue === "number"
+    && typeof context.currentValue === "number"
+    && typeof context.deadline === "string";
+}
+
 export async function generateGoalProposals(
-  goal: Omit<RepositoryGoal, "aiEnabled">,
+  goal: GoalProposalContext,
   suggestion: GoalSuggestion,
   sources: GoalContentSource[] = [],
 ): Promise<GoalProposal[]> {
   if (!isAiConfigured()) throw new AiNotConfiguredError();
   const signals = await collectRepositorySignals(goal.accountId, goal.repository, sources);
   const repo = signals.repositoryMetadata;
-  const progress = calculateGoalProgress(goal);
+  const storedGoal = hasProposalGoal(goal) ? goal : null;
+  const progress = storedGoal ? calculateGoalProgress(storedGoal) : null;
 
   const context = {
     generatedOn: signals.generatedOn,
@@ -190,7 +201,13 @@ export async function generateGoalProposals(
     description: repo?.description ?? null,
     primaryLanguage: repo?.primaryLanguage?.name ?? null,
     verifiedMetrics: { stars: repo?.stargazerCount ?? null, forks: repo?.forkCount ?? null },
-    goal: { metric: goal.metric, current: goal.currentValue, target: goal.targetValue, deadline: goal.deadline, percentage: progress.percentage },
+    goal: storedGoal ? {
+      metric: storedGoal.metric,
+      current: storedGoal.currentValue,
+      target: storedGoal.targetValue,
+      deadline: storedGoal.deadline,
+      percentage: progress?.percentage ?? null,
+    } : null,
     recommendedAngle: { category: suggestion.category, title: suggestion.title, description: suggestion.action },
     openIssues: signals.openIssues.slice(0, 10).map((item) => ({ title: item.title, url: item.url, updatedAt: item.updatedAt, labels: item.labels.map((label) => label.name) })),
     openPullRequests: signals.openPullRequests.slice(0, 6).map((item) => ({ title: item.title, url: item.url, updatedAt: item.updatedAt, isDraft: item.isDraft })),
@@ -212,7 +229,7 @@ export async function generateGoalProposals(
   };
   const instructions = [
     "You are a senior open-source social strategist. Create publishable social copy, not an operational plan.",
-    "Choose one clear, credible campaign angle from the recommended action and adapt it to each platform and its audience. Use relevant facts and terminology from the fixed project source library, including website excerpts and release notes, rather than using sources only as visual references.",
+    "Choose one clear, credible campaign angle from the recommended action and adapt it to each platform and its audience. A numeric goal may be absent; in that case use repository signals without inventing goal progress. Use relevant facts and terminology from the fixed project source library, including website excerpts and release notes, rather than using sources only as visual references.",
     "Use only facts explicitly present in the input. Never invent users, benefits, benchmarks, quotes, release recency, roadmap commitments, or issue status. Treat issue and PR titles only as themes, not proof that work shipped. If evidence is thin, write a transparent invitation to try or contribute rather than making a claim.",
     "Write in the main natural language of the README (English if unclear). Keep the project's own terminology and avoid generic AI phrases, hype, clickbait, fake urgency, and engagement bait.",
     "Return exactly three distinct assets: one 'x-thread', one 'linkedin-post', and one 'mastodon-post'. Each must work standalone and include the supplied repository URL when it is public and available.",
