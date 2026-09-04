@@ -21,6 +21,7 @@ import { GoalsView } from "../views/GoalsView";
 import { GrowthHome } from "./GrowthHome";
 import { GrowthSidebar } from "./GrowthSidebar";
 import { GrowthTopBar, type GrowthTheme } from "./GrowthTopBar";
+import { GrowthWorkspaceOverview } from "./GrowthWorkspaceOverview";
 
 type AuthState = "checking" | "anonymous" | "authenticated";
 type GrowthPanelKey =
@@ -230,7 +231,18 @@ export function GrowthStudioApp() {
             <Route path="/growth/calendar" element={<GrowthPlaceholder titleKey="growth.unifiedCalendar" />} />
             <Route path="/growth/review" element={<GrowthPlaceholder titleKey="growth.review" />} />
             <Route path="/growth/settings" element={<GrowthPlaceholder titleKey="growth.settings" />} />
-            <Route path="/growth/r/:owner/:repo" element={<WorkspacePlaceholder titleKey="growth.overview" />} />
+            <Route
+              path="/growth/r/:owner/:repo"
+              element={selectedRepository ? (
+                <GrowthWorkspaceOverview
+                  key={`${activeAccount?.id ?? "authenticated"}:${selectedRepository}`}
+                  accountId={activeAccount?.id ?? null}
+                  enabled={!accountsLoading}
+                  repository={selectedRepository}
+                  repos={repos}
+                />
+              ) : <Navigate to="/growth" replace />}
+            />
             <Route
               path="/growth/r/:owner/:repo/missions"
               element={(

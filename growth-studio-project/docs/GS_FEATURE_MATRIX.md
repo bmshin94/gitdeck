@@ -19,7 +19,7 @@ Authoritative inventory of Growth Studio capabilities. Statuses: `EXISTING`
 | Main-menu entry opening `/growth` in a new window; `goals` tab removed; `/goals` redirect | `src/App.tsx`, `src/main.tsx`, `src/utils/dataRequirements.ts`, `src/components/SidebarControls.tsx` | DONE | GS-012 |
 | Missions panel hosting the existing goals UI | `src/components/growth/GrowthStudioApp.tsx`, `src/hooks/useGoals.ts`, `src/components/views/GoalsView.tsx` | DONE | GS-013 |
 | Growth home: repositories with profiles or goals, quick stats | `src/components/growth/GrowthHome.tsx`, `src/utils/growthHome.ts`, `/growth` | DONE | GS-014 |
-| Workspace overview per repository | `/growth/r/:owner/:repo` | PLANNED | GS-015 |
+| Workspace overview per repository | `src/components/growth/GrowthWorkspaceOverview.tsx`, `src/types/growth.ts`, `src/api/growth.ts`, `/growth/r/:owner/:repo` | DONE | GS-015 |
 | Shell i18n, responsive layout, theme parity | shell components | PLANNED | GS-016 |
 | Growth store schema (profiles, interventions, plans, items, assets, performance) | `server/growth/store.ts` | PLANNED | GS-020 |
 | One-shot migration of legacy suggestions and proposals | `server/growth/store.ts` | PLANNED | GS-021 |
