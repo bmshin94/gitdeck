@@ -39,6 +39,11 @@ import {
   type GoalProposalFormat,
   type GoalSuggestion,
 } from "../../types/goals";
+import {
+  buildEvergreenIdeaInput,
+  contentIdFromEvergreenRuleKey,
+  isEvergreenContentEligible,
+} from "../../utils/growth/evergreen";
 import { createGrowthInterventionDedupeKey } from "../../utils/growth/interventions";
 import {
   createLegacySuggestionDedupeKey,
@@ -1058,6 +1063,42 @@ export function createContentItem(input: CreateGrowthContentItemInput): GrowthCo
   assertContentReferences(item);
   insertContentItem(item);
   return getContentItem(input.accountId, item.id)!;
+}
+
+/** Resolves an account-owned evergreen intervention and creates its blank idea at most once. */
+export function recycleEvergreenIntervention(
+  accountId: string,
+  interventionId: string,
+  now: Date,
+): { contentItem: GrowthContentItem; duplicate: boolean } | null {
+  ensureGrowthAccountMigration(accountId);
+  return getDatabase().transaction(() => {
+    const intervention = getGrowthIntervention(accountId, interventionId);
+    const sourceId = intervention?.origin === "rule"
+      ? contentIdFromEvergreenRuleKey(intervention.ruleKey)
+      : null;
+    if (!intervention || !sourceId) return null;
+
+    const source = getContentItem(accountId, sourceId);
+    if (
+      !source
+      || source.repository !== intervention.repository
+      || !isEvergreenContentEligible(source, now)
+    ) return null;
+
+    const existing = get<GrowthContentItemRow>(
+      `SELECT * FROM content_items
+       WHERE account_id = ? AND repository = ? AND intervention_id = ? AND status = 'idea'
+       ORDER BY created_at, id LIMIT 1`,
+      [accountId, intervention.repository, intervention.id],
+    );
+    if (existing) return { contentItem: contentItemFromRow(existing), duplicate: true };
+
+    return {
+      contentItem: createContentItem(buildEvergreenIdeaInput(source, intervention.id)),
+      duplicate: false,
+    };
+  })();
 }
 
 /** Creates a plan and all of its initial content items in one transaction. */

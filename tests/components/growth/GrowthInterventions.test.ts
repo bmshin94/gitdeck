@@ -4,7 +4,7 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { GrowthInterventions } from "../../../src/components/growth/GrowthInterventions";
 import { I18nProvider } from "../../../src/i18n/I18nProvider";
-import type { GrowthIntervention, GrowthInterventionStatus } from "../../../src/types/growth";
+import type { GrowthContentItem, GrowthIntervention, GrowthInterventionStatus } from "../../../src/types/growth";
 
 const mocks = vi.hoisted(() => ({
   fetchAiSettings: vi.fn(),
@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   draftGrowthContentFromIntervention: vi.fn(),
   generateGrowthInterventions: vi.fn(),
   patchGrowthIntervention: vi.fn(),
+  recycleGrowthIntervention: vi.fn(),
   scanGrowthOpportunities: vi.fn(),
   patchGrowthContentItem: vi.fn(),
   markGrowthContentPublished: vi.fn(),
@@ -30,6 +31,7 @@ vi.mock("../../../src/api/growth", () => ({
   draftGrowthContentFromIntervention: mocks.draftGrowthContentFromIntervention,
   generateGrowthInterventions: mocks.generateGrowthInterventions,
   patchGrowthIntervention: mocks.patchGrowthIntervention,
+  recycleGrowthIntervention: mocks.recycleGrowthIntervention,
   scanGrowthOpportunities: mocks.scanGrowthOpportunities,
   patchGrowthContentItem: mocks.patchGrowthContentItem,
   markGrowthContentPublished: mocks.markGrowthContentPublished,
@@ -267,6 +269,102 @@ describe("GrowthInterventions", () => {
       expect(container.textContent).not.toContain(ruleKey);
     }
     expect(container.textContent).toContain("Opportunity scan");
+  });
+
+  it("recycles only eligible evergreen rule cards and reconciles busy, success, duplicate, and error states", async () => {
+    const source: GrowthContentItem = {
+      id: "evergreen-source",
+      accountId: "account-a",
+      repository: "acme/rocket",
+      planId: null,
+      interventionId: null,
+      goalIds: ["goal-1"],
+      channel: "linkedin",
+      format: "linkedin-post",
+      pillar: "education",
+      angle: "Original angle",
+      title: "Evergreen guide",
+      summary: "Original summary",
+      body: "Original copy",
+      threadPosts: [],
+      media: [{ kind: "image", url: "https://example.com/guide.png", alt: "Guide" }],
+      sources: ["https://example.com/guide"],
+      status: "published",
+      scheduledFor: null,
+      publishedAt: "2020-01-01T00:00:00.000Z",
+      publishedUrl: "https://social.example/guide",
+      generatedAt: null,
+      generationVersion: 1,
+      evergreen: 1,
+      createdAt: "2020-01-01T00:00:00.000Z",
+      updatedAt: "2020-01-01T00:00:00.000Z",
+    };
+    const evergreenRule = intervention("evergreen-rule", "proposed", {
+      goalId: null,
+      origin: "rule",
+      ruleKey: `evergreen:${source.id}`,
+      title: "Recycle evergreen guide",
+    });
+    const ordinaryRule = intervention("release-rule", "proposed", {
+      goalId: null,
+      origin: "rule",
+      ruleKey: "release:v2",
+      title: "Release follow-up",
+    });
+    const recycled: GrowthContentItem = {
+      ...source,
+      id: "recycled-idea",
+      interventionId: evergreenRule.id,
+      title: "",
+      body: "",
+      media: [],
+      status: "idea",
+      publishedAt: null,
+      publishedUrl: null,
+      evergreen: 0,
+    };
+    mocks.fetchGrowthInterventions.mockResolvedValue([evergreenRule, ordinaryRule]);
+    mocks.fetchGrowthContentItems.mockResolvedValue([source]);
+    let resolveRecycle: ((value: { ok: true; contentItem: GrowthContentItem; duplicate: boolean }) => void) | undefined;
+    mocks.recycleGrowthIntervention.mockImplementationOnce(() => new Promise((resolve) => {
+      resolveRecycle = resolve;
+    }));
+
+    await renderPanel();
+    expect([...container.querySelectorAll("button")].filter((entry) => entry.textContent === "Recycle to idea"))
+      .toHaveLength(1);
+    const recycle = button("Recycle to idea");
+    recycle.focus();
+    expect(document.activeElement).toBe(recycle);
+    await act(async () => {
+      recycle.click();
+      await flush();
+    });
+    expect(button("Recycling…").disabled).toBe(true);
+    expect(mocks.recycleGrowthIntervention).toHaveBeenCalledWith(evergreenRule.id);
+
+    await act(async () => {
+      resolveRecycle?.({ ok: true, contentItem: recycled, duplicate: false });
+      await flush();
+    });
+    expect(container.textContent).toContain("A fresh idea was created");
+    expect(container.textContent).toContain("Content items (1)");
+
+    mocks.recycleGrowthIntervention.mockResolvedValueOnce({ ok: true, contentItem: recycled, duplicate: true });
+    await act(async () => {
+      button("Recycle to idea").click();
+      await flush();
+    });
+    expect(container.textContent).toContain("already has a recycled idea");
+    expect(container.querySelectorAll(".growth-intervention-content li")).toHaveLength(1);
+
+    mocks.recycleGrowthIntervention.mockRejectedValueOnce(new Error("no longer eligible"));
+    await act(async () => {
+      button("Recycle to idea").click();
+      await flush();
+    });
+    expect(container.querySelector(".growth-intervention-recycle-feedback.error")?.textContent)
+      .toContain("no longer eligible");
   });
 
   it("renders no-op and request-error scan states without running automatically", async () => {

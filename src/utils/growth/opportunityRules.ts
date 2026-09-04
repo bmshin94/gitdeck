@@ -5,12 +5,12 @@ import type {
   GrowthOpportunity,
 } from "../../types/growth";
 import { GOAL_METRICS, type GoalMetric } from "../../types/goals";
+import { createEvergreenRuleKey, isEvergreenContentEligible } from "./evergreen";
 
 const DAY_MS = 86_400_000;
 const RELEASE_FOLLOW_UP_DAYS = 3;
 const ACTIVITY_LOOKBACK_DAYS = 30;
 const STALE_ISSUE_DAYS = 14;
-const EVERGREEN_AGE_DAYS = 60;
 const LARGE_PULL_REQUEST_LINES = 500;
 const LARGE_PULL_REQUEST_FILES = 20;
 const STAR_MILESTONE_DISTANCE = 0.05;
@@ -248,12 +248,10 @@ export function detectGrowthOpportunities(input: DetectGrowthOpportunitiesInput)
   }).sort(byRuleKey);
 
   const evergreen = input.contentItems.flatMap((item) => {
-    const publishedAt = parseDate(item.publishedAt);
-    if (!nonEmpty(item.id) || item.status !== "published" || item.evergreen !== 1 || publishedAt === null) return [];
-    const age = ageInMilliseconds(publishedAt, now);
-    if (age === null || age < EVERGREEN_AGE_DAYS * DAY_MS) return [];
+    const ruleKey = createEvergreenRuleKey(item.id);
+    if (!ruleKey || !isEvergreenContentEligible(item, input.now)) return [];
     return [opportunity(
-      `evergreen:${item.id}`,
+      ruleKey,
       "marketing",
       `Recycle evergreen content: ${item.title.trim() || item.id}`,
       "Create a fresh angle and media treatment from this proven evergreen content.",

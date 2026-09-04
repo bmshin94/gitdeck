@@ -7,6 +7,7 @@ import {
   fetchGrowthInterventions,
   generateGrowthInterventions,
   patchGrowthIntervention,
+  recycleGrowthIntervention,
   scanGrowthOpportunities,
 } from "../../api/growth";
 import { useGoals } from "../../hooks/useGoals";
@@ -22,6 +23,10 @@ import {
 } from "../../types/growth";
 import { GOAL_METRIC_DEFINITIONS, type GoalMetric } from "../../types/goals";
 import { formatNumber } from "../../utils/format";
+import {
+  contentIdFromEvergreenRuleKey,
+  isEvergreenContentEligible,
+} from "../../utils/growth/evergreen";
 import { ContentItemDrawer } from "./ContentItemDrawer";
 
 interface GrowthInterventionsProps {
@@ -52,6 +57,7 @@ const originKeys: Record<GrowthInterventionOrigin, TranslationKey> = {
 };
 
 type OpportunityScanState = "idle" | "scanning" | "empty" | "success" | "error";
+type RecycleFeedback = { kind: "success" | "duplicate" | "error"; message: string };
 
 function opportunityKindKey(ruleKey: string | null): TranslationKey {
   if (ruleKey?.startsWith("release:")) return "growth.opportunityKind.release";
@@ -82,6 +88,7 @@ export function GrowthInterventions({ accountId, enabled, repository }: GrowthIn
   const [aiEnabled, setAiEnabled] = useState<boolean | null>(null);
   const [selectedContentItem, setSelectedContentItem] = useState<GrowthContentItem | null>(null);
   const [draftErrors, setDraftErrors] = useState<Record<string, string>>({});
+  const [recycleFeedback, setRecycleFeedback] = useState<Record<string, RecycleFeedback>>({});
   const [scanState, setScanState] = useState<OpportunityScanState>("idle");
   const [scanCount, setScanCount] = useState(0);
   const [scanError, setScanError] = useState("");
@@ -131,6 +138,7 @@ export function GrowthInterventions({ accountId, enabled, repository }: GrowthIn
     setDismissedOpen(false);
     setSelectedContentItem(null);
     setDraftErrors({});
+    setRecycleFeedback({});
     setScanState("idle");
     setScanCount(0);
     setScanError("");
@@ -245,6 +253,49 @@ export function GrowthInterventions({ accountId, enabled, repository }: GrowthIn
     }
   }
 
+  async function recycleIntervention(intervention: GrowthIntervention) {
+    const action = `recycle-${intervention.id}`;
+    setBusy(action);
+    setError("");
+    setNotice("");
+    setRecycleFeedback((current) => {
+      const next = { ...current };
+      delete next[intervention.id];
+      return next;
+    });
+    try {
+      const result = await recycleGrowthIntervention(intervention.id);
+      if (
+        result.contentItem.accountId !== accountId
+        || result.contentItem.repository !== repository
+        || result.contentItem.interventionId !== intervention.id
+      ) throw new Error("Invalid recycled content response.");
+      setContentItems((current) => {
+        const exists = current.some((item) => item.id === result.contentItem.id);
+        return exists
+          ? current.map((item) => item.id === result.contentItem.id ? result.contentItem : item)
+          : [...current, result.contentItem];
+      });
+      setRecycleFeedback((current) => ({
+        ...current,
+        [intervention.id]: {
+          kind: result.duplicate ? "duplicate" : "success",
+          message: t(result.duplicate ? "growth.evergreenRecycleDuplicate" : "growth.evergreenRecycleSuccess"),
+        },
+      }));
+    } catch (cause) {
+      setRecycleFeedback((current) => ({
+        ...current,
+        [intervention.id]: {
+          kind: "error",
+          message: t("growth.evergreenRecycleError", { message: (cause as Error).message }),
+        },
+      }));
+    } finally {
+      setBusy("");
+    }
+  }
+
   function updateContentItem(updated: GrowthContentItem) {
     setContentItems((current) => current.map((item) => item.id === updated.id ? updated : item));
     setSelectedContentItem(updated);
@@ -275,6 +326,15 @@ export function GrowthInterventions({ accountId, enabled, repository }: GrowthIn
   function renderIntervention(intervention: GrowthIntervention) {
     const linkedGoal = intervention.goalId ? goalsById.get(intervention.goalId) : null;
     const linkedContent = contentByIntervention.get(intervention.id) ?? [];
+    const evergreenSourceId = intervention.origin === "rule"
+      ? contentIdFromEvergreenRuleKey(intervention.ruleKey)
+      : null;
+    const evergreenSource = evergreenSourceId
+      ? contentItems.find((item) => item.id === evergreenSourceId)
+      : undefined;
+    const canRecycle = evergreenSource !== undefined
+      && isEvergreenContentEligible(evergreenSource, new Date());
+    const feedback = recycleFeedback[intervention.id];
     return (
       <article className="growth-intervention-card" key={intervention.id}>
         <div className="growth-intervention-card-head">
@@ -316,10 +376,20 @@ export function GrowthInterventions({ accountId, enabled, repository }: GrowthIn
             {/not configured/i.test(draftErrors[intervention.id]) ? <> <a href="/preferences#preferences-ai" target="_blank" rel="noopener">{t("growth.interventionsOpenPreferences")}</a></> : null}
           </p>
         ) : null}
+        {feedback ? (
+          <p className={`growth-intervention-recycle-feedback ${feedback.kind}`} role={feedback.kind === "error" ? "alert" : "status"}>
+            {feedback.message}
+          </p>
+        ) : null}
         <div className="growth-intervention-actions">
           <button className="btn" type="button" disabled={busy !== "" || scanState === "scanning"} onClick={() => void draftFromIntervention(intervention)}>
             {busy === `draft-${intervention.id}` ? t("growth.contentDrafting") : t("growth.contentDraftFromIntervention")}
           </button>
+          {canRecycle ? (
+            <button className="btn primary" type="button" disabled={busy !== "" || scanState === "scanning"} onClick={() => void recycleIntervention(intervention)}>
+              {busy === `recycle-${intervention.id}` ? t("growth.evergreenRecycling") : t("growth.evergreenRecycleAction")}
+            </button>
+          ) : null}
           {intervention.status === "proposed" || intervention.status === "dismissed" ? (
             <button className="btn primary" type="button" disabled={busy === intervention.id || scanState === "scanning"} onClick={() => void changeStatus(intervention, "accepted")}>
               {t("growth.interventionsAccept")}

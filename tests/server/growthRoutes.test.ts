@@ -922,6 +922,126 @@ describe("Growth API routes", () => {
     expect(otherAccount.body.interventions[0].accountId).toBe("account-b");
   });
 
+  it("recycles eligible evergreen rule interventions once with strict account-safe failures", async () => {
+    const media = [{ kind: "image" as const, url: "https://example.com/guide.png", alt: "Guide" }];
+    const oldDate = new Date(Date.now() - 61 * 86_400_000).toISOString();
+    const source = growthStore.createContentItem({
+      accountId: "account-a",
+      repository: "acme/repo",
+      goalIds: [],
+      channel: "linkedin",
+      format: "linkedin-post",
+      pillar: "education",
+      title: "Evergreen guide",
+      body: "Published source copy",
+      media,
+      sources: ["https://example.com/guide"],
+      status: "published",
+      publishedAt: oldDate,
+      evergreen: 1,
+    });
+    const intervention = growthStore.upsertGrowthRuleIntervention({
+      accountId: "account-a",
+      repository: "acme/repo",
+      category: "marketing",
+      title: "Recycle evergreen guide",
+      action: "Create a fresh angle.",
+      ruleKey: `evergreen:${source.id}`,
+    });
+
+    expect((await dispatch("POST", `/api/growth/interventions/${intervention.id}/recycle`, {
+      unexpected: true,
+    })).status).toBe(400);
+    const first = await dispatch("POST", `/api/growth/interventions/${intervention.id}/recycle`, {});
+    expect(first.status).toBe(201);
+    expect(first.body).toMatchObject({
+      ok: true,
+      duplicate: false,
+      contentItem: {
+        interventionId: intervention.id,
+        repository: "acme/repo",
+        channel: "linkedin",
+        format: "linkedin-post",
+        pillar: "education",
+        title: "",
+        body: "",
+        media: [],
+        sources: ["https://example.com/guide"],
+        status: "idea",
+        evergreen: 0,
+      },
+    });
+    const repeated = await dispatch("POST", `/api/growth/interventions/${intervention.id}/recycle`);
+    expect(repeated.status).toBe(200);
+    expect(repeated.body).toMatchObject({ duplicate: true, contentItem: { id: first.body.contentItem.id } });
+    expect(growthStore.getContentItem("account-a", source.id)).toMatchObject({
+      title: "Evergreen guide",
+      body: "Published source copy",
+      status: "published",
+      evergreen: 1,
+    });
+    expect(growthStore.listContentItems("account-a", { repository: "acme/repo" })).toHaveLength(2);
+
+    state.activeAccountId = "account-b";
+    const foreign = await dispatch("POST", `/api/growth/interventions/${intervention.id}/recycle`, {});
+    state.activeAccountId = "account-a";
+    const missing = await dispatch("POST", "/api/growth/interventions/missing/recycle", {});
+
+    const ineligibleSource = growthStore.createContentItem({
+      accountId: "account-a",
+      repository: "acme/repo",
+      channel: "x",
+      format: "x-thread",
+      media,
+      status: "published",
+      publishedAt: oldDate,
+      evergreen: 0,
+    });
+    const ineligibleRule = growthStore.upsertGrowthRuleIntervention({
+      accountId: "account-a",
+      repository: "acme/repo",
+      category: "marketing",
+      title: "Not evergreen",
+      action: "Do not recycle.",
+      ruleKey: `evergreen:${ineligibleSource.id}`,
+    });
+    const recentSource = growthStore.createContentItem({
+      accountId: "account-a",
+      repository: "acme/repo",
+      channel: "x",
+      format: "x-thread",
+      media,
+      status: "published",
+      publishedAt: new Date(Date.now() - 10 * 86_400_000).toISOString(),
+      evergreen: 1,
+    });
+    const staleRule = growthStore.upsertGrowthRuleIntervention({
+      accountId: "account-a",
+      repository: "acme/repo",
+      category: "marketing",
+      title: "Too recent",
+      action: "Wait.",
+      ruleKey: `evergreen:${recentSource.id}`,
+    });
+    const manual = growthStore.createGrowthIntervention({
+      accountId: "account-a",
+      repository: "acme/repo",
+      category: "marketing",
+      title: "Manual collision",
+      action: "Do not recycle.",
+      origin: "manual",
+      ruleKey: `evergreen:${source.id}`,
+      dedupeKey: "manual-collision",
+    });
+    const rejected = await Promise.all([ineligibleRule.id, staleRule.id, manual.id].map((id) => (
+      dispatch("POST", `/api/growth/interventions/${id}/recycle`, {})
+    )));
+
+    expect(foreign).toEqual(missing);
+    expect(foreign).toMatchObject({ status: 404, body: { ok: false, error: "evergreen intervention not found" } });
+    expect(rejected.map(({ status }) => status)).toEqual([404, 404, 404]);
+  });
+
   it("lists and refreshes account-scoped performance with strict filters and bodies", async () => {
     const media = [{ kind: "image" as const, url: "https://example.com/card.png", alt: "Card" }];
     const accountA = growthStore.createContentItem({

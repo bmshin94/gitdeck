@@ -676,6 +676,10 @@ export interface GrowthContentItemData {
   contentItem: GrowthContentItem;
 }
 
+export interface GrowthRecycledContentData extends GrowthContentItemData {
+  duplicate: boolean;
+}
+
 export interface GrowthDraftContentData extends GrowthContentItemsData {
   cached: boolean;
 }

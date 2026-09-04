@@ -205,6 +205,111 @@ describe("Growth Studio store", () => {
     expect(store.listGrowthInterventions("account-b", { repository: "owner/repo" })).toHaveLength(1);
   });
 
+  it("atomically recycles an eligible rule source into one blank linked idea", () => {
+    const source = store.createContentItem({
+      accountId: "account-a",
+      repository: "owner/repo",
+      planId: null,
+      goalIds: ["goal-1"],
+      channel: "linkedin",
+      format: "linkedin-post",
+      pillar: "education",
+      angle: "Original angle",
+      title: "Evergreen guide",
+      summary: "Original summary",
+      body: "Original body",
+      media: MEDIA,
+      sources: ["https://example.com/guide"],
+      status: "published",
+      publishedAt: "2026-07-01T00:00:00.000Z",
+      publishedUrl: "https://social.example/guide",
+      evergreen: 1,
+    });
+    const intervention = store.upsertGrowthRuleIntervention({
+      accountId: "account-a",
+      repository: "owner/repo",
+      category: "marketing",
+      title: "Recycle evergreen guide",
+      action: "Create a fresh angle.",
+      ruleKey: `evergreen:${source.id}`,
+    });
+    const sourceBefore = store.getContentItem("account-a", source.id);
+    const now = new Date("2026-09-10T00:00:00.000Z");
+
+    const first = store.recycleEvergreenIntervention("account-a", intervention.id, now);
+    const repeated = store.recycleEvergreenIntervention("account-a", intervention.id, now);
+
+    expect(first).toMatchObject({ duplicate: false, contentItem: {
+      repository: "owner/repo",
+      planId: null,
+      interventionId: intervention.id,
+      goalIds: ["goal-1"],
+      channel: "linkedin",
+      format: "linkedin-post",
+      pillar: "education",
+      angle: "",
+      title: "",
+      summary: "",
+      body: "",
+      threadPosts: [],
+      media: [],
+      sources: ["https://example.com/guide"],
+      status: "idea",
+      scheduledFor: null,
+      publishedAt: null,
+      publishedUrl: null,
+      generatedAt: null,
+      evergreen: 0,
+    } });
+    expect(repeated).toMatchObject({ duplicate: true, contentItem: { id: first?.contentItem.id } });
+    expect(store.listContentItems("account-a", { repository: "owner/repo" })).toHaveLength(2);
+    expect(store.getContentItem("account-a", source.id)).toEqual(sourceBefore);
+    expect(store.recycleEvergreenIntervention("account-b", intervention.id, now)).toBeNull();
+  });
+
+  it("rejects stale or unrelated interventions during evergreen recycling", () => {
+    const source = store.createContentItem({
+      accountId: "account-a",
+      repository: "owner/repo",
+      channel: "x",
+      format: "x-thread",
+      media: MEDIA,
+      status: "published",
+      publishedAt: "2026-08-01T00:00:00.000Z",
+      evergreen: 1,
+    });
+    const stale = store.upsertGrowthRuleIntervention({
+      accountId: "account-a",
+      repository: "owner/repo",
+      category: "marketing",
+      title: "Recycle later",
+      action: "Wait until eligible.",
+      ruleKey: `evergreen:${source.id}`,
+    });
+    const manual = store.createGrowthIntervention({
+      accountId: "account-a",
+      repository: "owner/repo",
+      category: "marketing",
+      title: "Manual",
+      action: "Do it manually.",
+      origin: "manual",
+      ruleKey: `evergreen:${source.id}`,
+      dedupeKey: "manual-evergreen",
+    });
+
+    expect(store.recycleEvergreenIntervention(
+      "account-a",
+      stale.id,
+      new Date("2026-09-10T00:00:00.000Z"),
+    )).toBeNull();
+    expect(store.recycleEvergreenIntervention(
+      "account-a",
+      manual.id,
+      new Date("2027-01-01T00:00:00.000Z"),
+    )).toBeNull();
+    expect(store.listContentItems("account-a", { repository: "owner/repo" })).toEqual([source]);
+  });
+
   it("creates, reads, and stably lists assets in one account and repository", () => {
     const first = store.createGrowthAsset({
       accountId: "account-a",

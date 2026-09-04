@@ -52,6 +52,10 @@ import {
   GrowthContentDraftConflictError,
 } from "../growth/drafter";
 import { scanRepositoryGrowthOpportunities } from "../growth/rules";
+import {
+  EvergreenRecycleUnavailableError,
+  recycleEvergreenContent,
+} from "../growth/recycling";
 import { refreshContentPerformance } from "../growth/attribution";
 import { getGrowthPerformanceSummary } from "../growth/performance";
 import { getGrowthWeeklyReview } from "../growth/review";
@@ -354,6 +358,26 @@ async function scanInterventions(ctx: RouteContext): Promise<void> {
     sendJson(ctx.res, 200, { ok: true, ...result });
   } catch (error) {
     sendJson(ctx.res, 500, { ok: false, error: (error as Error).message });
+  }
+}
+
+async function recycleIntervention(ctx: RouteContext): Promise<void> {
+  const account = await requireAccount(ctx);
+  if (!account) return;
+  const body = await parseJsonBody<Record<string, unknown>>(ctx.req, ctx.res);
+  if (!body) return;
+  if (!isRecord(body) || Object.keys(body).length > 0) {
+    return badRequest(ctx, "invalid evergreen recycling body");
+  }
+
+  try {
+    const result = recycleEvergreenContent(account.id, ctx.params.id ?? "");
+    sendJson(ctx.res, result.duplicate ? 200 : 201, { ok: true, ...result });
+  } catch (error) {
+    if (error instanceof EvergreenRecycleUnavailableError) {
+      return sendJson(ctx.res, 404, { ok: false, error: "evergreen intervention not found" });
+    }
+    sendJson(ctx.res, 500, { ok: false, error: "evergreen recycling failed" });
   }
 }
 
@@ -1200,6 +1224,7 @@ export function registerGrowthRoutes(router: AppRouter): void {
   router.post("/api/growth/interventions", interventions);
   router.post("/api/growth/interventions/generate", generateInterventions);
   router.post("/api/growth/interventions/scan", scanInterventions);
+  router.post("/api/growth/interventions/:id/recycle", recycleIntervention);
   router.on("PATCH", "/api/growth/interventions/:id", patchIntervention);
   router.get("/api/growth/assets", assets);
   router.post("/api/growth/assets", assets);

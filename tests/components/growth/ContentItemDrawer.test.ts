@@ -214,6 +214,30 @@ describe("ContentItemDrawer", () => {
     }));
   });
 
+  it("edits the evergreen setting and restores it when persistence fails", async () => {
+    await renderDrawer();
+    const evergreen = document.body.querySelector<HTMLInputElement>('.growth-content-evergreen input[type="checkbox"]');
+    expect(evergreen).not.toBeNull();
+    expect(evergreen?.checked).toBe(false);
+    expect(document.body.textContent).toContain("surface for recycling after 60 days");
+
+    await act(async () => {
+      evergreen?.click();
+      await Promise.resolve();
+    });
+    expect(mocks.patchGrowthContentItem).toHaveBeenCalledWith("content-1", { evergreen: 1 });
+    expect(onUpdate).toHaveBeenCalledWith(expect.objectContaining({ evergreen: 1 }));
+    expect(evergreen?.checked).toBe(true);
+
+    mocks.patchGrowthContentItem.mockRejectedValueOnce(new Error("evergreen update failed"));
+    await act(async () => {
+      evergreen?.click();
+      await Promise.resolve();
+    });
+    expect(evergreen?.checked).toBe(false);
+    expect(document.body.querySelector('[role="alert"]')?.textContent).toContain("evergreen update failed");
+  });
+
   it("uses authenticated asset previews and excludes videos from image actions", async () => {
     item = {
       ...item,

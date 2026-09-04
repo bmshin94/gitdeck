@@ -384,6 +384,31 @@
   font-size: 10px;
 }
 
+.mode-growth .growth-intervention-recycle-feedback {
+  margin: 0;
+  padding: 7px 8px;
+  border: 1px solid var(--border-soft);
+  border-radius: 7px;
+  font-size: 9.5px;
+  line-height: 1.45;
+}
+
+.mode-growth .growth-intervention-recycle-feedback.success {
+  color: var(--success);
+  background: color-mix(in srgb, var(--success) 8%, var(--panel));
+}
+
+.mode-growth .growth-intervention-recycle-feedback.duplicate {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--panel));
+}
+
+.mode-growth .growth-intervention-recycle-feedback.error {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 8%, var(--panel));
+  border-color: color-mix(in srgb, var(--danger) 34%, var(--border));
+}
+
 .mode-growth .growth-intervention-actions {
   padding-top: 3px;
 }

@@ -29,6 +29,7 @@ import type {
   GrowthProfileData,
   GrowthProfileInput,
   GrowthRegeneratedContentPlanData,
+  GrowthRecycledContentData,
   GrowthReviewData,
   GrowthReviewFilters,
   GrowthScannedInterventionsData,
@@ -252,6 +253,13 @@ export async function scanGrowthOpportunities(repository: string, signal?: Abort
 }
 
 export const scanGrowthInterventions = scanGrowthOpportunities;
+
+export async function recycleGrowthIntervention(id: string, signal?: AbortSignal) {
+  return requestJson<GrowthRecycledContentData>(
+    `/api/growth/interventions/${encodeURIComponent(id)}/recycle`,
+    jsonRequest("POST", {}, signal),
+  );
+}
 
 export async function fetchGrowthReview(
   filters: GrowthReviewFilters = {},

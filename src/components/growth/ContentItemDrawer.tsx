@@ -68,6 +68,7 @@ export function ContentItemDrawer({ item, onClose, onUpdate }: ContentItemDrawer
   const [threadPosts, setThreadPosts] = useState(item.threadPosts);
   const [scheduledFor, setScheduledFor] = useState(toLocalDateTime(item.scheduledFor));
   const [publishedUrl, setPublishedUrl] = useState(item.publishedUrl ?? "");
+  const [evergreen, setEvergreen] = useState(item.evergreen === 1);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
 
@@ -77,6 +78,7 @@ export function ContentItemDrawer({ item, onClose, onUpdate }: ContentItemDrawer
     setThreadPosts(item.threadPosts);
     setScheduledFor(toLocalDateTime(item.scheduledFor));
     setPublishedUrl(item.publishedUrl ?? "");
+    setEvergreen(item.evergreen === 1);
     setError("");
   }, [item]);
 
@@ -134,6 +136,22 @@ export function ContentItemDrawer({ item, onClose, onUpdate }: ContentItemDrawer
 
   function markPublished() {
     void persist("publish", () => markGrowthContentPublished(item.id, publishedUrl.trim() || null));
+  }
+
+  async function changeEvergreen(checked: boolean) {
+    setEvergreen(checked);
+    setBusy("evergreen");
+    setError("");
+    try {
+      const updated = await patchGrowthContentItem(item.id, { evergreen: checked ? 1 : 0 });
+      setEvergreen(updated.evergreen === 1);
+      onUpdate(updated);
+    } catch (cause) {
+      setEvergreen(item.evergreen === 1);
+      setError((cause as Error).message);
+    } finally {
+      setBusy("");
+    }
   }
 
   function updateThreadPost(index: number, value: string) {
@@ -244,6 +262,18 @@ export function ContentItemDrawer({ item, onClose, onUpdate }: ContentItemDrawer
           </section>
 
           <section className="growth-content-section growth-content-workflow">
+            <label className="growth-content-evergreen">
+              <input
+                type="checkbox"
+                checked={evergreen}
+                disabled={busy !== ""}
+                onChange={(event) => void changeEvergreen(event.target.checked)}
+              />
+              <span>
+                <strong>{t("growth.contentEvergreenLabel")}</strong>
+                <small>{busy === "evergreen" ? t("growth.contentEvergreenSaving") : t("growth.contentEvergreenDescription")}</small>
+              </span>
+            </label>
             <h3>{t("growth.contentStatusTitle")}</h3>
             <div className="growth-content-status-actions">
               {EDITABLE_STATUSES.filter((status) => status !== item.status).map((status) => (

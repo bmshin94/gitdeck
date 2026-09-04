@@ -189,6 +189,44 @@
   resize: vertical;
 }
 
+.mode-growth .growth-content-workflow .growth-content-evergreen {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 10px;
+  color: var(--text);
+  background: var(--panel);
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  cursor: pointer;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.mode-growth .growth-content-workflow .growth-content-evergreen input {
+  width: 16px;
+  height: 16px;
+  margin: 1px 0 0;
+  padding: 0;
+  accent-color: var(--accent);
+}
+
+.mode-growth .growth-content-evergreen span {
+  display: grid;
+  gap: 3px;
+}
+
+.mode-growth .growth-content-evergreen strong {
+  font-size: 10.5px;
+}
+
+.mode-growth .growth-content-evergreen small {
+  color: var(--muted);
+  font-size: 9.5px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
 .mode-growth .growth-content-edit input:focus,
 .mode-growth .growth-content-edit textarea:focus,
 .mode-growth .growth-content-workflow input:focus {
