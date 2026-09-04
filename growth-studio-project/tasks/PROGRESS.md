@@ -11,7 +11,7 @@ phase-closing tasks) are appended with `PENDING` rows and matching task files.
 | ------ | ------- | ------- | ------------ | ------- |
 | GS-000 | COMPLETED | Established the governance baseline and fixed six pre-existing type errors without runtime changes | VALIDATION OK; typecheck; 28 test files and 151 tests; production build; runner scripts bash-n; Node v22.18.0; npm 10.9.3; pi 0.84.4; jq 1.8.2 | 2026-09-04 |
 | GS-001 | COMPLETED | Verified the current goals architecture, locale inventory, tab consumers, and existing feature locations | VALIDATION OK; 70 locale keys matched in English and Italian; branch and no-source-change checks; git diff --check | 2026-09-04 |
-| GS-002 | PENDING | — | — | — |
+| GS-002 | COMPLETED | Settled phase 1 and phase 2 routing, shell, account, migration, API, and data-model choices with provisional recommendations where needed | VALIDATION OK; decision coverage for GS-010 through GS-016 and GS-020 through GS-026; no source changes; git diff --check | 2026-09-04 |
 | GS-003 | PENDING | — | — | — |
 | GS-010 | PENDING | — | — | — |
 | GS-011 | PENDING | — | — | — |

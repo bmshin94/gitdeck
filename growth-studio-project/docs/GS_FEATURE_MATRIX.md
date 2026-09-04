@@ -7,6 +7,7 @@ Authoritative inventory of Growth Studio capabilities. Statuses: `EXISTING`
 | Feature | Location (current or target) | Status | Task |
 |---|---|---|---|
 | Governance baseline and validation gate | `growth-studio-project/scripts/`, `src/utils/colors.ts`, `tests/utils/colors.test.ts` | DONE | GS-000 |
+| Phase 1 and phase 2 implementation decisions | `growth-studio-project/docs/GS_DECISIONS.md` | DONE | GS-002 |
 | Goals CRUD with metric refresh (stars, forks, closed PRs, downloads) | `src/components/views/GoalsView.tsx`, `src/api/github.ts`, `src/server/goalStore.ts`, `src/server/goals.ts`, `src/server/routes/goals.ts` | EXISTING | — |
 | AI suggestions per goal (3–5 actions); four deterministic actions when AI is not configured | `src/server/goals.ts` `generateGoalSuggestions`, `src/server/goalStore.ts` `saveGoalSuggestions`, `src/components/views/GoalsView.tsx` | EXISTING | GS-021 migrates |
 | AI proposals per suggestion (X thread, LinkedIn, Mastodon) with source-backed media suggestions when assets are available | `src/server/goals.ts` `generateGoalProposals`, `src/utils/socialProposals.ts`, `src/server/goalStore.ts` `saveGoalProposals`, `src/components/modals/GoalProposalsModal.tsx` | EXISTING | GS-021 migrates |
