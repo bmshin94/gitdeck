@@ -5,7 +5,11 @@ import {
   type GrowthCadence,
   type GrowthChannelSelection,
 } from "../../../src/types/growth";
-import { buildGrowthPlanSlots } from "../../../src/utils/growth/planSlots";
+import {
+  buildGrowthPlanSlots,
+  growthPlanPeriodFromStart,
+  nextGrowthPlanPeriod,
+} from "../../../src/utils/growth/planSlots";
 
 const DISABLED_CHANNELS: GrowthChannelSelection = {
   x: false,
@@ -45,6 +49,28 @@ function slotInput(overrides: Partial<BuildGrowthPlanSlotsInput> = {}): BuildGro
 function sortedSlotIdentity(slot: { scheduledFor: string; channel: string; key: string }): string {
   return `${slot.scheduledFor}:${slot.channel}:${slot.key}`;
 }
+
+describe("growth plan periods", () => {
+  it("defaults to the complete ISO week after the current week", () => {
+    expect(nextGrowthPlanPeriod(new Date("2026-09-07T08:00:00.000Z"))).toEqual({
+      periodStart: "2026-09-14",
+      periodEnd: "2026-09-20",
+    });
+    expect(nextGrowthPlanPeriod(new Date("2026-09-13T23:00:00.000Z"), 2)).toEqual({
+      periodStart: "2026-09-14",
+      periodEnd: "2026-09-27",
+    });
+  });
+
+  it("builds only one-to-four complete weeks from Monday", () => {
+    expect(growthPlanPeriodFromStart("2026-09-14", 4)).toEqual({
+      periodStart: "2026-09-14",
+      periodEnd: "2026-10-11",
+    });
+    expect(() => growthPlanPeriodFromStart("2026-09-15", 1)).toThrow(RangeError);
+    expect(() => growthPlanPeriodFromStart("2026-09-14", 5)).toThrow(RangeError);
+  });
+});
 
 describe("buildGrowthPlanSlots", () => {
   it("creates stable, sorted slots with the format for every enabled channel", () => {

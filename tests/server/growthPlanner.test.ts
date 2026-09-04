@@ -27,6 +27,7 @@ vi.mock("../../src/server/growth/signals", () => ({
 const {
   GROWTH_PLANNER_GENERATION_VERSION,
   generateGrowthContentPlan,
+  regenerateGrowthContentPlan,
 } = await import("../../src/server/growth/planner");
 const store = await import("../../src/server/growth/store");
 const { AiRequestError } = await import("../../src/server/ai/client");
@@ -212,6 +213,59 @@ describe("Growth editorial planner", () => {
     })).rejects.toThrow("forced content failure");
     expect(store.listContentPlans("account-a", "acme/rocket")).toEqual([]);
     expect(store.listContentItems("account-a", { repository: "acme/rocket" })).toEqual([]);
+  });
+
+  it("regenerates atomically and skips only editable source items", async () => {
+    saveProfile();
+    state.aiConfigured = false;
+    const source = await generateGrowthContentPlan("account-a", {
+      repository: "acme/rocket",
+      periodStart: "2026-09-07",
+      periodEnd: "2026-09-13",
+    });
+    const draft = store.createContentItem({
+      accountId: "account-a",
+      repository: "acme/rocket",
+      planId: source.plan.id,
+      channel: "x",
+      format: "x-thread",
+      status: "draft",
+    });
+    const media = [{ kind: "image" as const, url: "https://example.com/card.png", alt: "Card" }];
+    const protectedItems = [
+      store.createContentItem({ accountId: "account-a", repository: "acme/rocket", planId: source.plan.id, channel: "x", format: "x-thread", status: "ready", media }),
+      store.createContentItem({ accountId: "account-a", repository: "acme/rocket", planId: source.plan.id, channel: "x", format: "x-thread", status: "scheduled", scheduledFor: "2026-09-12T10:00:00.000Z", media }),
+      store.createContentItem({ accountId: "account-a", repository: "acme/rocket", planId: source.plan.id, channel: "x", format: "x-thread", status: "published", media }),
+      store.createContentItem({ accountId: "account-a", repository: "acme/rocket", planId: source.plan.id, channel: "x", format: "x-thread", status: "skipped" }),
+    ];
+
+    store.ensureGrowthSchema();
+    getDatabase().exec(`
+      CREATE TRIGGER fail_replacement_items BEFORE INSERT ON content_items
+      BEGIN SELECT RAISE(ABORT, 'forced replacement failure'); END;
+    `);
+    await expect(regenerateGrowthContentPlan("account-a", source.plan.id))
+      .rejects.toThrow("forced replacement failure");
+    expect(store.getContentPlan("account-a", source.plan.id)?.status).toBe("active");
+    expect(store.getContentItem("account-a", draft.id)?.status).toBe("draft");
+    expect(store.listContentPlans("account-a", "acme/rocket")).toHaveLength(1);
+
+    getDatabase().exec("DROP TRIGGER fail_replacement_items");
+    const result = await regenerateGrowthContentPlan("account-a", source.plan.id);
+    expect(result).toMatchObject({
+      sourcePlan: { id: source.plan.id, status: "archived" },
+      plan: { status: "active", repository: "acme/rocket" },
+      usedFallback: true,
+    });
+    expect(result?.affectedContentItems.map(({ id }) => id)).toEqual([
+      source.contentItems[0].id,
+      source.contentItems[1].id,
+      draft.id,
+    ]);
+    expect(result?.affectedContentItems.every(({ status }) => status === "skipped")).toBe(true);
+    expect(protectedItems.map(({ id }) => store.getContentItem("account-a", id)?.status))
+      .toEqual(["ready", "scheduled", "published", "skipped"]);
+    expect(store.listContentPlans("account-a", "acme/rocket")).toHaveLength(2);
   });
 
   it("rejects overlapping active plans per account and lists plans in descending period order", async () => {

@@ -567,14 +567,18 @@ export function hasOverlappingActiveContentPlan(
   repository: string,
   periodStart: string,
   periodEnd: string,
+  excludePlanId?: string,
 ): boolean {
   ensureGrowthAccountMigration(accountId);
+  const excludeClause = excludePlanId === undefined ? "" : " AND id <> ?";
   return Boolean(get<{ id: string }>(
     `SELECT id FROM content_plans
      WHERE account_id = ? AND repository = ? AND status = 'active'
-       AND period_start <= ? AND period_end >= ?
+       AND period_start <= ? AND period_end >= ?${excludeClause}
      LIMIT 1`,
-    [accountId, repository, periodEnd, periodStart],
+    excludePlanId === undefined
+      ? [accountId, repository, periodEnd, periodStart]
+      : [accountId, repository, periodEnd, periodStart, excludePlanId],
   ));
 }
 
@@ -847,6 +851,82 @@ export function createContentPlanWithItems(
       planId: plan.id,
     }));
     return { plan, contentItems };
+  })();
+}
+
+function skipEditablePlanItems(accountId: string, planId: string): GrowthContentItem[] {
+  const ids = all<{ id: string }>(
+    `SELECT id FROM content_items
+     WHERE account_id = ? AND plan_id = ? AND status IN ('idea', 'draft')
+     ORDER BY scheduled_for IS NULL, scheduled_for, created_at, id`,
+    [accountId, planId],
+  ).map(({ id }) => id);
+  if (ids.length === 0) return [];
+  run(
+    `UPDATE content_items SET status = 'skipped', updated_at = ?
+     WHERE account_id = ? AND plan_id = ? AND status IN ('idea', 'draft')`,
+    [new Date().toISOString(), accountId, planId],
+  );
+  return ids.flatMap((id) => {
+    const item = getContentItem(accountId, id);
+    return item ? [item] : [];
+  });
+}
+
+/** Archives a plan and skips only its remaining editable items atomically. */
+export function archiveContentPlanWithItems(
+  accountId: string,
+  id: string,
+): { plan: GrowthContentPlan; contentItems: GrowthContentItem[] } | null {
+  ensureGrowthAccountMigration(accountId);
+  return getDatabase().transaction(() => {
+    const source = getContentPlan(accountId, id);
+    if (!source) return null;
+    run(
+      "UPDATE content_plans SET status = 'archived' WHERE account_id = ? AND id = ?",
+      [accountId, id],
+    );
+    const contentItems = skipEditablePlanItems(accountId, id);
+    return { plan: getContentPlan(accountId, id)!, contentItems };
+  })();
+}
+
+/** Replaces a source plan while preserving every reviewed or published item. */
+export function replaceContentPlanWithItems(
+  accountId: string,
+  sourcePlanId: string,
+  replacementInput: CreateGrowthContentPlanInput,
+  itemInputs: Array<Omit<CreateGrowthContentItemInput, "accountId" | "repository" | "planId">>,
+): {
+  sourcePlan: GrowthContentPlan;
+  affectedContentItems: GrowthContentItem[];
+  plan: GrowthContentPlan;
+  contentItems: GrowthContentItem[];
+} | null {
+  ensureGrowthAccountMigration(accountId);
+  return getDatabase().transaction(() => {
+    const source = getContentPlan(accountId, sourcePlanId);
+    if (!source) return null;
+    if (
+      replacementInput.accountId !== accountId
+      || replacementInput.repository !== source.repository
+      || replacementInput.periodStart !== source.periodStart
+      || replacementInput.periodEnd !== source.periodEnd
+    ) {
+      throw new GrowthStoreValidationError("Replacement plan must match the source repository and period.");
+    }
+
+    run(
+      "UPDATE content_plans SET status = 'archived' WHERE account_id = ? AND id = ?",
+      [accountId, sourcePlanId],
+    );
+    const affectedContentItems = skipEditablePlanItems(accountId, sourcePlanId);
+    const replacement = createContentPlanWithItems(replacementInput, itemInputs);
+    return {
+      sourcePlan: getContentPlan(accountId, sourcePlanId)!,
+      affectedContentItems,
+      ...replacement,
+    };
   })();
 }
 

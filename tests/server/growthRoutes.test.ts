@@ -378,6 +378,75 @@ describe("Growth API routes", () => {
     expect(growthStore.listContentPlans("account-b", "acme/repo")).toHaveLength(1);
   });
 
+  it("regenerates and archives plans with strict bodies, account scope, and protected content", async () => {
+    const input = profileInput();
+    await dispatch("PUT", "/api/growth/profiles/acme/repo", {
+      ...input,
+      channels: { ...input.channels, linkedin: false, mastodon: false },
+      cadence: { ...input.cadence, x: 1, linkedin: 0, mastodon: 0 },
+    });
+    const generated = await dispatch("POST", "/api/growth/plans/generate", {
+      repository: "acme/repo",
+      periodStart: "2026-09-07",
+      periodEnd: "2026-09-13",
+    });
+    const sourceId = generated.body.plan.id as string;
+    const draft = growthStore.createContentItem({
+      accountId: "account-a",
+      repository: "acme/repo",
+      planId: sourceId,
+      channel: "x",
+      format: "x-thread",
+      status: "draft",
+    });
+    const ready = growthStore.createContentItem({
+      accountId: "account-a",
+      repository: "acme/repo",
+      planId: sourceId,
+      channel: "x",
+      format: "x-thread",
+      status: "ready",
+      media: [{ kind: "image", url: "https://example.com/card.png", alt: "Card" }],
+    });
+
+    expect((await dispatch("POST", `/api/growth/plans/${sourceId}/regenerate`, { unknown: true })).status).toBe(400);
+    state.activeAccountId = "account-b";
+    expect((await dispatch("POST", `/api/growth/plans/${sourceId}/regenerate`, { unknown: true })).status).toBe(404);
+    expect((await dispatch("POST", `/api/growth/plans/${sourceId}/archive`, { unknown: true })).status).toBe(404);
+    state.activeAccountId = "account-a";
+
+    await dispatch("PUT", "/api/growth/profiles/acme/repo", {
+      ...input,
+      channels: { ...input.channels, linkedin: false, mastodon: false },
+      cadence: { ...input.cadence, x: 2, linkedin: 0, mastodon: 0 },
+    });
+    const regenerated = await dispatch("POST", `/api/growth/plans/${sourceId}/regenerate`, {});
+    expect(regenerated.status).toBe(201);
+    expect(regenerated.body).toMatchObject({
+      ok: true,
+      sourcePlan: { id: sourceId, status: "archived" },
+      plan: { status: "active", repository: "acme/repo" },
+      aiEnabled: false,
+      usedFallback: true,
+    });
+    expect(regenerated.body.contentItems).toHaveLength(2);
+    expect(regenerated.body.affectedContentItems.map((item: { id: string }) => item.id))
+      .toContain(draft.id);
+    expect(growthStore.getContentItem("account-a", ready.id)?.status).toBe("ready");
+    const overlappingRegeneration = await dispatch("POST", `/api/growth/plans/${sourceId}/regenerate`, {});
+    expect(overlappingRegeneration.status).toBe(400);
+    expect(growthStore.listContentPlans("account-a", "acme/repo")).toHaveLength(2);
+
+    const replacementId = regenerated.body.plan.id as string;
+    expect((await dispatch("POST", `/api/growth/plans/${replacementId}/archive`, { extra: true })).status).toBe(400);
+    const archived = await dispatch("POST", `/api/growth/plans/${replacementId}/archive`, {});
+    expect(archived.status).toBe(200);
+    expect(archived.body.plan).toMatchObject({ id: replacementId, status: "archived" });
+    expect(archived.body.contentItems).toHaveLength(2);
+    expect(archived.body.contentItems.every((item: { status: string }) => item.status === "skipped")).toBe(true);
+    expect(growthStore.getContentItem("account-a", ready.id)?.status).toBe("ready");
+  });
+
   it("returns a typed AI request error without persisting a plan", async () => {
     state.aiConfigured = true;
     state.generateStructured.mockRejectedValueOnce(new AiRequestError("planner provider failed"));

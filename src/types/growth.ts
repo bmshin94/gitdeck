@@ -344,6 +344,17 @@ export interface GrowthGeneratedContentPlanData {
   usedFallback: boolean;
 }
 
+export interface GrowthArchivedContentPlanData {
+  ok: true;
+  plan: GrowthContentPlan;
+  contentItems: GrowthContentItem[];
+}
+
+export interface GrowthRegeneratedContentPlanData extends GrowthGeneratedContentPlanData {
+  sourcePlan: GrowthContentPlan;
+  affectedContentItems: GrowthContentItem[];
+}
+
 export interface GrowthContentItemsData {
   ok: true;
   contentItems: GrowthContentItem[];

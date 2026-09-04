@@ -1,4 +1,6 @@
 import type {
+  CreateGrowthContentItemInput,
+  CreateGrowthContentPlanInput,
   GenerateGrowthContentPlanInput,
   GrowthContentItem,
   GrowthContentPlan,
@@ -11,8 +13,10 @@ import { AiNotConfiguredError, generateStructured } from "../ai/client";
 import { isAiConfigured } from "../ai/settings";
 import {
   createContentPlanWithItems,
+  getContentPlan,
   getGrowthProfile,
   hasOverlappingActiveContentPlan,
+  replaceContentPlanWithItems,
   ActivePlanOverlapError,
 } from "./store";
 import { collectRepositorySignals, type GrowthRepositorySignals } from "./signals";
@@ -22,6 +26,18 @@ export const GROWTH_PLANNER_GENERATION_VERSION = 1;
 export interface GeneratedGrowthContentPlan {
   plan: GrowthContentPlan;
   contentItems: GrowthContentItem[];
+  aiEnabled: boolean;
+  usedFallback: boolean;
+}
+
+export interface RegeneratedGrowthContentPlan extends GeneratedGrowthContentPlan {
+  sourcePlan: GrowthContentPlan;
+  affectedContentItems: GrowthContentItem[];
+}
+
+interface PreparedGrowthContentPlan {
+  planInput: CreateGrowthContentPlanInput;
+  itemInputs: Array<Omit<CreateGrowthContentItemInput, "accountId" | "repository" | "planId">>;
   aiEnabled: boolean;
   usedFallback: boolean;
 }
@@ -183,11 +199,11 @@ async function requestAssignments(
   return result.data.assignments;
 }
 
-/** Builds, enriches, and atomically persists one repository editorial plan. */
-export async function generateGrowthContentPlan(
+async function prepareGrowthContentPlan(
   accountId: string,
   input: GenerateGrowthContentPlanInput,
-): Promise<GeneratedGrowthContentPlan> {
+  excludePlanId?: string,
+): Promise<PreparedGrowthContentPlan> {
   const profile = getGrowthProfile(accountId, input.repository);
   const slots = buildGrowthPlanSlots({
     periodStart: input.periodStart,
@@ -198,7 +214,13 @@ export async function generateGrowthContentPlan(
     postingWindows: profile.postingWindows,
     timezone: profile.timezone,
   });
-  if (hasOverlappingActiveContentPlan(accountId, input.repository, input.periodStart, input.periodEnd)) {
+  if (hasOverlappingActiveContentPlan(
+    accountId,
+    input.repository,
+    input.periodStart,
+    input.periodEnd,
+    excludePlanId,
+  )) {
     throw new ActivePlanOverlapError();
   }
 
@@ -221,40 +243,78 @@ export async function generateGrowthContentPlan(
     candidates,
   );
   const generatedAt = new Date().toISOString();
-  const created = createContentPlanWithItems({
-    accountId,
-    repository: input.repository,
-    periodStart: input.periodStart,
-    periodEnd: input.periodEnd,
-    cadence: profile.cadence,
-    pillars: profile.pillars,
-    status: "active",
-    generatedAt,
-  }, slots.map((slot, index) => {
-    const assignment = normalized.assignments[index];
-    return {
-      channel: slot.channel,
-      format: slot.format,
-      goalIds: [],
-      pillar: assignment.pillarId,
-      angle: assignment.angle,
-      title: "",
-      summary: assignment.cta,
-      body: "",
-      threadPosts: [],
-      media: [],
-      sources: assignment.sources,
-      status: "idea" as const,
-      scheduledFor: slot.scheduledFor,
-      generatedAt,
-      generationVersion: GROWTH_PLANNER_GENERATION_VERSION,
-      evergreen: 0 as const,
-    };
-  }));
-
   return {
-    ...created,
+    planInput: {
+      accountId,
+      repository: input.repository,
+      periodStart: input.periodStart,
+      periodEnd: input.periodEnd,
+      cadence: profile.cadence,
+      pillars: profile.pillars,
+      status: "active",
+      generatedAt,
+    },
+    itemInputs: slots.map((slot, index) => {
+      const assignment = normalized.assignments[index];
+      return {
+        channel: slot.channel,
+        format: slot.format,
+        goalIds: [],
+        pillar: assignment.pillarId,
+        angle: assignment.angle,
+        title: "",
+        summary: assignment.cta,
+        body: "",
+        threadPosts: [],
+        media: [],
+        sources: assignment.sources,
+        status: "idea" as const,
+        scheduledFor: slot.scheduledFor,
+        generatedAt,
+        generationVersion: GROWTH_PLANNER_GENERATION_VERSION,
+        evergreen: 0 as const,
+      };
+    }),
     aiEnabled,
     usedFallback: !aiEnabled || normalized.usedFallback,
   };
+}
+
+/** Builds, enriches, and atomically persists one repository editorial plan. */
+export async function generateGrowthContentPlan(
+  accountId: string,
+  input: GenerateGrowthContentPlanInput,
+): Promise<GeneratedGrowthContentPlan> {
+  const prepared = await prepareGrowthContentPlan(accountId, input);
+  const created = createContentPlanWithItems(prepared.planInput, prepared.itemInputs);
+  return {
+    ...created,
+    aiEnabled: prepared.aiEnabled,
+    usedFallback: prepared.usedFallback,
+  };
+}
+
+/** Builds a replacement before atomically archiving and superseding the source plan. */
+export async function regenerateGrowthContentPlan(
+  accountId: string,
+  sourcePlanId: string,
+): Promise<RegeneratedGrowthContentPlan | null> {
+  const source = getContentPlan(accountId, sourcePlanId);
+  if (!source) return null;
+  const prepared = await prepareGrowthContentPlan(accountId, {
+    repository: source.repository,
+    periodStart: source.periodStart,
+    periodEnd: source.periodEnd,
+  }, source.id);
+  const replaced = replaceContentPlanWithItems(
+    accountId,
+    source.id,
+    prepared.planInput,
+    prepared.itemInputs,
+  );
+  return replaced ? {
+    ...replaced,
+    aiEnabled: prepared.aiEnabled,
+    usedFallback: prepared.usedFallback,
+  } : null;
 }

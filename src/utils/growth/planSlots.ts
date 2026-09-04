@@ -89,6 +89,30 @@ function validatePeriod(periodStart: string, periodEnd: string): {
   return { startTimestamp: start.timestamp, weeks: inclusiveDays / 7 };
 }
 
+export interface GrowthPlanPeriod {
+  periodStart: string;
+  periodEnd: string;
+}
+
+/** Builds a complete one-to-four-week plan period from an ISO Monday. */
+export function growthPlanPeriodFromStart(periodStart: string, weeks: number): GrowthPlanPeriod {
+  const start = parseDateOnly(periodStart, "periodStart");
+  if (isoWeekday(start.timestamp) !== 1 || !Number.isInteger(weeks) || weeks < 1 || weeks > 4) {
+    throw new RangeError("plan period must contain one to four complete ISO weeks from Monday through Sunday");
+  }
+  const periodEnd = formatDateOnly(start.timestamp + weeks * WEEK_MS - DAY_MS);
+  validatePeriod(periodStart, periodEnd);
+  return { periodStart, periodEnd };
+}
+
+/** Returns the complete ISO week strictly following the week containing now. */
+export function nextGrowthPlanPeriod(now = new Date(), weeks = 1): GrowthPlanPeriod {
+  if (Number.isNaN(now.getTime())) throw new RangeError("now must be a valid date");
+  const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  const nextMonday = today + (8 - isoWeekday(today)) * DAY_MS;
+  return growthPlanPeriodFromStart(formatDateOnly(nextMonday), weeks);
+}
+
 function createTimezoneFormatter(timezone: string): Intl.DateTimeFormat {
   if (typeof timezone !== "string" || timezone.trim().length === 0) {
     throw new RangeError("timezone must be a valid IANA timezone");

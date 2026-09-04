@@ -9,9 +9,11 @@ import {
   SOCIAL_PROPOSALS_VERSION,
 } from "../goals";
 import {
+  archiveContentPlanWithItems,
   createContentItem,
   deleteContentItem,
   getContentItem,
+  getContentPlan,
   getGrowthIntervention,
   getGrowthProfile,
   getGrowthWorkspaceSummary,
@@ -26,7 +28,10 @@ import {
   upsertGrowthIntervention,
   upsertGrowthProfile,
 } from "../growth/store";
-import { generateGrowthContentPlan } from "../growth/planner";
+import {
+  generateGrowthContentPlan,
+  regenerateGrowthContentPlan,
+} from "../growth/planner";
 import {
   draftGrowthContentItem,
   GrowthContentDraftConflictError,
@@ -578,6 +583,51 @@ async function generatePlan(ctx: RouteContext): Promise<void> {
   }
 }
 
+async function regeneratePlan(ctx: RouteContext): Promise<void> {
+  const account = await requireAccount(ctx);
+  if (!account) return;
+  const id = ctx.params.id ?? "";
+  if (!getContentPlan(account.id, id)) {
+    return sendJson(ctx.res, 404, { ok: false, error: "content plan not found" });
+  }
+  const body = await parseJsonBody<Record<string, unknown>>(ctx.req, ctx.res);
+  if (!body) return;
+  if (!isRecord(body) || Object.keys(body).length > 0) {
+    return badRequest(ctx, "invalid plan regeneration body");
+  }
+
+  try {
+    const result = await regenerateGrowthContentPlan(account.id, id);
+    if (!result) return sendJson(ctx.res, 404, { ok: false, error: "content plan not found" });
+    sendJson(ctx.res, 201, { ok: true, ...result });
+  } catch (error) {
+    if (sendStoreError(ctx, error)) return;
+    if (error instanceof RangeError) return badRequest(ctx, error.message);
+    sendJson(ctx.res, error instanceof AiRequestError ? 502 : 500, {
+      ok: false,
+      error: (error as Error).message,
+    });
+  }
+}
+
+async function archivePlan(ctx: RouteContext): Promise<void> {
+  const account = await requireAccount(ctx);
+  if (!account) return;
+  const id = ctx.params.id ?? "";
+  if (!getContentPlan(account.id, id)) {
+    return sendJson(ctx.res, 404, { ok: false, error: "content plan not found" });
+  }
+  const body = await parseJsonBody<Record<string, unknown>>(ctx.req, ctx.res);
+  if (!body) return;
+  if (!isRecord(body) || Object.keys(body).length > 0) {
+    return badRequest(ctx, "invalid plan archive body");
+  }
+
+  const result = archiveContentPlanWithItems(account.id, id);
+  if (!result) return sendJson(ctx.res, 404, { ok: false, error: "content plan not found" });
+  sendJson(ctx.res, 200, { ok: true, ...result });
+}
+
 async function content(ctx: RouteContext): Promise<void> {
   const account = await requireAccount(ctx);
   if (!account) return;
@@ -802,6 +852,8 @@ export function registerGrowthRoutes(router: AppRouter): void {
   router.on("PATCH", "/api/growth/interventions/:id", patchIntervention);
   router.get("/api/growth/plans", plans);
   router.post("/api/growth/plans/generate", generatePlan);
+  router.post("/api/growth/plans/:id/regenerate", regeneratePlan);
+  router.post("/api/growth/plans/:id/archive", archivePlan);
   router.get("/api/growth/calendar.ics", exportCalendar);
   router.get("/api/growth/content", content);
   router.post("/api/growth/content", content);

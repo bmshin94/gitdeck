@@ -22,6 +22,7 @@ import {
 import { ContentItemDrawer } from "../ContentItemDrawer";
 import { GrowthCalendarMonth } from "./GrowthCalendarMonth";
 import { GrowthCalendarWeek } from "./GrowthCalendarWeek";
+import { GrowthPlanManager } from "./GrowthPlanManager";
 import { GrowthQueue } from "./GrowthQueue";
 
 interface GrowthCalendarProps {
@@ -53,6 +54,7 @@ export function GrowthCalendar({ accountId, enabled, repository }: GrowthCalenda
   const [items, setItems] = useState<GrowthContentItem[]>([]);
   const [profileLoading, setProfileLoading] = useState(false);
   const [itemsLoading, setItemsLoading] = useState(false);
+  const [itemsLoadKey, setItemsLoadKey] = useState(0);
   const [error, setError] = useState("");
   const [rescheduleError, setRescheduleError] = useState("");
   const [reschedulingIds, setReschedulingIds] = useState<Set<string>>(() => new Set());
@@ -133,7 +135,7 @@ export function GrowthCalendar({ accountId, enabled, repository }: GrowthCalenda
         if (!controller.signal.aborted) setItemsLoading(false);
       });
     return () => controller.abort();
-  }, [accountId, enabled, grid, profile, repository]);
+  }, [accountId, enabled, grid, itemsLoadKey, profile, repository]);
 
   const itemsByDate = useMemo(
     () => groupGrowthCalendarItems(items, profile?.timezone ?? "UTC"),
@@ -232,6 +234,13 @@ export function GrowthCalendar({ accountId, enabled, repository }: GrowthCalenda
           </div>
         ) : null}
       </header>
+
+      <GrowthPlanManager
+        accountId={accountId}
+        enabled={enabled}
+        repository={repository}
+        onContentItemsChange={() => setItemsLoadKey((key) => key + 1)}
+      />
 
       <div className="growth-calendar-toolbar">
         <div className="growth-calendar-toolbar-actions">

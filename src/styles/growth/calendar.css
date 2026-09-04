@@ -5,6 +5,7 @@
 }
 
 .mode-growth .growth-calendar-hero,
+.mode-growth .growth-plan-manager,
 .mode-growth .growth-calendar-toolbar,
 .mode-growth .growth-calendar-month,
 .mode-growth .growth-calendar-week,
@@ -119,6 +120,185 @@
 .mode-growth .growth-calendar-view-switch .btn {
   min-height: 32px;
   font-size: 10.5px;
+}
+
+.mode-growth .growth-plan-manager {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border-top: 3px solid var(--accent-2);
+}
+
+.mode-growth .growth-plan-manager-head {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.mode-growth .growth-plan-manager-head span,
+.mode-growth .growth-plan-create label > span,
+.mode-growth .growth-plan-create-summary > span {
+  color: var(--accent-2);
+  font-size: 8.5px;
+  font-weight: 850;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.mode-growth .growth-plan-manager-head h2 {
+  margin: 4px 0 0;
+  font-size: 16px;
+}
+
+.mode-growth .growth-plan-manager-head p {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 10.5px;
+  line-height: 1.5;
+}
+
+.mode-growth .growth-plan-create {
+  display: grid;
+  grid-template-columns: minmax(150px, .8fr) minmax(120px, .6fr) minmax(220px, 1.4fr) auto;
+  align-items: end;
+  gap: 9px;
+  padding: 11px;
+  background: color-mix(in srgb, var(--panel-2) 76%, transparent);
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+}
+
+.mode-growth .growth-plan-create label,
+.mode-growth .growth-plan-create-summary {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+}
+
+.mode-growth .growth-plan-create input,
+.mode-growth .growth-plan-create select {
+  min-width: 0;
+  height: 34px;
+  padding: 0 9px;
+  color: var(--text);
+  color-scheme: dark;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font: inherit;
+  font-size: 10.5px;
+}
+
+:root[data-theme="light"] .mode-growth .growth-plan-create input,
+:root[data-theme="light"] .mode-growth .growth-plan-create select {
+  color-scheme: light;
+}
+
+.mode-growth .growth-plan-create input:focus,
+.mode-growth .growth-plan-create select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: var(--ring);
+}
+
+.mode-growth .growth-plan-create-summary strong {
+  overflow: hidden;
+  min-height: 34px;
+  padding: 9px;
+  color: var(--text);
+  background: var(--panel);
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mode-growth .growth-plan-message,
+.mode-growth .growth-plan-empty {
+  padding: 9px 11px;
+  color: var(--muted);
+  background: var(--panel-2);
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  font-size: 10.5px;
+}
+
+.mode-growth .growth-plan-message.error {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 9%, var(--panel));
+  border-color: color-mix(in srgb, var(--danger) 34%, var(--border));
+}
+
+.mode-growth .growth-plan-message.fallback {
+  color: var(--warn);
+  background: color-mix(in srgb, var(--warn) 9%, var(--panel));
+  border-color: color-mix(in srgb, var(--warn) 34%, var(--border));
+}
+
+.mode-growth .growth-plan-empty strong {
+  color: var(--text);
+}
+
+.mode-growth .growth-plan-empty p {
+  margin: 3px 0 0;
+}
+
+.mode-growth .growth-plan-list {
+  display: grid;
+  gap: 7px;
+}
+
+.mode-growth .growth-plan-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 10px 11px;
+  background: color-mix(in srgb, var(--panel-2) 66%, transparent);
+  border: 1px solid var(--border-soft);
+  border-left: 3px solid var(--accent);
+  border-radius: 9px;
+}
+
+.mode-growth .growth-plan-row.status-archived {
+  border-left-color: var(--muted-2);
+  opacity: .76;
+}
+
+.mode-growth .growth-plan-row > div:first-child {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.mode-growth .growth-plan-status {
+  color: var(--accent);
+  font-size: 8px;
+  font-weight: 850;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+}
+
+.mode-growth .growth-plan-row strong {
+  font-size: 11px;
+}
+
+.mode-growth .growth-plan-row small {
+  color: var(--muted);
+  font-size: 8.5px;
+}
+
+.mode-growth .growth-plan-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 6px;
+}
+
+.mode-growth .growth-plan-actions .btn {
+  min-height: 30px;
+  font-size: 9.5px;
 }
 
 .mode-growth .growth-calendar-state,
@@ -712,6 +892,15 @@
     flex-direction: column-reverse;
   }
 
+  .mode-growth .growth-plan-create {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .mode-growth .growth-plan-row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
   .mode-growth .growth-calendar-toolbar-actions {
     align-items: stretch;
     flex-direction: column;
@@ -735,6 +924,24 @@
 
   .mode-growth .growth-calendar-hero {
     padding: 18px;
+  }
+
+  .mode-growth .growth-plan-manager {
+    padding: 12px;
+  }
+
+  .mode-growth .growth-plan-create {
+    grid-template-columns: 1fr;
+  }
+
+  .mode-growth .growth-plan-create .btn,
+  .mode-growth .growth-plan-actions {
+    width: 100%;
+  }
+
+  .mode-growth .growth-plan-actions .btn {
+    flex: 1 1 auto;
+    justify-content: center;
   }
 
   .mode-growth .growth-calendar-timezone {

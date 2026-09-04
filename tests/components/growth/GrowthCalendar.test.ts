@@ -8,6 +8,10 @@ import type { GrowthContentItem, GrowthProfile } from "../../../src/types/growth
 
 const mocks = vi.hoisted(() => ({
   buildGrowthCalendarExportUrl: vi.fn(() => "/api/growth/calendar.ics?export=visible"),
+  fetchGrowthContentPlans: vi.fn(),
+  generateGrowthContentPlan: vi.fn(),
+  regenerateGrowthContentPlan: vi.fn(),
+  archiveGrowthContentPlan: vi.fn(),
   fetchGrowthProfile: vi.fn(),
   fetchGrowthContentItems: vi.fn(),
   patchGrowthContentItem: vi.fn(),
@@ -15,6 +19,10 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("../../../src/api/growth", () => ({
   buildGrowthCalendarExportUrl: mocks.buildGrowthCalendarExportUrl,
+  fetchGrowthContentPlans: mocks.fetchGrowthContentPlans,
+  generateGrowthContentPlan: mocks.generateGrowthContentPlan,
+  regenerateGrowthContentPlan: mocks.regenerateGrowthContentPlan,
+  archiveGrowthContentPlan: mocks.archiveGrowthContentPlan,
   fetchGrowthProfile: mocks.fetchGrowthProfile,
   fetchGrowthContentItems: mocks.fetchGrowthContentItems,
   patchGrowthContentItem: mocks.patchGrowthContentItem,
@@ -95,6 +103,7 @@ beforeEach(() => {
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
+  mocks.fetchGrowthContentPlans.mockResolvedValue([]);
   mocks.fetchGrowthProfile.mockResolvedValue(profile());
   mocks.fetchGrowthContentItems.mockResolvedValue([contentItem()]);
   mocks.patchGrowthContentItem.mockImplementation(async (id: string, updates: Partial<GrowthContentItem>) => ({
