@@ -10,6 +10,9 @@ import type {
   GrowthContentItemData,
   GrowthContentItemFilters,
   GrowthContentItemsData,
+  GrowthContentPerformanceData,
+  GrowthContentPerformanceFilters,
+  GrowthContentPerformanceRefreshData,
   GrowthContentPlansData,
   GrowthDraftContentData,
   GrowthDraftContentItemData,
@@ -32,6 +35,7 @@ import type {
   UpdateGrowthInterventionInput,
   UploadGrowthAssetInput,
 } from "../types/growth";
+import { GROWTH_PERFORMANCE_WINDOWS } from "../types/growth";
 import { parseRepositoryName } from "../utils/repository";
 
 async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
@@ -243,6 +247,39 @@ export async function scanGrowthOpportunities(repository: string, signal?: Abort
 }
 
 export const scanGrowthInterventions = scanGrowthOpportunities;
+
+export async function fetchGrowthContentPerformance(
+  filters: GrowthContentPerformanceFilters = {},
+  signal?: AbortSignal,
+) {
+  if (filters.repository !== undefined && !parseRepositoryName(filters.repository)) {
+    throw new Error("invalid repository");
+  }
+  const contentId = filters.contentId?.trim();
+  if (filters.contentId !== undefined && !contentId) throw new Error("invalid content ID");
+  if (filters.window !== undefined && !GROWTH_PERFORMANCE_WINDOWS.includes(filters.window)) {
+    throw new Error("invalid performance window");
+  }
+  const data = await requestJson<GrowthContentPerformanceData>(addFilters("/api/growth/performance", {
+    repo: filters.repository,
+    contentId,
+    window: filters.window,
+  }), { signal });
+  return data.performance;
+}
+
+export async function refreshGrowthContentPerformance(
+  input: { repository?: string } = {},
+  signal?: AbortSignal,
+) {
+  if (input.repository !== undefined && !parseRepositoryName(input.repository)) {
+    throw new Error("invalid repository");
+  }
+  return requestJson<GrowthContentPerformanceRefreshData>(
+    "/api/growth/performance/refresh",
+    jsonRequest("POST", input, signal),
+  );
+}
 
 type GrowthContentCreateRequest = Omit<
   CreateGrowthContentItemInput,

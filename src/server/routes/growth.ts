@@ -19,6 +19,7 @@ import {
   getGrowthWorkspaceSummary,
   GrowthStoreValidationError,
   listContentItems,
+  listContentPerformance,
   listContentPlans,
   listGrowthAssets,
   listGrowthInterventions,
@@ -51,16 +52,19 @@ import {
   GrowthContentDraftConflictError,
 } from "../growth/drafter";
 import { scanRepositoryGrowthOpportunities } from "../growth/rules";
+import { refreshContentPerformance } from "../growth/attribution";
 import { parseJsonBody, send, sendJson } from "../http";
 import type { AppRouter, RouteContext } from "../router";
 import {
   GROWTH_CHANNELS,
   GROWTH_CONTENT_ITEM_STATUSES,
   GROWTH_INTERVENTION_STATUSES,
+  GROWTH_PERFORMANCE_WINDOWS,
   type GrowthAssetImportOrigin,
   type GrowthContentChannel,
   type GrowthContentMedia,
   type GrowthContentItemStatus,
+  type GrowthContentPerformanceFilters,
   type GrowthInterventionCategory,
   type GrowthInterventionStatus,
   type UpdateGrowthContentItemInput,
@@ -1063,6 +1067,72 @@ async function removeContent(ctx: RouteContext): Promise<void> {
   sendJson(ctx.res, 200, { ok: true });
 }
 
+function parsePerformanceFilters(ctx: RouteContext): GrowthContentPerformanceFilters | null {
+  const allowed = new Set(["repo", "contentId", "window"]);
+  const keys = [...ctx.url.searchParams.keys()];
+  if (keys.some((key) => !allowed.has(key)) || [...allowed].some((key) => ctx.url.searchParams.getAll(key).length > 1)) {
+    badRequest(ctx, "invalid performance filter");
+    return null;
+  }
+  const repositoryValue = ctx.url.searchParams.get("repo");
+  const repository = repositoryValue === null ? undefined : repositoryFromValue(repositoryValue);
+  if (repositoryValue !== null && !repository) {
+    badRequest(ctx, "invalid repository");
+    return null;
+  }
+  const contentIdValue = ctx.url.searchParams.get("contentId");
+  const contentId = contentIdValue?.trim();
+  if (contentIdValue !== null && !contentId) {
+    badRequest(ctx, "invalid content ID");
+    return null;
+  }
+  const windowValue = ctx.url.searchParams.get("window");
+  if (windowValue !== null && !isEnumValue(GROWTH_PERFORMANCE_WINDOWS, windowValue)) {
+    badRequest(ctx, "invalid performance window");
+    return null;
+  }
+  return {
+    repository: repository ?? undefined,
+    contentId: contentId ?? undefined,
+    window: windowValue ?? undefined,
+  };
+}
+
+async function performance(ctx: RouteContext): Promise<void> {
+  const account = await requireAccount(ctx);
+  if (!account) return;
+  const filters = parsePerformanceFilters(ctx);
+  if (!filters) return;
+  if (filters.contentId && !getContentItem(account.id, filters.contentId)) {
+    return sendJson(ctx.res, 404, { ok: false, error: "content item not found" });
+  }
+  sendJson(ctx.res, 200, {
+    ok: true,
+    performance: listContentPerformance(account.id, filters),
+  });
+}
+
+async function refreshPerformance(ctx: RouteContext): Promise<void> {
+  const account = await requireAccount(ctx);
+  if (!account) return;
+  if ([...ctx.url.searchParams.keys()].length > 0) {
+    return badRequest(ctx, "invalid performance refresh filter");
+  }
+  const body = await parseJsonBody<Record<string, unknown>>(ctx.req, ctx.res);
+  if (!body) return;
+  if (!isRecord(body) || !hasOnlyKeys(body, ["repository"])) {
+    return badRequest(ctx, "invalid performance refresh body");
+  }
+  const repository = body.repository === undefined ? undefined : repositoryFromValue(body.repository);
+  if (body.repository !== undefined && !repository) return badRequest(ctx, "invalid repository");
+  try {
+    const result = await refreshContentPerformance(account.id, { repository: repository ?? undefined });
+    sendJson(ctx.res, 200, { ok: true, ...result });
+  } catch (error) {
+    sendJson(ctx.res, 500, { ok: false, error: (error as Error).message });
+  }
+}
+
 export function registerGrowthRoutes(router: AppRouter): void {
   router.get("/api/growth/workspaces", listWorkspaces);
   router.get("/api/growth/workspace/:owner/:repo", readWorkspace);
@@ -1084,6 +1154,8 @@ export function registerGrowthRoutes(router: AppRouter): void {
   router.post("/api/growth/plans/:id/regenerate", regeneratePlan);
   router.post("/api/growth/plans/:id/archive", archivePlan);
   router.get("/api/growth/calendar.ics", exportCalendar);
+  router.get("/api/growth/performance", performance);
+  router.post("/api/growth/performance/refresh", refreshPerformance);
   router.get("/api/growth/content", content);
   router.post("/api/growth/content", content);
   router.post("/api/growth/content/draft", draftContent);

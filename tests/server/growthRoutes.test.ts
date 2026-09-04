@@ -20,6 +20,7 @@ const state = vi.hoisted(() => {
     fetchReadmeSignal: vi.fn(),
     fetchAdditionalSourceSignals: vi.fn(),
     readPublicMedia: vi.fn(),
+    refreshContentPerformance: vi.fn(),
   };
 });
 
@@ -57,6 +58,9 @@ vi.mock("../../src/server/growth/signals", () => ({
   readPublicMedia: state.readPublicMedia,
   PublicMediaTooLargeError: class PublicMediaTooLargeError extends Error {},
   UnsupportedPublicMediaTypeError: class UnsupportedPublicMediaTypeError extends Error {},
+}));
+vi.mock("../../src/server/growth/attribution", () => ({
+  refreshContentPerformance: state.refreshContentPerformance,
 }));
 
 const { registerGrowthRoutes } = await import("../../src/server/routes/growth");
@@ -175,6 +179,12 @@ beforeEach(async () => {
     finalUrl: "https://cdn.example/media.png",
   });
   state.generateStructured.mockReset();
+  state.refreshContentPerformance.mockReset();
+  state.refreshContentPerformance.mockResolvedValue({
+    performance: [],
+    pending: [],
+    refreshedAt: "2026-09-10T00:00:00.000Z",
+  });
   state.generateSuggestions.mockReset();
   state.generateSuggestions.mockResolvedValue([{
     category: "marketing",
@@ -909,6 +919,114 @@ describe("Growth API routes", () => {
     const otherAccount = await dispatch("POST", "/api/growth/interventions/scan", { repository: "acme/repo" });
     expect(otherAccount.body.interventions[0].id).not.toBe(id);
     expect(otherAccount.body.interventions[0].accountId).toBe("account-b");
+  });
+
+  it("lists and refreshes account-scoped performance with strict filters and bodies", async () => {
+    const media = [{ kind: "image" as const, url: "https://example.com/card.png", alt: "Card" }];
+    const accountA = growthStore.createContentItem({
+      accountId: "account-a",
+      repository: "acme/repo",
+      channel: "x",
+      format: "x-thread",
+      status: "published",
+      publishedAt: "2026-09-01T00:00:00.000Z",
+      media,
+    });
+    const otherRepository = growthStore.createContentItem({
+      accountId: "account-a",
+      repository: "acme/other",
+      channel: "x",
+      format: "x-thread",
+      status: "published",
+      publishedAt: "2026-09-01T00:00:00.000Z",
+      media,
+    });
+    const accountB = growthStore.createContentItem({
+      accountId: "account-b",
+      repository: "acme/repo",
+      channel: "x",
+      format: "x-thread",
+      status: "published",
+      publishedAt: "2026-09-01T00:00:00.000Z",
+      media,
+    });
+    for (const [accountId, contentId, window] of [
+      ["account-a", accountA.id, "48h"],
+      ["account-a", otherRepository.id, "7d"],
+      ["account-b", accountB.id, "48h"],
+    ] as const) {
+      growthStore.upsertContentPerformance(accountId, {
+        contentId,
+        window,
+        measuredAt: "2026-09-10T00:00:00.000Z",
+        metrics: { starsDelta: 3, forksDelta: -1 },
+      });
+    }
+
+    const filtered = await dispatch(
+      "GET",
+      `/api/growth/performance?repo=acme%2Frepo&contentId=${accountA.id}&window=48h`,
+    );
+    expect(filtered).toEqual({
+      status: 200,
+      body: {
+        ok: true,
+        performance: [{
+          accountId: "account-a",
+          contentId: accountA.id,
+          window: "48h",
+          measuredAt: "2026-09-10T00:00:00.000Z",
+          metrics: { starsDelta: 3, forksDelta: -1 },
+        }],
+      },
+    });
+    expect((await dispatch("GET", `/api/growth/performance?repo=acme%2Fother&contentId=${accountA.id}`)).body.performance)
+      .toEqual([]);
+
+    state.activeAccountId = "account-b";
+    expect((await dispatch("GET", "/api/growth/performance?repo=acme%2Frepo")).body.performance)
+      .toEqual([expect.objectContaining({ accountId: "account-b", contentId: accountB.id })]);
+    expect((await dispatch("GET", `/api/growth/performance?contentId=${accountA.id}`)).status).toBe(404);
+    state.activeAccountId = "account-a";
+    expect((await dispatch("GET", "/api/growth/performance?contentId=missing")).status).toBe(404);
+
+    const malformedFilters = [
+      "/api/growth/performance?unknown=1",
+      "/api/growth/performance?repo=invalid",
+      "/api/growth/performance?contentId=",
+      "/api/growth/performance?window=30d",
+      "/api/growth/performance?window=48h&window=7d",
+    ];
+    for (const path of malformedFilters) {
+      expect((await dispatch("GET", path)).status, path).toBe(400);
+    }
+    for (const body of [
+      { repository: "invalid" },
+      { repository: "acme/repo", unknown: true },
+      [],
+    ]) {
+      expect((await dispatch("POST", "/api/growth/performance/refresh", body)).status).toBe(400);
+    }
+    expect((await dispatch("POST", "/api/growth/performance/refresh?repo=acme%2Frepo", {})).status).toBe(400);
+
+    state.refreshContentPerformance.mockResolvedValueOnce({
+      performance: [filtered.body.performance[0]],
+      pending: [{
+        contentId: accountA.id,
+        window: "7d",
+        dueAt: "2026-09-08T00:00:00.000Z",
+        reason: "snapshot-unavailable",
+      }],
+      refreshedAt: "2026-09-10T00:00:00.000Z",
+    });
+    const refreshed = await dispatch("POST", "/api/growth/performance/refresh", { repository: "acme/repo" });
+    expect(refreshed.status).toBe(200);
+    expect(refreshed.body).toMatchObject({ ok: true, refreshedAt: "2026-09-10T00:00:00.000Z" });
+    expect(state.refreshContentPerformance).toHaveBeenCalledWith("account-a", { repository: "acme/repo" });
+
+    state.activeAccountId = null;
+    expect((await dispatch("POST", "/api/growth/performance/refresh", {})).status).toBe(401);
+    expect(state.refreshContentPerformance).toHaveBeenCalledTimes(1);
   });
 
   it("deduplicates repeated manual interventions without resetting their status", async () => {

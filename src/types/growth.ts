@@ -413,7 +413,8 @@ export interface UploadGrowthAssetInput {
   height?: number;
 }
 
-export type GrowthPerformanceWindow = "48h" | "7d";
+export const GROWTH_PERFORMANCE_WINDOWS = ["48h", "7d"] as const;
+export type GrowthPerformanceWindow = (typeof GROWTH_PERFORMANCE_WINDOWS)[number];
 
 export interface GrowthPerformanceMetrics {
   starsDelta?: number;
@@ -429,6 +430,36 @@ export interface GrowthContentPerformance {
   window: GrowthPerformanceWindow;
   measuredAt: string;
   metrics: GrowthPerformanceMetrics;
+}
+
+export type UpsertGrowthContentPerformanceInput = Omit<GrowthContentPerformance, "accountId">;
+
+export interface GrowthContentPerformanceFilters {
+  repository?: string;
+  contentId?: string;
+  window?: GrowthPerformanceWindow;
+}
+
+export type GrowthAttributionPendingReason =
+  | "missing-publication"
+  | "not-due"
+  | "snapshot-unavailable";
+
+export interface GrowthPendingAttribution {
+  contentId: string;
+  window: GrowthPerformanceWindow;
+  dueAt: string | null;
+  reason: GrowthAttributionPendingReason;
+}
+
+export interface GrowthContentPerformanceData {
+  ok: true;
+  performance: GrowthContentPerformance[];
+}
+
+export interface GrowthContentPerformanceRefreshData extends GrowthContentPerformanceData {
+  pending: GrowthPendingAttribution[];
+  refreshedAt: string;
 }
 
 export interface GrowthWorkspaceSummary {

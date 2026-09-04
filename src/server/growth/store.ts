@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import {
   GROWTH_CONTENT_ITEM_STATUSES,
   GROWTH_INTERVENTION_STATUSES,
+  GROWTH_PERFORMANCE_WINDOWS,
 } from "../../types/growth";
 import type {
   CreateGrowthAssetInput,
@@ -13,6 +14,8 @@ import type {
   GrowthContentItemFilters,
   GrowthContentItemStatus,
   GrowthContentMedia,
+  GrowthContentPerformance,
+  GrowthContentPerformanceFilters,
   GrowthContentPlan,
   GrowthContentPlanStatus,
   GrowthIntervention,
@@ -24,6 +27,7 @@ import type {
   GrowthPostingWindow,
   GrowthProfile,
   GrowthProfileInput,
+  UpsertGrowthContentPerformanceInput,
   GrowthWorkspaceSummary,
   UpdateGrowthContentItemInput,
   UpdateGrowthInterventionInput,
@@ -109,6 +113,14 @@ interface GrowthAssetRow {
   card_template: string | null;
   card_data: string | null;
   created_at: string;
+}
+
+interface GrowthContentPerformanceRow {
+  account_id: string;
+  content_id: string;
+  window: GrowthContentPerformance["window"];
+  measured_at: string;
+  metrics: string;
 }
 
 interface GrowthContentItemRow {
@@ -830,6 +842,77 @@ function isValidIsoDateTime(value: string | null): value is string {
   return value !== null
     && /^\d{4}-\d{2}-\d{2}T.+(?:Z|[+-]\d{2}:\d{2})$/.test(value)
     && !Number.isNaN(Date.parse(value));
+}
+
+function contentPerformanceFromRow(row: GrowthContentPerformanceRow): GrowthContentPerformance {
+  return {
+    accountId: row.account_id,
+    contentId: row.content_id,
+    window: row.window,
+    measuredAt: row.measured_at,
+    metrics: parseJson(row.metrics, {}),
+  };
+}
+
+export function listContentPerformance(
+  accountId: string,
+  filters: GrowthContentPerformanceFilters = {},
+): GrowthContentPerformance[] {
+  ensureGrowthAccountMigration(accountId);
+  const clauses = ["performance.account_id = ?", "content.account_id = performance.account_id"];
+  const params: unknown[] = [accountId];
+  if (filters.repository !== undefined) {
+    clauses.push("content.repository = ?");
+    params.push(filters.repository);
+  }
+  if (filters.contentId !== undefined) {
+    clauses.push("performance.content_id = ?");
+    params.push(filters.contentId);
+  }
+  if (filters.window !== undefined) {
+    clauses.push('performance."window" = ?');
+    params.push(filters.window);
+  }
+  return all<GrowthContentPerformanceRow>(
+    `SELECT performance.account_id, performance.content_id, performance."window" AS window,
+            performance.measured_at, performance.metrics
+     FROM content_performance AS performance
+     INNER JOIN content_items AS content ON content.id = performance.content_id
+     WHERE ${clauses.join(" AND ")}
+     ORDER BY performance.content_id,
+       CASE performance."window" WHEN '48h' THEN 0 ELSE 1 END`,
+    params,
+  ).map(contentPerformanceFromRow);
+}
+
+export function upsertContentPerformance(
+  accountId: string,
+  input: UpsertGrowthContentPerformanceInput,
+): GrowthContentPerformance | null {
+  ensureGrowthAccountMigration(accountId);
+  if (!GROWTH_PERFORMANCE_WINDOWS.includes(input.window)) {
+    throw new GrowthStoreValidationError("Invalid performance window.");
+  }
+  if (!isValidIsoDateTime(input.measuredAt)) {
+    throw new GrowthStoreValidationError("Performance measurement requires a valid ISO date and time.");
+  }
+  if (Object.values(input.metrics).some((value) => value !== undefined && !Number.isFinite(value))) {
+    throw new GrowthStoreValidationError("Performance metrics must be finite numbers.");
+  }
+  if (!getContentItem(accountId, input.contentId)) return null;
+  run(
+    `INSERT INTO content_performance (account_id, content_id, "window", measured_at, metrics)
+     VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT(content_id, "window") DO UPDATE SET
+       measured_at = excluded.measured_at,
+       metrics = excluded.metrics
+     WHERE content_performance.account_id = excluded.account_id`,
+    [accountId, input.contentId, input.window, input.measuredAt, JSON.stringify(input.metrics)],
+  );
+  return listContentPerformance(accountId, {
+    contentId: input.contentId,
+    window: input.window,
+  })[0] ?? null;
 }
 
 function validatePublishedUrl(value: string | null): void {

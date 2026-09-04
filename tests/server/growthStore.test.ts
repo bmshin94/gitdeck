@@ -453,6 +453,64 @@ describe("Growth Studio store", () => {
     expect(store.getContentItem("account-a", item.id)).toBeNull();
   });
 
+  it("upserts and filters performance within its account and cascades content deletion", () => {
+    const item = createDraft("account-a", "owner/repo");
+    const otherRepository = createDraft("account-a", "owner/other");
+    const otherAccount = createDraft("account-b", "owner/repo");
+    const measuredAt = "2026-09-10T00:00:00.000Z";
+
+    expect(store.upsertContentPerformance("account-b", {
+      contentId: item.id,
+      window: "48h",
+      measuredAt,
+      metrics: { starsDelta: 99, forksDelta: 99 },
+    })).toBeNull();
+    const first = store.upsertContentPerformance("account-a", {
+      contentId: item.id,
+      window: "48h",
+      measuredAt,
+      metrics: { starsDelta: 4, forksDelta: -1 },
+    });
+    store.upsertContentPerformance("account-a", {
+      contentId: otherRepository.id,
+      window: "7d",
+      measuredAt,
+      metrics: { starsDelta: 8, forksDelta: 2 },
+    });
+    store.upsertContentPerformance("account-b", {
+      contentId: otherAccount.id,
+      window: "48h",
+      measuredAt,
+      metrics: { starsDelta: 1, forksDelta: 0 },
+    });
+
+    expect(first).toMatchObject({
+      accountId: "account-a",
+      contentId: item.id,
+      window: "48h",
+      metrics: { starsDelta: 4, forksDelta: -1 },
+    });
+    expect(store.listContentPerformance("account-a", { repository: "owner/repo" })).toEqual([first]);
+    expect(store.listContentPerformance("account-a", { contentId: otherRepository.id, window: "7d" }))
+      .toHaveLength(1);
+    expect(store.listContentPerformance("account-b")).toHaveLength(1);
+
+    const updated = store.upsertContentPerformance("account-a", {
+      contentId: item.id,
+      window: "48h",
+      measuredAt: "2026-09-11T00:00:00.000Z",
+      metrics: { starsDelta: -2, forksDelta: 3 },
+    });
+    expect(updated).toMatchObject({
+      measuredAt: "2026-09-11T00:00:00.000Z",
+      metrics: { starsDelta: -2, forksDelta: 3 },
+    });
+    expect(store.listContentPerformance("account-a", { contentId: item.id })).toHaveLength(1);
+
+    expect(store.deleteContentItem("account-a", item.id)).toBe(true);
+    expect(store.listContentPerformance("account-a", { contentId: item.id })).toEqual([]);
+  });
+
   it("migrates legacy suggestions and proposals once per account with complete mapping", () => {
     const database = getDatabase();
     database.exec(`
