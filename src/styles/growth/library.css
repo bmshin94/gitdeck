@@ -280,6 +280,169 @@
   font-size: 11px;
 }
 
+.mode-growth .growth-asset-library-heading {
+  margin-bottom: 14px;
+}
+
+.mode-growth .growth-asset-upload {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.1fr) minmax(150px, .8fr) minmax(220px, 1.5fr) auto;
+  align-items: end;
+  gap: 10px;
+  padding: 13px;
+  background: var(--panel-2);
+  border: 1px solid var(--border-soft);
+  border-radius: 11px;
+}
+
+.mode-growth .growth-asset-upload-heading {
+  grid-column: 1 / -1;
+}
+
+.mode-growth .growth-asset-upload-heading h3,
+.mode-growth .growth-asset-empty h3 {
+  margin: 0;
+  color: var(--text);
+  font-size: 13px;
+}
+
+.mode-growth .growth-asset-upload-heading p,
+.mode-growth .growth-asset-empty p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 10.5px;
+  line-height: 1.5;
+}
+
+.mode-growth .growth-asset-upload input[type="file"] {
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.mode-growth .growth-asset-upload > .btn {
+  min-height: 35px;
+  white-space: nowrap;
+}
+
+.mode-growth .growth-asset-state,
+.mode-growth .growth-asset-progress,
+.mode-growth .growth-asset-success,
+.mode-growth .growth-asset-error {
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  border-radius: 9px;
+  font-size: 11px;
+}
+
+.mode-growth .growth-asset-state,
+.mode-growth .growth-asset-progress {
+  color: var(--muted);
+  background: var(--panel-2);
+  border: 1px solid var(--border-soft);
+}
+
+.mode-growth .growth-asset-success {
+  color: var(--success);
+  background: color-mix(in srgb, var(--success) 9%, var(--panel));
+  border: 1px solid color-mix(in srgb, var(--success) 32%, var(--border));
+}
+
+.mode-growth .growth-asset-error {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 10%, var(--panel));
+  border: 1px solid color-mix(in srgb, var(--danger) 36%, var(--border));
+}
+
+.mode-growth .growth-asset-empty {
+  text-align: center;
+}
+
+.mode-growth .growth-asset-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(230px, 100%), 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.mode-growth .growth-asset-card {
+  min-width: 0;
+  overflow: hidden;
+  background: var(--panel-2);
+  border: 1px solid var(--border-soft);
+  border-radius: 11px;
+}
+
+.mode-growth .growth-asset-preview {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--panel) 80%, #000);
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.mode-growth .growth-asset-preview img,
+.mode-growth .growth-asset-preview video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.mode-growth .growth-asset-card-body {
+  padding: 12px;
+}
+
+.mode-growth .growth-asset-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.mode-growth .growth-asset-badges span {
+  padding: 3px 6px;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-radius: 999px;
+  font-size: 8.5px;
+  font-weight: 800;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.mode-growth .growth-asset-card h3 {
+  margin: 9px 0 0;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
+
+.mode-growth .growth-asset-card dl {
+  display: grid;
+  gap: 8px;
+  margin: 10px 0 0;
+}
+
+.mode-growth .growth-asset-card dl > div {
+  display: grid;
+  gap: 2px;
+}
+
+.mode-growth .growth-asset-card dt {
+  color: var(--muted-2);
+  font-size: 8.5px;
+  font-weight: 800;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.mode-growth .growth-asset-card dd {
+  margin: 0;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+  font-size: 10.5px;
+  line-height: 1.45;
+}
+
 @media (max-width: 1180px) {
   .mode-growth .growth-library-channel-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -302,8 +465,14 @@
   }
 
   .mode-growth .growth-library-fields,
-  .mode-growth .growth-library-cadence-grid {
+  .mode-growth .growth-library-cadence-grid,
+  .mode-growth .growth-asset-upload {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .mode-growth .growth-asset-upload-heading,
+  .mode-growth .growth-asset-alt-field {
+    grid-column: 1 / -1;
   }
 
   .mode-growth .growth-library-profile-fields .growth-library-wide-field {
@@ -325,13 +494,17 @@
   .mode-growth .growth-library-channel-grid,
   .mode-growth .growth-library-cadence-grid,
   .mode-growth .growth-library-pillar,
-  .mode-growth .growth-library-window {
+  .mode-growth .growth-library-window,
+  .mode-growth .growth-asset-upload,
+  .mode-growth .growth-asset-grid {
     grid-template-columns: 1fr;
   }
 
   .mode-growth .growth-library-profile-fields .growth-library-wide-field,
   .mode-growth .growth-library-pillar-description,
-  .mode-growth .growth-library-window > .btn {
+  .mode-growth .growth-library-window > .btn,
+  .mode-growth .growth-asset-upload-heading,
+  .mode-growth .growth-asset-alt-field {
     grid-column: 1;
   }
 

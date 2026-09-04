@@ -16,6 +16,7 @@ import {
   normalizeGrowthProfileInput,
 } from "../../utils/growth/profile";
 import { RepositoryContentSources } from "../common/RepositoryContentSources";
+import { GrowthAssetLibrary } from "./GrowthAssetLibrary";
 
 interface GrowthLibraryProps {
   accountId: string | null;
@@ -181,6 +182,8 @@ export function GrowthLibrary({ accountId, enabled, repository, repos }: GrowthL
         <h1>{t("growth.libraryTitle")}</h1>
         <p>{t("growth.libraryDescription", { repository })}</p>
       </header>
+
+      <GrowthAssetLibrary accountId={accountId} enabled={enabled} repository={repository} />
 
       <section className="growth-library-card growth-library-sources">
         <div className="growth-library-section-heading">

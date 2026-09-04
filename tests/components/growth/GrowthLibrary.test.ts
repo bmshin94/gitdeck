@@ -6,13 +6,19 @@ import { I18nProvider } from "../../../src/i18n/I18nProvider";
 import type { GrowthProfile } from "../../../src/types/growth";
 
 const mocks = vi.hoisted(() => ({
+  buildGrowthAssetFileUrl: vi.fn((id: string) => `/api/growth/assets/${id}/file`),
+  fetchGrowthAssets: vi.fn(),
   fetchGrowthProfile: vi.fn(),
   updateGrowthProfile: vi.fn(),
+  uploadGrowthAsset: vi.fn(),
 }));
 
 vi.mock("../../../src/api/growth", () => ({
+  buildGrowthAssetFileUrl: mocks.buildGrowthAssetFileUrl,
+  fetchGrowthAssets: mocks.fetchGrowthAssets,
   fetchGrowthProfile: mocks.fetchGrowthProfile,
   updateGrowthProfile: mocks.updateGrowthProfile,
+  uploadGrowthAsset: mocks.uploadGrowthAsset,
 }));
 vi.mock("../../../src/components/common/RepositoryContentSources", () => ({
   RepositoryContentSources: ({ repository }: { repository: string }) => createElement("button", null, `Sources for ${repository}`),
@@ -59,6 +65,7 @@ beforeEach(() => {
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
+  mocks.fetchGrowthAssets.mockResolvedValue([]);
   mocks.fetchGrowthProfile.mockResolvedValue(growthProfile());
   mocks.updateGrowthProfile.mockImplementation(async (_repository, input) => growthProfile({
     ...input,
@@ -94,6 +101,7 @@ describe("GrowthLibrary", () => {
 
     expect(mocks.fetchGrowthProfile).toHaveBeenCalledWith("acme/rocket", expect.any(AbortSignal));
     expect(container.textContent).toContain("Voice, sources, and editorial foundations");
+    expect(container.textContent).toContain("Repository assets");
     expect(container.textContent).toContain("Channels");
     expect(container.textContent).toContain("Cadence");
     expect(container.textContent).toContain("Content pillars");
@@ -108,7 +116,7 @@ describe("GrowthLibrary", () => {
     await act(async () => {
       setValue(inputFor("Voice"), "  Direct and grounded  ");
       setValue(inputFor("Hashtags"), " #OpenSource, #opensource, #GitDeck ");
-      container.querySelector("form")?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+      container.querySelector(".growth-library-form")?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -127,7 +135,7 @@ describe("GrowthLibrary", () => {
     await renderLibrary();
     await act(async () => {
       setValue(inputFor("IANA timezone"), "Mars/Olympus");
-      container.querySelector("form")?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+      container.querySelector(".growth-library-form")?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
     });
 
     expect(mocks.updateGrowthProfile).not.toHaveBeenCalled();
