@@ -61,7 +61,12 @@ import { refreshContentPerformance } from "../growth/attribution";
 import { getGrowthPerformanceSummary } from "../growth/performance";
 import { getGrowthWeeklyReview } from "../growth/review";
 import { getGrowthUnifiedCalendar } from "../growth/calendar";
-import { parseJsonBody, send, sendJson } from "../http";
+import {
+  getGrowthSettings,
+  resetGrowthSettings,
+  saveGrowthSettings,
+} from "../growth/settings";
+import { parseJsonBody, readJsonBody, send, sendJson } from "../http";
 import type { AppRouter, RouteContext } from "../router";
 import {
   GROWTH_CHANNELS,
@@ -90,6 +95,7 @@ import {
   GrowthProfileValidationError,
   normalizeGrowthProfileInput,
 } from "../../utils/growth/profile";
+import { GrowthSettingsValidationError } from "../../utils/growth/settings";
 import { parseRepositoryName } from "../../utils/repository";
 import { SOCIAL_PROPOSAL_FORMATS } from "../../utils/socialProposals";
 
@@ -218,6 +224,42 @@ async function readWorkspace(ctx: RouteContext): Promise<void> {
   const repository = decodeRepositoryParams(ctx);
   if (!repository) return;
   sendJson(ctx.res, 200, { ok: true, workspace: getGrowthWorkspaceSummary(account.id, repository) });
+}
+
+const INVALID_SETTINGS_BODY = Symbol("invalid-settings-body");
+
+async function readSettingsBody(ctx: RouteContext): Promise<unknown | typeof INVALID_SETTINGS_BODY> {
+  try {
+    return await readJsonBody<unknown>(ctx.req);
+  } catch {
+    sendJson(ctx.res, 400, { ok: false, error: "invalid JSON" });
+    return INVALID_SETTINGS_BODY;
+  }
+}
+
+async function settings(ctx: RouteContext): Promise<void> {
+  const account = await requireAccount(ctx);
+  if (!account) return;
+  if ([...ctx.url.searchParams.keys()].length > 0) {
+    return badRequest(ctx, "growth settings do not accept query parameters");
+  }
+  if (ctx.req.method === "GET") {
+    return sendJson(ctx.res, 200, { ok: true, settings: getGrowthSettings(account.id) });
+  }
+  const body = await readSettingsBody(ctx);
+  if (body === INVALID_SETTINGS_BODY) return;
+  if (ctx.req.method === "DELETE") {
+    if (!isRecord(body) || Object.keys(body).length > 0) {
+      return badRequest(ctx, "growth settings reset requires an empty body");
+    }
+    return sendJson(ctx.res, 200, { ok: true, settings: resetGrowthSettings(account.id) });
+  }
+  try {
+    sendJson(ctx.res, 200, { ok: true, settings: saveGrowthSettings(account.id, body) });
+  } catch (error) {
+    if (error instanceof GrowthSettingsValidationError) return badRequest(ctx, error.message);
+    throw error;
+  }
 }
 
 async function profile(ctx: RouteContext): Promise<void> {
@@ -1291,6 +1333,9 @@ async function refreshPerformance(ctx: RouteContext): Promise<void> {
 export function registerGrowthRoutes(router: AppRouter): void {
   router.get("/api/growth/workspaces", listWorkspaces);
   router.get("/api/growth/workspace/:owner/:repo", readWorkspace);
+  router.get("/api/growth/settings", settings);
+  router.on("PUT", "/api/growth/settings", settings);
+  router.delete("/api/growth/settings", settings);
   router.get("/api/growth/profiles/:owner/:repo", profile);
   router.on("PUT", "/api/growth/profiles/:owner/:repo", profile);
   router.get("/api/growth/interventions", interventions);

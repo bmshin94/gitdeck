@@ -2,9 +2,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   fetchGrowthPerformanceSummary,
   fetchGrowthReview,
+  fetchGrowthSettings,
   fetchGrowthUnifiedCalendar,
   generateGrowthContentPlan,
   generateMultipleGrowthContentPlans,
+  resetGrowthSettings,
+  updateGrowthSettings,
 } from "../../src/api/growth";
 
 const ZERO_SUMMARY = {
@@ -40,6 +43,58 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+});
+
+describe("Growth settings client", () => {
+  const settings = {
+    timezone: "UTC",
+    cadence: { x: 3, linkedin: 1, mastodon: 3, bluesky: 0, discussion: 0, blog: 0 },
+    pillars: [{ id: "product", label: "Product", weight: 100, description: "Outcomes" }],
+  };
+
+  it("reads, updates, and resets settings with abort signals", async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: vi.fn(async () => ({ ok: true, settings })),
+    } as unknown as Response);
+    const controller = new AbortController();
+
+    await expect(fetchGrowthSettings(controller.signal)).resolves.toEqual(settings);
+    await expect(updateGrowthSettings(settings, controller.signal)).resolves.toEqual(settings);
+    await expect(resetGrowthSettings(controller.signal)).resolves.toEqual(settings);
+
+    expect(fetchMock.mock.calls).toEqual([
+      ["/api/growth/settings", { cache: "no-store", signal: controller.signal }],
+      ["/api/growth/settings", {
+        cache: "no-store",
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(settings),
+        signal: controller.signal,
+      }],
+      ["/api/growth/settings", { cache: "no-store", method: "DELETE", signal: controller.signal }],
+    ]);
+  });
+
+  it("surfaces server errors and aborts stale reads", async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: false,
+      status: 400,
+      json: vi.fn(async () => ({ ok: false, error: "invalid settings" })),
+    } as unknown as Response);
+    await expect(updateGrowthSettings(settings)).rejects.toThrow("invalid settings");
+
+    fetchMock.mockImplementationOnce((_url: string, init: RequestInit) => new Promise((_resolve, reject) => {
+      init.signal?.addEventListener("abort", () => {
+        reject(Object.assign(new Error("aborted"), { name: "AbortError" }));
+      }, { once: true });
+    }));
+    const controller = new AbortController();
+    const staleLoad = fetchGrowthSettings(controller.signal);
+    controller.abort();
+    await expect(staleLoad).rejects.toMatchObject({ name: "AbortError" });
+  });
 });
 
 describe("Growth unified calendar client", () => {

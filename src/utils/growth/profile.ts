@@ -64,7 +64,7 @@ function normalizeChannels(value: unknown): GrowthChannelSelection {
   return Object.fromEntries(GROWTH_CHANNELS.map((channel) => [channel, value[channel]])) as GrowthChannelSelection;
 }
 
-function normalizeCadence(value: unknown): GrowthCadence {
+export function normalizeGrowthCadence(value: unknown): GrowthCadence {
   if (!isRecord(value) || !hasExactKeys(value, GROWTH_CHANNELS)) {
     throw new GrowthProfileValidationError("cadence must contain every supported channel");
   }
@@ -77,7 +77,7 @@ function normalizeCadence(value: unknown): GrowthCadence {
   return Object.fromEntries(GROWTH_CHANNELS.map((channel) => [channel, value[channel]])) as GrowthCadence;
 }
 
-function normalizePillars(value: unknown): GrowthPillar[] {
+export function normalizeGrowthPillars(value: unknown): GrowthPillar[] {
   if (!Array.isArray(value) || value.length === 0) {
     throw new GrowthProfileValidationError("pillars must contain at least one pillar");
   }
@@ -139,7 +139,7 @@ function normalizePostingWindows(value: unknown): GrowthPostingWindow[] {
   });
 }
 
-function normalizeTimezone(value: unknown): string {
+export function normalizeGrowthTimezone(value: unknown): string {
   const timezone = requiredString(value, "timezone");
   try {
     new Intl.DateTimeFormat("en", { timeZone: timezone }).format();
@@ -162,11 +162,11 @@ export function normalizeGrowthProfileInput(value: unknown): GrowthProfileInput 
     voice: requiredString(value.voice, "voice", true),
     audience: requiredString(value.audience, "audience", true),
     channels: normalizeChannels(value.channels),
-    cadence: normalizeCadence(value.cadence),
-    pillars: normalizePillars(value.pillars),
+    cadence: normalizeGrowthCadence(value.cadence),
+    pillars: normalizeGrowthPillars(value.pillars),
     hashtags: normalizeHashtags(value.hashtags),
     avoid: requiredString(value.avoid, "avoid", true),
-    timezone: normalizeTimezone(value.timezone),
+    timezone: normalizeGrowthTimezone(value.timezone),
     postingWindows: normalizePostingWindows(value.postingWindows),
     color,
   };

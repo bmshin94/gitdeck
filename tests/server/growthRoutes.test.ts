@@ -148,6 +148,14 @@ function profileInput() {
   };
 }
 
+function settingsInput() {
+  return {
+    timezone: " Europe/Rome ",
+    cadence: { x: 4, linkedin: 2, mastodon: 1, bluesky: 0, discussion: 0, blog: 0 },
+    pillars: [{ id: "Product-Value", label: " Product value ", weight: 100, description: " Outcomes " }],
+  };
+}
+
 beforeEach(async () => {
   closeDatabase();
   await rm(state.tmpDir, { recursive: true, force: true });
@@ -234,6 +242,75 @@ describe("Growth API routes", () => {
       status: 401,
       body: { ok: false, needsAuth: true, error: "authentication required" },
     });
+  });
+
+  it("round-trips, isolates, and resets growth-wide settings", async () => {
+    const defaults = await dispatch("GET", "/api/growth/settings");
+    expect(defaults.status).toBe(200);
+    expect(defaults.body.settings).toMatchObject({ timezone: "UTC", cadence: { x: 3 } });
+    expect(defaults.body.settings.pillars).toHaveLength(5);
+
+    const saved = await dispatch("PUT", "/api/growth/settings", settingsInput());
+    expect(saved).toEqual({
+      status: 200,
+      body: {
+        ok: true,
+        settings: {
+          timezone: "Europe/Rome",
+          cadence: settingsInput().cadence,
+          pillars: [{ id: "product-value", label: "Product value", weight: 100, description: "Outcomes" }],
+        },
+      },
+    });
+    expect((await dispatch("GET", "/api/growth/settings")).body.settings).toEqual(saved.body.settings);
+
+    state.activeAccountId = "account-b";
+    expect((await dispatch("GET", "/api/growth/settings")).body.settings.timezone).toBe("UTC");
+    await dispatch("PUT", "/api/growth/settings", { ...settingsInput(), timezone: "America/New_York" });
+
+    state.activeAccountId = "account-a";
+    expect((await dispatch("DELETE", "/api/growth/settings")).body.settings.timezone).toBe("UTC");
+    state.activeAccountId = "account-b";
+    expect((await dispatch("GET", "/api/growth/settings")).body.settings.timezone).toBe("America/New_York");
+  });
+
+  it("strictly validates growth settings requests", async () => {
+    const invalidDocuments = [
+      {},
+      null,
+      [],
+      { ...settingsInput(), unknown: true },
+      { ...settingsInput(), timezone: "Mars/Olympus" },
+      { ...settingsInput(), cadence: { ...settingsInput().cadence, x: 15 } },
+      { ...settingsInput(), cadence: { x: 1 } },
+      { ...settingsInput(), pillars: [] },
+      { ...settingsInput(), pillars: [
+        { id: "same", label: "One", weight: 50, description: "" },
+        { id: "SAME", label: "Two", weight: 50, description: "" },
+      ] },
+    ];
+    for (const body of invalidDocuments) {
+      const response = await dispatch("PUT", "/api/growth/settings", body);
+      expect(response.status).toBe(400);
+      expect(response.body.ok).toBe(false);
+    }
+
+    expect((await dispatchRaw("PUT", "/api/growth/settings", "{broken")).status).toBe(400);
+    expect((await dispatch("GET", "/api/growth/settings?unknown=1")).status).toBe(400);
+    expect((await dispatch("PUT", "/api/growth/settings?unknown=1", settingsInput())).status).toBe(400);
+    expect((await dispatch("DELETE", "/api/growth/settings", { unknown: true })).status).toBe(400);
+    expect((await dispatch("DELETE", "/api/growth/settings?unknown=1")).status).toBe(400);
+  });
+
+  it("requires an active account for every growth settings method", async () => {
+    state.activeAccountId = null;
+    for (const [method, body] of [
+      ["GET", undefined],
+      ["PUT", settingsInput()],
+      ["DELETE", undefined],
+    ] as const) {
+      expect((await dispatch(method, "/api/growth/settings", body)).status).toBe(401);
+    }
   });
 
   it("uploads, lists, and serves private asset bytes without exposing stored paths", async () => {

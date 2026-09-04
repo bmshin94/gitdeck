@@ -35,6 +35,8 @@ import type {
   GrowthReviewData,
   GrowthReviewFilters,
   GrowthScannedInterventionsData,
+  GrowthSettings,
+  GrowthSettingsData,
   GrowthUnifiedCalendarData,
   GrowthUnifiedCalendarFilters,
   GrowthWorkspaceData,
@@ -73,6 +75,30 @@ function repositoryRoute(repository: string): string {
   const parts = parseRepositoryName(repository);
   if (!parts) throw new Error("invalid repository");
   return `${encodeURIComponent(parts[0])}/${encodeURIComponent(parts[1])}`;
+}
+
+export async function fetchGrowthSettings(signal?: AbortSignal): Promise<GrowthSettings> {
+  const data = await requestJson<GrowthSettingsData>("/api/growth/settings", { signal });
+  return data.settings;
+}
+
+export async function updateGrowthSettings(
+  settings: GrowthSettings,
+  signal?: AbortSignal,
+): Promise<GrowthSettings> {
+  const data = await requestJson<GrowthSettingsData>(
+    "/api/growth/settings",
+    jsonRequest("PUT", settings, signal),
+  );
+  return data.settings;
+}
+
+export async function resetGrowthSettings(signal?: AbortSignal): Promise<GrowthSettings> {
+  const data = await requestJson<GrowthSettingsData>(
+    "/api/growth/settings",
+    { method: "DELETE", signal },
+  );
+  return data.settings;
 }
 
 export async function fetchGrowthWorkspaces(signal?: AbortSignal): Promise<GrowthWorkspaceSummary[]> {

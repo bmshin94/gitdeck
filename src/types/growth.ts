@@ -47,6 +47,17 @@ export interface GrowthProfile {
 
 export type GrowthProfileInput = Omit<GrowthProfile, "accountId" | "repository" | "updatedAt">;
 
+export interface GrowthSettings {
+  timezone: string;
+  cadence: GrowthCadence;
+  pillars: GrowthPillar[];
+}
+
+export interface GrowthSettingsData {
+  ok: true;
+  settings: GrowthSettings;
+}
+
 export interface GrowthPlanSlot {
   key: string;
   channel: GrowthChannel;
