@@ -163,6 +163,7 @@ export const en = {
   "growth.noRepositoriesFound": "No repositories found",
   "growth.noRepositoryDescription": "No description",
   "growth.repositoryLoadError": "Could not load repositories: {message}",
+  "growth.goalsLoadError": "Could not load missions: {message}",
   "growth.home": "Home",
   "growth.unifiedCalendar": "Unified calendar",
   "growth.review": "Review",

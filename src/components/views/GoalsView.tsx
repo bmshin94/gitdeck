@@ -19,6 +19,8 @@ interface GoalsViewProps {
   repos: GhRepo[];
   loading: boolean;
   onChange: () => Promise<void> | void;
+  fixedRepository?: string;
+  loadError?: string;
 }
 
 const metricLabels = new Map<GoalMetric, string>(GOAL_METRIC_DEFINITIONS.map((metric) => [metric.id, metric.label]));
@@ -29,7 +31,7 @@ function currentRepoValue(repo: GhRepo | undefined, metric: GoalMetric): number 
   return 0;
 }
 
-export function GoalsView({ goals, repos, loading, onChange }: GoalsViewProps) {
+export function GoalsView({ goals, repos, loading, onChange, fixedRepository, loadError = "" }: GoalsViewProps) {
   const { t } = useI18n();
   const [repository, setRepository] = useState("");
   const [metric, setMetric] = useState<GoalMetric>("stars");
@@ -43,8 +45,17 @@ export function GoalsView({ goals, repos, loading, onChange }: GoalsViewProps) {
   // Proposals fetched while the modal is open, so reopening it shows them without a round-trip.
   const [proposalCache, setProposalCache] = useState<Record<string, { proposals: GoalProposal[]; generatedAt: string }>>({});
   const navigate = useNavigate();
-  const reposByName = useMemo(() => new Map(repos.map((repo) => [repo.nameWithOwner, repo])), [repos]);
-  const groupedGoals = useMemo(() => groupGoalsByRepository(goals), [goals]);
+  const activeRepository = fixedRepository ?? repository;
+  const scopedRepos = useMemo(
+    () => fixedRepository ? repos.filter((repo) => repo.nameWithOwner === fixedRepository) : repos,
+    [fixedRepository, repos],
+  );
+  const scopedGoals = useMemo(
+    () => fixedRepository ? goals.filter((goal) => goal.repository === fixedRepository) : goals,
+    [fixedRepository, goals],
+  );
+  const reposByName = useMemo(() => new Map(scopedRepos.map((repo) => [repo.nameWithOwner, repo])), [scopedRepos]);
+  const groupedGoals = useMemo(() => groupGoalsByRepository(scopedGoals), [scopedGoals]);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -52,10 +63,10 @@ export function GoalsView({ goals, repos, loading, onChange }: GoalsViewProps) {
     setSaving(true);
     try {
       await createGoal({
-        repository,
+        repository: activeRepository,
         metric,
         targetValue: Number(targetValue),
-        currentValue: currentRepoValue(reposByName.get(repository), metric),
+        currentValue: currentRepoValue(reposByName.get(activeRepository), metric),
         deadline,
       });
       setTargetValue("");
@@ -90,6 +101,16 @@ export function GoalsView({ goals, repos, loading, onChange }: GoalsViewProps) {
     }
   }
 
+  function openAiPreferences() {
+    setProposalTarget(null);
+    if (fixedRepository) {
+      const preferencesWindow = window.open("/preferences#preferences-ai", "_blank", "noopener");
+      if (preferencesWindow) preferencesWindow.opener = null;
+      return;
+    }
+    navigate("/preferences#preferences-ai");
+  }
+
   return (
     <div className="goals-view">
       <section className="goal-create-card">
@@ -103,7 +124,11 @@ export function GoalsView({ goals, repos, loading, onChange }: GoalsViewProps) {
         <form className="goal-form" onSubmit={(event) => void submit(event)}>
           <label>
             {t("goals.repository")}
-            <RepositoryPicker repos={repos} value={repository} placeholder={t("goals.searchRepository")} onChange={setRepository} />
+            {fixedRepository ? (
+              <input type="text" value={fixedRepository} readOnly aria-readonly="true" />
+            ) : (
+              <RepositoryPicker repos={scopedRepos} value={repository} placeholder={t("goals.searchRepository")} onChange={setRepository} />
+            )}
           </label>
           <label>
             {t("goals.metric")}
@@ -119,13 +144,13 @@ export function GoalsView({ goals, repos, loading, onChange }: GoalsViewProps) {
             {t("goals.deadline")}
             <input type="date" min={new Date().toISOString().slice(0, 10)} value={deadline} onChange={(event) => setDeadline(event.target.value)} required />
           </label>
-          <button className="btn primary" type="submit" disabled={saving || !repository || !repos.length}>{saving ? t("common.loading") : t("goals.add")}</button>
+          <button className="btn primary" type="submit" disabled={saving || !activeRepository || !scopedRepos.length}>{saving ? t("common.loading") : t("goals.add")}</button>
         </form>
       </section>
 
-      {error ? <div className="error">{error}</div> : null}
-      {loading && !goals.length ? <GoalsLoadingState label={t("common.loadingEllipsis")} /> : null}
-      {!goals.length && !loading ? <div className="empty"><h3>{t("goals.emptyTitle")}</h3><p>{t("goals.emptyText")}</p></div> : null}
+      {error || loadError ? <div className="error" role="alert">{error || loadError}</div> : null}
+      {loading && !scopedGoals.length ? <GoalsLoadingState label={t("common.loadingEllipsis")} /> : null}
+      {!scopedGoals.length && !loading && !loadError ? <div className="empty"><h3>{t("goals.emptyTitle")}</h3><p>{t("goals.emptyText")}</p></div> : null}
       <div className="goal-repository-list">
         {groupedGoals.map((group) => {
           const repo = reposByName.get(group.repository);
@@ -181,7 +206,7 @@ export function GoalsView({ goals, repos, loading, onChange }: GoalsViewProps) {
                   <div><span>{t("goals.growthStudioEyebrow")}</span><h3>{t("goals.growthStudio")}</h3></div>
                   <div className="goal-studio-actions">
                     <p>{t("goals.growthStudioDescription")}</p>
-                    <RepositoryContentSources repository={group.repository} repos={repos} />
+                    <RepositoryContentSources repository={group.repository} repos={scopedRepos} />
                   </div>
                 </div>
                 <div className="goal-plan-grid">
@@ -241,7 +266,7 @@ export function GoalsView({ goals, repos, loading, onChange }: GoalsViewProps) {
         }}
       />
       {proposalTarget ? (() => {
-        const goal = goals.find((entry) => entry.id === proposalTarget.goalId);
+        const goal = scopedGoals.find((entry) => entry.id === proposalTarget.goalId);
         const suggestion = goal?.suggestions[proposalTarget.index];
         if (!goal || !suggestion) return null;
         const cached = proposalCache[`${goal.id}:${proposalTarget.index}`];
@@ -251,7 +276,7 @@ export function GoalsView({ goals, repos, loading, onChange }: GoalsViewProps) {
             suggestion={cached ? { ...suggestion, proposals: cached.proposals, proposalsGeneratedAt: cached.generatedAt } : suggestion}
             suggestionIndex={proposalTarget.index}
             onClose={() => setProposalTarget(null)}
-            onOpenPreferences={() => { setProposalTarget(null); navigate("/preferences#preferences-ai"); }}
+            onOpenPreferences={openAiPreferences}
             onProposals={(proposals, generatedAt) => setProposalCache((prev) => ({ ...prev, [`${goal.id}:${proposalTarget.index}`]: { proposals, generatedAt } }))}
           />
         );

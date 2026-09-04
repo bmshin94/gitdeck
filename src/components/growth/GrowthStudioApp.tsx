@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import {
   AuthRequiredClientError,
@@ -10,12 +10,14 @@ import {
 import { invalidate as invalidateClientCache } from "../../api/cache";
 import { useAccounts } from "../../contexts/AccountContext";
 import { useI18n } from "../../i18n/I18nProvider";
+import { useGoals } from "../../hooks/useGoals";
 import type { GhRepo } from "../../types/github";
 import {
   growthRepositorySwitchPath,
   parseGrowthWorkspacePath,
 } from "../../utils/growthRoutes";
 import { AuthGate } from "../AuthGate";
+import { GoalsView } from "../views/GoalsView";
 import { GrowthSidebar } from "./GrowthSidebar";
 import { GrowthTopBar, type GrowthTheme } from "./GrowthTopBar";
 
@@ -217,7 +219,18 @@ export function GrowthStudioApp() {
             <Route path="/growth/review" element={<GrowthPlaceholder titleKey="growth.review" />} />
             <Route path="/growth/settings" element={<GrowthPlaceholder titleKey="growth.settings" />} />
             <Route path="/growth/r/:owner/:repo" element={<WorkspacePlaceholder titleKey="growth.overview" />} />
-            <Route path="/growth/r/:owner/:repo/missions" element={<WorkspacePlaceholder titleKey="growth.missions" />} />
+            <Route
+              path="/growth/r/:owner/:repo/missions"
+              element={(
+                <WorkspaceMissions
+                  key={`${activeAccount?.id ?? "authenticated"}:${selectedRepository}`}
+                  accountId={activeAccount?.id ?? null}
+                  enabled={!accountsLoading}
+                  repository={selectedRepository}
+                  repos={repos}
+                />
+              )}
+            />
             <Route path="/growth/r/:owner/:repo/interventions" element={<WorkspacePlaceholder titleKey="growth.interventions" />} />
             <Route path="/growth/r/:owner/:repo/calendar" element={<WorkspacePlaceholder titleKey="growth.calendar" />} />
             <Route path="/growth/r/:owner/:repo/library" element={<WorkspacePlaceholder titleKey="growth.library" />} />
@@ -227,6 +240,35 @@ export function GrowthStudioApp() {
         </main>
       </div>
     </div>
+  );
+}
+
+interface WorkspaceMissionsProps {
+  accountId: string | null;
+  enabled: boolean;
+  repository: string;
+  repos: GhRepo[];
+}
+
+function WorkspaceMissions({ accountId, enabled, repository, repos }: WorkspaceMissionsProps) {
+  const { t } = useI18n();
+  const { goals, loading, error, refresh } = useGoals({ accountId, enabled, repository });
+  const scopedRepos = useMemo(
+    () => repos.filter((repo) => repo.nameWithOwner === repository),
+    [repository, repos],
+  );
+
+  if (!repository) return <Navigate to="/growth" replace />;
+
+  return (
+    <GoalsView
+      goals={goals}
+      repos={scopedRepos}
+      loading={loading}
+      loadError={error ? t("growth.goalsLoadError", { message: error }) : ""}
+      fixedRepository={repository}
+      onChange={refresh}
+    />
   );
 }
 

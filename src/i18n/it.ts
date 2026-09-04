@@ -165,6 +165,7 @@ export const it: Record<keyof typeof en, string> = {
   "growth.noRepositoriesFound": "Nessuna repository trovata",
   "growth.noRepositoryDescription": "Nessuna descrizione",
   "growth.repositoryLoadError": "Impossibile caricare le repository: {message}",
+  "growth.goalsLoadError": "Impossibile caricare le missioni: {message}",
   "growth.home": "Home",
   "growth.unifiedCalendar": "Calendario unificato",
   "growth.review": "Revisione",
