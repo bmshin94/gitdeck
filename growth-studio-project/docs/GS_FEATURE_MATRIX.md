@@ -1,0 +1,46 @@
+# Growth Studio feature matrix
+
+Authoritative inventory of Growth Studio capabilities. Statuses: `EXISTING`
+(present before the project, may move), `PLANNED`, `IN_PROGRESS`, `DONE`,
+`DROPPED`. Tasks update the rows they touch.
+
+| Feature | Location (current or target) | Status | Task |
+|---|---|---|---|
+| Governance baseline and validation gate | `growth-studio-project/scripts/`, `src/utils/colors.ts`, `tests/utils/colors.test.ts` | DONE | GS-000 |
+| Goals CRUD with metric refresh (stars, forks, closed PRs, downloads) | `GoalsView.tsx`, `server/goals.ts`, `routes/goals.ts` | EXISTING | — |
+| AI suggestions per goal (3–5 actions) with deterministic fallback | `server/goals.ts` `generateGoalSuggestions` | EXISTING | GS-021 migrates |
+| AI proposals per suggestion (thread, LinkedIn, Mastodon, issue, doc…) with media suggestions | `server/goals.ts` `generateGoalProposals`, `GoalProposalsModal.tsx` | EXISTING | GS-021 migrates |
+| Repository content sources (repositories and websites) with SSRF guards | `goalStore.ts`, `routes/repository.ts`, `RepositoryContentSources.tsx` | EXISTING | GS-025 moves to Library |
+| AI provider settings and connection test | `preferences/AiIntegrationSettings.tsx`, `server/ai/*` | EXISTING | — |
+| `/growth` client routes served by the SPA | `server/spa.ts`, `main.tsx` | PLANNED | GS-010 |
+| Growth shell: own top bar, sidebar, `mode-growth` body class, no dashboard chrome | `components/growth/GrowthStudioApp.tsx`, `styles/growth/shell.css` | PLANNED | GS-011 |
+| Main-menu entry opening `/growth` in a new window; `goals` tab removed; `/goals` redirect | `App.tsx` | PLANNED | GS-012 |
+| Missions panel hosting the existing goals UI | `/growth/r/:owner/:repo/missions` | PLANNED | GS-013 |
+| Growth home: repositories with profiles or goals, quick stats | `/growth` | PLANNED | GS-014 |
+| Workspace overview per repository | `/growth/r/:owner/:repo` | PLANNED | GS-015 |
+| Shell i18n, responsive layout, theme parity | shell components | PLANNED | GS-016 |
+| Growth store schema (profiles, interventions, plans, items, assets, performance) | `server/growth/store.ts` | PLANNED | GS-020 |
+| One-shot migration of legacy suggestions and proposals | `server/growth/store.ts` | PLANNED | GS-021 |
+| Growth API routes | `server/routes/growth.ts`, `api/growth.ts` | PLANNED | GS-022 |
+| Interventions backlog with statuses and manual creation | `/growth/r/:owner/:repo/interventions` | PLANNED | GS-023 |
+| Content items list and drawer with copy actions | Interventions and Calendar panels | PLANNED | GS-024 |
+| Library panel: sources, profile (voice, audience, channels), pillars, cadence | `/growth/r/:owner/:repo/library` | PLANNED | GS-025 |
+| Deterministic slot builder from cadence, pillars, posting windows | `utils/growth/planSlots.ts` | PLANNED | Phase 3 |
+| AI planner assigning angles to slots | `server/growth/planner.ts` | PLANNED | Phase 3 |
+| AI drafter producing media-aware drafts per slot | `server/growth/drafter.ts` | PLANNED | Phase 3 |
+| Calendar month and week views with drag and drop | `components/growth/calendar/` | PLANNED | Phase 3 |
+| Queue "this week" with copy and mark published | Calendar panel | PLANNED | Phase 3 |
+| ICS export | `/api/growth/calendar.ics` | PLANNED | Phase 3 |
+| Assets library with uploads and imports from README and web sources | `server/growth/assets.ts` | PLANNED | Phase 4 |
+| Generated SVG cards (release, milestone, stats, quote, what's new) | `server/growth/cards.ts` | PLANNED | Phase 4 |
+| Client rasterization, copy image to clipboard, download | `utils/growth/rasterize.ts` | PLANNED | Phase 4 |
+| Media gate: `ready` requires media | store and UI | PLANNED | Phase 4 |
+| Opportunity rules producing interventions | `utils/growth/opportunityRules.ts`, `server/growth/rules.ts` | PLANNED | Phase 5 |
+| Attribution of published items to metric deltas (48h, 7d) | `server/growth/attribution.ts` | PLANNED | Phase 5 |
+| Weekly Growth Review | `server/growth/review.ts`, `/growth/review` | PLANNED | Phase 5 |
+| Evergreen recycling | planner and rules | PLANNED | Phase 5 |
+| Plan re-weighting from performance | planner | PLANNED | Phase 5 |
+| Unified calendar with per-repository colours and filters | `/growth/calendar` | PLANNED | Phase 6 |
+| Multi-repository deconfliction | planner | PLANNED | Phase 6 |
+| Growth settings (defaults, timezone) | `/growth/settings` | PLANNED | Phase 6 |
+| README, CHANGELOG and screenshots | `README.md`, `CHANGELOG.md` | PLANNED | Phase 6 |
