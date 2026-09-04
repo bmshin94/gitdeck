@@ -267,6 +267,34 @@ export interface GrowthContentItemFilters {
   scheduledTo?: string;
 }
 
+export interface GrowthUnifiedCalendarFilters {
+  scheduledFrom: string;
+  scheduledTo: string;
+}
+
+export interface GrowthUnifiedCalendarPillarLabel {
+  id: string;
+  label: string;
+}
+
+export interface GrowthUnifiedCalendarRepository {
+  repository: string;
+  color: string;
+  timezone: string;
+  postingWindows: GrowthPostingWindow[];
+  pillarLabels: GrowthUnifiedCalendarPillarLabel[];
+  contentItems: GrowthContentItem[];
+}
+
+export interface GrowthUnifiedCalendar {
+  repositories: GrowthUnifiedCalendarRepository[];
+}
+
+export interface GrowthUnifiedCalendarData {
+  ok: true;
+  calendar: GrowthUnifiedCalendar;
+}
+
 export const GROWTH_CARD_TEMPLATES = [
   "release",
   "milestone",

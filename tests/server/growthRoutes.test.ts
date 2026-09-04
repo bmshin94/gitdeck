@@ -1495,6 +1495,100 @@ describe("Growth API routes", () => {
     expect(growthStore.getContentItem("account-a", id)).toMatchObject({ status: "ready", body: drafted.body.contentItem.body });
   });
 
+  it("serves a strict account-scoped unified calendar without changing the ICS route", async () => {
+    await dispatch("PUT", "/api/growth/profiles/acme/profile-only", {
+      ...profileInput(),
+      color: "#BE123C",
+      timezone: "Europe/Rome",
+    });
+    const fromEdge = growthStore.createContentItem({
+      accountId: "account-a",
+      repository: "acme/content-only",
+      channel: "x",
+      format: "x-thread",
+      title: "Inclusive edge",
+      status: "idea",
+      scheduledFor: "2026-10-14T08:00:00.000Z",
+    });
+    growthStore.createContentItem({
+      accountId: "account-a",
+      repository: "acme/content-only",
+      channel: "x",
+      format: "x-thread",
+      title: "Skipped item",
+      status: "skipped",
+      scheduledFor: "2026-10-14T08:30:00.000Z",
+    });
+    growthStore.createContentItem({
+      accountId: "account-b",
+      repository: "private/repo",
+      channel: "x",
+      format: "x-thread",
+      title: "Private item",
+      status: "idea",
+      scheduledFor: "2026-10-14T08:30:00.000Z",
+    });
+
+    const response = await dispatch(
+      "GET",
+      "/api/growth/calendar?scheduledFrom=2026-10-14T08%3A00%3A00Z&scheduledTo=2026-10-14T09%3A00%3A00Z",
+    );
+    expect(response).toMatchObject({
+      status: 200,
+      body: {
+        ok: true,
+        calendar: {
+          repositories: [
+            {
+              repository: "acme/content-only",
+              timezone: "UTC",
+              contentItems: [{ id: fromEdge.id }],
+            },
+            {
+              repository: "acme/profile-only",
+              color: "#BE123C",
+              timezone: "Europe/Rome",
+              contentItems: [],
+            },
+          ],
+        },
+      },
+    });
+    expect(JSON.stringify(response.body)).not.toContain("Skipped item");
+    expect(JSON.stringify(response.body)).not.toContain("Private item");
+
+    const malformed = [
+      "/api/growth/calendar",
+      "/api/growth/calendar?scheduledFrom=2026-10-14T08%3A00%3A00Z",
+      "/api/growth/calendar?scheduledTo=2026-10-14T09%3A00%3A00Z",
+      "/api/growth/calendar?scheduledFrom=2026-10-14T08%3A00%3A00Z&scheduledTo=2026-10-14T09%3A00%3A00Z&unknown=1",
+      "/api/growth/calendar?scheduledFrom=2026-10-14T08%3A00%3A00Z&scheduledFrom=2026-10-14T08%3A30%3A00Z&scheduledTo=2026-10-14T09%3A00%3A00Z",
+      "/api/growth/calendar?scheduledFrom=2026-10-14T08%3A00%3A00%2B00%3A00&scheduledTo=2026-10-14T09%3A00%3A00Z",
+      "/api/growth/calendar?scheduledFrom=2026-02-30T08%3A00%3A00Z&scheduledTo=2026-10-14T09%3A00%3A00Z",
+      "/api/growth/calendar?scheduledFrom=2026-10-14T10%3A00%3A00Z&scheduledTo=2026-10-14T09%3A00%3A00Z",
+    ];
+    for (const path of malformed) {
+      expect((await dispatch("GET", path)).status, path).toBe(400);
+    }
+
+    state.activeAccountId = null;
+    expect((await dispatch(
+      "GET",
+      "/api/growth/calendar?scheduledFrom=2026-10-14T08%3A00%3A00Z&scheduledTo=2026-10-14T09%3A00%3A00Z",
+    ))).toEqual({
+      status: 401,
+      body: { ok: false, needsAuth: true, error: "authentication required" },
+    });
+
+    state.activeAccountId = "account-a";
+    const ics = await dispatchRaw(
+      "GET",
+      "/api/growth/calendar.ics?from=2026-10-14T08%3A00%3A00Z&to=2026-10-14T09%3A00%3A00Z",
+    );
+    expect(ics.status).toBe(200);
+    expect(ics.headers["content-type"]).toBe("text/calendar; charset=utf-8");
+  });
+
   it("exports only the active account's scheduled content with validated repository and UTC bounds", async () => {
     const scheduled = await dispatch("POST", "/api/growth/content", {
       repository: "acme/repo",

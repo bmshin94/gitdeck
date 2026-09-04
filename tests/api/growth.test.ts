@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   fetchGrowthPerformanceSummary,
   fetchGrowthReview,
+  fetchGrowthUnifiedCalendar,
   generateGrowthContentPlan,
 } from "../../src/api/growth";
 
@@ -38,6 +39,53 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+});
+
+describe("Growth unified calendar client", () => {
+  it("requests the required inclusive UTC range and forwards cancellation", async () => {
+    const calendar = { repositories: [] };
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: vi.fn(async () => ({ ok: true, calendar })),
+    } as unknown as Response);
+    const controller = new AbortController();
+
+    await expect(fetchGrowthUnifiedCalendar({
+      scheduledFrom: "2026-10-14T08:00:00.000Z",
+      scheduledTo: "2026-10-14T09:00:00.000Z",
+    }, controller.signal)).resolves.toEqual(calendar);
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      "/api/growth/calendar?scheduledFrom=2026-10-14T08%3A00%3A00.000Z&scheduledTo=2026-10-14T09%3A00%3A00.000Z",
+      { cache: "no-store", signal: controller.signal },
+    );
+  });
+
+  it("rejects malformed ranges before fetching and lets callers abort stale loads", async () => {
+    const invalid = [
+      { scheduledFrom: "invalid", scheduledTo: "2026-10-14T09:00:00.000Z" },
+      { scheduledFrom: "2026-10-14T08:00:00+00:00", scheduledTo: "2026-10-14T09:00:00.000Z" },
+      { scheduledFrom: "2026-10-14T10:00:00.000Z", scheduledTo: "2026-10-14T09:00:00.000Z" },
+    ];
+    for (const filters of invalid) {
+      await expect(fetchGrowthUnifiedCalendar(filters)).rejects.toThrow(/invalid/);
+    }
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    fetchMock.mockImplementationOnce((_url: string, init: RequestInit) => new Promise((_resolve, reject) => {
+      init.signal?.addEventListener("abort", () => {
+        reject(Object.assign(new Error("aborted"), { name: "AbortError" }));
+      }, { once: true });
+    }));
+    const controller = new AbortController();
+    const staleLoad = fetchGrowthUnifiedCalendar({
+      scheduledFrom: "2026-10-14T08:00:00.000Z",
+      scheduledTo: "2026-10-14T09:00:00.000Z",
+    }, controller.signal);
+    controller.abort();
+
+    await expect(staleLoad).rejects.toMatchObject({ name: "AbortError" });
+  });
 });
 
 describe("Growth performance summary client", () => {

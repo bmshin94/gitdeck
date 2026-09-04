@@ -59,6 +59,7 @@ import {
 import { refreshContentPerformance } from "../growth/attribution";
 import { getGrowthPerformanceSummary } from "../growth/performance";
 import { getGrowthWeeklyReview } from "../growth/review";
+import { getGrowthUnifiedCalendar } from "../growth/calendar";
 import { parseJsonBody, send, sendJson } from "../http";
 import type { AppRouter, RouteContext } from "../router";
 import {
@@ -73,6 +74,7 @@ import {
   type GrowthContentPerformanceFilters,
   type GrowthPerformanceSummaryFilters,
   type GrowthReviewFilters,
+  type GrowthUnifiedCalendarFilters,
   type GrowthInterventionCategory,
   type GrowthInterventionStatus,
   type UpdateGrowthContentItemInput,
@@ -514,6 +516,34 @@ function parseContentUpdates(body: Record<string, unknown>, creating: boolean): 
     updates.evergreen = body.evergreen;
   }
   return updates;
+}
+
+function parseUnifiedCalendarFilters(ctx: RouteContext): GrowthUnifiedCalendarFilters | null {
+  const fields = ["scheduledFrom", "scheduledTo"] as const;
+  if (!hasStrictQueryFields(ctx, fields, fields)) {
+    badRequest(ctx, "invalid unified calendar filter");
+    return null;
+  }
+  const scheduledFrom = ctx.url.searchParams.get("scheduledFrom")!;
+  const scheduledTo = ctx.url.searchParams.get("scheduledTo")!;
+  const from = parseUtcIsoDateTime(scheduledFrom);
+  const to = parseUtcIsoDateTime(scheduledTo);
+  if (from === null || to === null || from > to) {
+    badRequest(ctx, "invalid unified calendar date range");
+    return null;
+  }
+  return { scheduledFrom, scheduledTo };
+}
+
+async function unifiedCalendar(ctx: RouteContext): Promise<void> {
+  const account = await requireAccount(ctx);
+  if (!account) return;
+  const filters = parseUnifiedCalendarFilters(ctx);
+  if (!filters) return;
+  sendJson(ctx.res, 200, {
+    ok: true,
+    calendar: getGrowthUnifiedCalendar(account.id, filters),
+  });
 }
 
 interface CalendarExportFilters {
@@ -1236,6 +1266,7 @@ export function registerGrowthRoutes(router: AppRouter): void {
   router.post("/api/growth/plans/generate", generatePlan);
   router.post("/api/growth/plans/:id/regenerate", regeneratePlan);
   router.post("/api/growth/plans/:id/archive", archivePlan);
+  router.get("/api/growth/calendar", unifiedCalendar);
   router.get("/api/growth/calendar.ics", exportCalendar);
   router.get("/api/growth/review", review);
   router.get("/api/growth/performance/summary", performanceSummary);

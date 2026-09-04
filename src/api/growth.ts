@@ -33,6 +33,8 @@ import type {
   GrowthReviewData,
   GrowthReviewFilters,
   GrowthScannedInterventionsData,
+  GrowthUnifiedCalendarData,
+  GrowthUnifiedCalendarFilters,
   GrowthWorkspaceData,
   GrowthWorkspacesData,
   GrowthWorkspaceSummary,
@@ -186,6 +188,25 @@ export async function fetchGrowthAssetFile(id: string, signal?: AbortSignal): Pr
     throw new Error(body.error || `Request failed: ${response.status}`);
   }
   return response.blob();
+}
+
+export async function fetchGrowthUnifiedCalendar(
+  filters: GrowthUnifiedCalendarFilters,
+  signal?: AbortSignal,
+) {
+  const from = parseUtcIsoDateTime(filters.scheduledFrom);
+  const to = parseUtcIsoDateTime(filters.scheduledTo);
+  if (from === null || to === null || from > to) {
+    throw new Error("invalid unified calendar date range");
+  }
+  const data = await requestJson<GrowthUnifiedCalendarData>(addFilters(
+    "/api/growth/calendar",
+    {
+      scheduledFrom: filters.scheduledFrom,
+      scheduledTo: filters.scheduledTo,
+    },
+  ), { signal });
+  return data.calendar;
 }
 
 export function buildGrowthCalendarExportUrl(filters: {
