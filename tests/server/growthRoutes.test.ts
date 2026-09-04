@@ -141,6 +141,37 @@ describe("Growth API routes", () => {
     });
   });
 
+  it("round-trips normalized profiles and rejects invalid planning constraints", async () => {
+    const input = {
+      ...profileInput(),
+      voice: "  Practical and direct  ",
+      hashtags: [" #OpenSource ", "#opensource", "#GitDeck"],
+      color: "#2563eb",
+    };
+    const saved = await dispatch("PUT", "/api/growth/profiles/acme/rocket", input);
+    expect(saved.status).toBe(200);
+    expect(saved.body.profile).toMatchObject({
+      repository: "acme/rocket",
+      voice: "Practical and direct",
+      hashtags: ["#OpenSource", "#GitDeck"],
+      color: "#2563EB",
+    });
+    expect((await dispatch("GET", "/api/growth/profiles/acme/rocket")).body.profile)
+      .toEqual(saved.body.profile);
+
+    const invalidProfiles: Array<[unknown, string]> = [
+      [{ ...profileInput(), timezone: "Mars/Olympus" }, "IANA timezone"],
+      [{ ...profileInput(), cadence: { ...profileInput().cadence, x: 15 } }, "0 through 14"],
+      [{ ...profileInput(), channels: { ...profileInput().channels, unknown: true } }, "supported channel"],
+      [{ ...profileInput(), pillars: [{ id: "product", label: "Product", weight: 101, description: "" }] }, "0 through 100"],
+    ];
+    for (const [invalid, message] of invalidProfiles) {
+      const response = await dispatch("PUT", "/api/growth/profiles/acme/rocket", invalid);
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain(message);
+    }
+  });
+
   it("discovers profile-only and goal-backed workspaces and returns real counters", async () => {
     expect((await dispatch("PUT", "/api/growth/profiles/acme/profile-only", profileInput())).status).toBe(200);
     goalStore.createGoal({

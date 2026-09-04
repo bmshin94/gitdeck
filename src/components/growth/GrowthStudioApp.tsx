@@ -20,6 +20,7 @@ import { AuthGate } from "../AuthGate";
 import { GoalsView } from "../views/GoalsView";
 import { GrowthHome } from "./GrowthHome";
 import { GrowthInterventions } from "./GrowthInterventions";
+import { GrowthLibrary } from "./GrowthLibrary";
 import { GrowthSidebar } from "./GrowthSidebar";
 import { GrowthTopBar, type GrowthTheme } from "./GrowthTopBar";
 import { GrowthWorkspaceOverview } from "./GrowthWorkspaceOverview";
@@ -280,7 +281,18 @@ export function GrowthStudioApp() {
               ) : <Navigate to="/growth" replace />}
             />
             <Route path="/growth/r/:owner/:repo/calendar" element={<WorkspacePlaceholder titleKey="growth.calendar" />} />
-            <Route path="/growth/r/:owner/:repo/library" element={<WorkspacePlaceholder titleKey="growth.library" />} />
+            <Route
+              path="/growth/r/:owner/:repo/library"
+              element={selectedRepository ? (
+                <GrowthLibrary
+                  key={`${activeAccount?.id ?? "authenticated"}:${selectedRepository}`}
+                  accountId={activeAccount?.id ?? null}
+                  enabled={!accountsLoading}
+                  repository={selectedRepository}
+                  repos={repos}
+                />
+              ) : <Navigate to="/growth" replace />}
+            />
             <Route path="/growth/r/:owner/:repo/review" element={<WorkspacePlaceholder titleKey="growth.review" />} />
             <Route path="*" element={<Navigate to="/growth" replace />} />
           </Routes>

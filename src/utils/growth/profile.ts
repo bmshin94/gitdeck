@@ -21,6 +21,12 @@ const PROFILE_FIELDS = [
   "color",
 ] as const;
 
+export function createGrowthPillarId(pillars: readonly GrowthPillar[]): string {
+  let suffix = pillars.length + 1;
+  while (pillars.some(({ id }) => id === `pillar-${suffix}`)) suffix += 1;
+  return `pillar-${suffix}`;
+}
+
 export class GrowthProfileValidationError extends Error {
   constructor(message: string) {
     super(message);

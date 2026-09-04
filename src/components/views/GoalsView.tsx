@@ -4,7 +4,6 @@ import { createGoal, deleteGoal } from "../../api/github";
 import { useI18n } from "../../i18n/I18nProvider";
 import { Avatar } from "../common/Avatar";
 import { ConfirmDialog } from "../common/ConfirmDialog";
-import { RepositoryContentSources } from "../common/RepositoryContentSources";
 import { RepositoryPicker } from "../common/RepositoryPicker";
 import { GoalIcon } from "../common/Icons";
 import { GOAL_METRIC_DEFINITIONS, type GoalMetric, type RepositoryGoal } from "../../types/goals";
@@ -176,10 +175,7 @@ export function GoalsView({ goals, repos, loading, onChange, fixedRepository, lo
               <div className="goal-growth-studio">
                 <div className="goal-studio-heading">
                   <div><span>{t("goals.growthStudioEyebrow")}</span><h3>{t("goals.growthStudio")}</h3></div>
-                  <div className="goal-studio-actions">
-                    <p>{t("goals.growthStudioDescription")}</p>
-                    <RepositoryContentSources repository={group.repository} repos={scopedRepos} />
-                  </div>
+                  <p>{t("goals.growthStudioDescription")}</p>
                 </div>
                 <div className="goal-plan-grid">
                   <section className="goal-plan goal-interventions-link">

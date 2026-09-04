@@ -45,7 +45,7 @@ import { legacyMediaToContentMedia, legacyProposalChannel } from "../../utils/gr
 import {
   GrowthProfileValidationError,
   normalizeGrowthProfileInput,
-} from "../../utils/growth/profileValidation";
+} from "../../utils/growth/profile";
 import { parseRepositoryName } from "../../utils/repository";
 import { SOCIAL_PROPOSAL_FORMATS } from "../../utils/socialProposals";
 
