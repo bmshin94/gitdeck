@@ -22,7 +22,7 @@ Authoritative inventory of Growth Studio capabilities. Statuses: `EXISTING`
 | Workspace overview per repository | `src/components/growth/GrowthWorkspaceOverview.tsx`, `src/types/growth.ts`, `src/api/growth.ts`, `/growth/r/:owner/:repo` | DONE | GS-015 |
 | Shell i18n, responsive layout, theme parity, and keyboard dismissal | `src/components/growth/`, `src/components/common/RepositoryPicker.tsx`, `src/styles/growth/`, `src/i18n/en.ts`, `src/i18n/it.ts` | DONE | GS-016 |
 | Growth Studio introduction and screenshot placeholder | `README.md` | DONE | GS-016 |
-| Growth store schema (profiles, interventions, plans, items, assets, performance) | `src/server/growth/store.ts`, `src/types/growth.ts` | PLANNED | GS-020 |
+| Growth store schema (profiles, interventions, plans, items, assets, performance) | `src/server/growth/store.ts`, `src/types/growth.ts`, `src/utils/growth/profileDefaults.ts`, `tests/server/growthStore.test.ts` | DONE | GS-020 |
 | One-shot migration of legacy suggestions and proposals | `src/server/growth/store.ts` | PLANNED | GS-021 |
 | Growth API routes and account-wide workspace summaries | `src/server/routes/growth.ts`, `src/api/growth.ts` | PLANNED | GS-022 |
 | Shared repository signal collection with SSRF-guarded sources | `src/server/growth/signals.ts` | PLANNED | GS-023 |
@@ -38,7 +38,7 @@ Authoritative inventory of Growth Studio capabilities. Statuses: `EXISTING`
 | Assets library with uploads and imports from README and web sources | `server/growth/assets.ts` | PLANNED | Phase 4 |
 | Generated SVG cards (release, milestone, stats, quote, what's new) | `server/growth/cards.ts` | PLANNED | Phase 4 |
 | Client rasterization, copy image to clipboard, download | `utils/growth/rasterize.ts` | PLANNED | Phase 4 |
-| Media gate: `ready` requires media | store and UI | PLANNED | Phase 4 |
+| Media gate: `ready` requires media | `src/server/growth/store.ts`; UI planned for Phase 4 | IN_PROGRESS | GS-020 and Phase 4 |
 | Opportunity rules producing interventions | `utils/growth/opportunityRules.ts`, `server/growth/rules.ts` | PLANNED | Phase 5 |
 | Attribution of published items to metric deltas (48h, 7d) | `server/growth/attribution.ts` | PLANNED | Phase 5 |
 | Weekly Growth Review | `server/growth/review.ts`, `/growth/review` | PLANNED | Phase 5 |

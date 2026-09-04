@@ -45,6 +45,8 @@ export interface GrowthProfile {
   updatedAt: string;
 }
 
+export type GrowthProfileInput = Omit<GrowthProfile, "accountId" | "repository" | "updatedAt">;
+
 export const GROWTH_INTERVENTION_STATUSES = ["proposed", "accepted", "dismissed", "done"] as const;
 export type GrowthInterventionStatus = (typeof GROWTH_INTERVENTION_STATUSES)[number];
 export type GrowthInterventionCategory = "product" | "community" | "engineering" | "marketing";
@@ -66,6 +68,25 @@ export interface GrowthIntervention {
   updatedAt: string;
 }
 
+export interface CreateGrowthInterventionInput {
+  accountId: string;
+  repository: string;
+  goalId?: string | null;
+  category: GrowthInterventionCategory;
+  title: string;
+  action: string;
+  origin: GrowthInterventionOrigin;
+  ruleKey?: string | null;
+  dedupeKey: string;
+  status?: GrowthInterventionStatus;
+}
+
+export interface GrowthInterventionFilters {
+  repository?: string;
+  goalId?: string | null;
+  status?: GrowthInterventionStatus;
+}
+
 export type GrowthContentPlanStatus = "draft" | "active" | "archived";
 
 export interface GrowthContentPlan {
@@ -79,6 +100,17 @@ export interface GrowthContentPlan {
   status: GrowthContentPlanStatus;
   generatedAt: string;
   createdAt: string;
+}
+
+export interface CreateGrowthContentPlanInput {
+  accountId: string;
+  repository: string;
+  periodStart: string;
+  periodEnd: string;
+  cadence: GrowthCadence;
+  pillars: GrowthPillar[];
+  status?: Exclude<GrowthContentPlanStatus, "archived">;
+  generatedAt?: string;
 }
 
 export const GROWTH_CONTENT_ITEM_STATUSES = [
@@ -125,6 +157,62 @@ export interface GrowthContentItem {
   evergreen: 0 | 1;
   createdAt: string;
   updatedAt: string;
+}
+
+export type CreateGrowthContentItemInput = Pick<
+  GrowthContentItem,
+  "accountId" | "repository" | "channel" | "format"
+> & Partial<Pick<
+  GrowthContentItem,
+  | "planId"
+  | "interventionId"
+  | "goalIds"
+  | "pillar"
+  | "angle"
+  | "title"
+  | "summary"
+  | "body"
+  | "threadPosts"
+  | "media"
+  | "sources"
+  | "status"
+  | "scheduledFor"
+  | "publishedAt"
+  | "publishedUrl"
+  | "generatedAt"
+  | "generationVersion"
+  | "evergreen"
+>>;
+
+export type UpdateGrowthContentItemInput = Partial<Pick<
+  GrowthContentItem,
+  | "planId"
+  | "interventionId"
+  | "goalIds"
+  | "channel"
+  | "format"
+  | "pillar"
+  | "angle"
+  | "title"
+  | "summary"
+  | "body"
+  | "threadPosts"
+  | "media"
+  | "sources"
+  | "status"
+  | "scheduledFor"
+  | "publishedAt"
+  | "publishedUrl"
+  | "generatedAt"
+  | "generationVersion"
+  | "evergreen"
+>>;
+
+export interface GrowthContentItemFilters {
+  repository?: string;
+  status?: GrowthContentItemStatus;
+  scheduledFrom?: string;
+  scheduledTo?: string;
 }
 
 export type GrowthAssetKind = "image" | "video";
