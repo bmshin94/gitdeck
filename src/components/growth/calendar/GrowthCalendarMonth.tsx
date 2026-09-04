@@ -1,8 +1,9 @@
-import type { CSSProperties } from "react";
+import type { CSSProperties, DragEvent } from "react";
 import { useI18n } from "../../../i18n/I18nProvider";
 import type { TranslationKey } from "../../../i18n/translations";
 import type { GrowthContentItem } from "../../../types/growth";
 import type { GrowthCalendarMonthGrid } from "../../../utils/growth/calendar";
+import { GROWTH_CALENDAR_DRAG_TYPE, GrowthCalendarItem } from "./GrowthCalendarItem";
 
 interface GrowthCalendarMonthProps {
   grid: GrowthCalendarMonthGrid;
@@ -10,11 +11,10 @@ interface GrowthCalendarMonthProps {
   timezone: string;
   color: string;
   pillarLabels: ReadonlyMap<string, string>;
+  reschedulingIds: ReadonlySet<string>;
   onOpenItem: (item: GrowthContentItem) => void;
-}
-
-function itemTitle(item: GrowthContentItem): string {
-  return item.title || item.angle || item.format;
+  onRescheduleItem: (item: GrowthContentItem, targetDate: string) => void;
+  onDropItem: (itemId: string, targetDate: string) => void;
 }
 
 export function GrowthCalendarMonth({
@@ -23,7 +23,10 @@ export function GrowthCalendarMonth({
   timezone,
   color,
   pillarLabels,
+  reschedulingIds,
   onOpenItem,
+  onRescheduleItem,
+  onDropItem,
 }: GrowthCalendarMonthProps) {
   const { language, t } = useI18n();
   const monthLabel = new Intl.DateTimeFormat(language, {
@@ -31,18 +34,18 @@ export function GrowthCalendarMonth({
     year: "numeric",
     timeZone: "UTC",
   }).format(new Date(`${grid.monthStart}T12:00:00.000Z`));
-  const timeFormatter = new Intl.DateTimeFormat(language, {
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
-    timeZone: timezone,
-  });
   const dateFormatter = new Intl.DateTimeFormat(language, {
     dateStyle: "long",
     timeZone: "UTC",
   });
   const weekdayLabels = Array.from({ length: 7 }, (_, index) => t(`growth.weekday.${index + 1}` as TranslationKey));
   const calendarStyle = { "--growth-calendar-color": color } as CSSProperties;
+
+  function dropItem(event: DragEvent<HTMLElement>, targetDate: string) {
+    event.preventDefault();
+    const itemId = event.dataTransfer.getData(GROWTH_CALENDAR_DRAG_TYPE);
+    if (itemId) onDropItem(itemId, targetDate);
+  }
 
   return (
     <section className="growth-calendar-month" aria-label={monthLabel} style={calendarStyle}>
@@ -59,36 +62,28 @@ export function GrowthCalendarMonth({
                 className={`growth-calendar-day${day.inCurrentMonth ? "" : " outside-month"}`}
                 key={day.date}
                 aria-label={formattedDate}
+                data-calendar-date={day.date}
+                onDragOver={(event) => event.preventDefault()}
+                onDrop={(event) => dropItem(event, day.date)}
               >
                 <header>
                   <time dateTime={day.date}>{day.dayOfMonth}</time>
                 </header>
                 <div className="growth-calendar-day-items">
-                  {dayItems.map((item) => {
-                    const title = itemTitle(item);
-                    const pillar = item.pillar ? pillarLabels.get(item.pillar) ?? item.pillar : "";
-                    return (
-                      <button
-                        className={`growth-calendar-item status-${item.status}`}
-                        type="button"
-                        key={item.id}
-                        onClick={() => onOpenItem(item)}
-                        aria-label={t("growth.calendarOpenItem", { title, date: formattedDate })}
-                      >
-                        <span className="growth-calendar-item-time">
-                          {timeFormatter.format(new Date(item.scheduledFor!))}
-                        </span>
-                        <strong>{title}</strong>
-                        <span className="growth-calendar-item-indicators">
-                          <small className="growth-calendar-item-channel">
-                            {t(`growth.channel.${item.channel}` as TranslationKey)}
-                          </small>
-                          <small>{t(`growth.status.${item.status}` as TranslationKey)}</small>
-                          {pillar ? <small className="growth-calendar-item-pillar">{pillar}</small> : null}
-                        </span>
-                      </button>
-                    );
-                  })}
+                  {dayItems.map((item) => (
+                    <GrowthCalendarItem
+                      key={item.id}
+                      item={item}
+                      date={day.date}
+                      formattedDate={formattedDate}
+                      timezone={timezone}
+                      color={color}
+                      pillarLabel={item.pillar ? pillarLabels.get(item.pillar) ?? item.pillar : ""}
+                      rescheduling={reschedulingIds.has(item.id)}
+                      onOpen={onOpenItem}
+                      onReschedule={onRescheduleItem}
+                    />
+                  ))}
                 </div>
               </section>
             );

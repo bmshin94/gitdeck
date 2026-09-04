@@ -16,6 +16,13 @@ export interface GrowthCalendarMonthGrid {
   days: GrowthCalendarDay[];
 }
 
+export interface GrowthCalendarWeekGrid {
+  selectedDate: string;
+  rangeStart: string;
+  rangeEnd: string;
+  days: GrowthCalendarDay[];
+}
+
 interface DateParts {
   year: number;
   month: number;
@@ -49,9 +56,10 @@ function formatDateKey(timestamp: number): string {
   ].join("-");
 }
 
-function addDays(date: string, days: number): string {
+export function shiftCalendarDate(date: string, days: number): string {
   const parsed = parseDateKey(date);
   if (!parsed) throw new RangeError("date must be a valid YYYY-MM-DD calendar date");
+  if (!Number.isInteger(days)) throw new RangeError("days must be an integer");
   return formatDateKey(parsed.timestamp + days * DAY_MS);
 }
 
@@ -83,8 +91,48 @@ function formatterParts(formatter: Intl.DateTimeFormat, instant: Date): Record<s
 }
 
 function timezoneOffsetAt(formatter: Intl.DateTimeFormat, timestamp: number): number {
-  const parts = formatterParts(formatter, new Date(timestamp));
-  return Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, parts.second) - timestamp;
+  const wholeSecond = Math.floor(timestamp / 1_000) * 1_000;
+  const parts = formatterParts(formatter, new Date(wholeSecond));
+  return Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, parts.second) - wholeSecond;
+}
+
+function localDateTimeToUtc(
+  date: string,
+  time: { hour: number; minute: number; second: number; millisecond: number },
+  timezone: string,
+): number {
+  const parsed = parseDateKey(date);
+  if (!parsed) throw new RangeError("date must be a valid YYYY-MM-DD calendar date");
+  const formatter = createTimezoneFormatter(timezone, true);
+  const localTimestamp = Date.UTC(
+    parsed.year,
+    parsed.month - 1,
+    parsed.day,
+    time.hour,
+    time.minute,
+    time.second,
+    time.millisecond,
+  );
+  const offsets = new Set<number>();
+  for (let hours = -36; hours <= 36; hours += 6) {
+    offsets.add(timezoneOffsetAt(formatter, localTimestamp + hours * 60 * 60 * 1_000));
+  }
+  const exactCandidates = [...offsets]
+    .map((offset) => localTimestamp - offset)
+    .filter((candidate) => {
+      const parts = formatterParts(formatter, new Date(candidate));
+      return parts.year === parsed.year
+        && parts.month === parsed.month
+        && parts.day === parsed.day
+        && parts.hour === time.hour
+        && parts.minute === time.minute
+        && parts.second === time.second;
+    });
+  if (exactCandidates.length > 0) return Math.max(...exactCandidates);
+
+  // A local time inside a daylight-saving gap is normalized forward by the gap.
+  const offsetBefore = timezoneOffsetAt(formatter, localTimestamp - DAY_MS);
+  return localTimestamp - offsetBefore;
 }
 
 function localMidnightToUtc(date: string, timezone: string): number {
@@ -121,7 +169,7 @@ export function buildGrowthCalendarMonth(selectedDate: string): GrowthCalendarMo
   const mondayOffset = (new Date(monthTimestamp).getUTCDay() + 6) % 7;
   const rangeStart = formatDateKey(monthTimestamp - mondayOffset * DAY_MS);
   const days = Array.from({ length: 42 }, (_, index) => {
-    const date = addDays(rangeStart, index);
+    const date = shiftCalendarDate(rangeStart, index);
     const parsed = parseDateKey(date)!;
     return {
       date,
@@ -133,6 +181,27 @@ export function buildGrowthCalendarMonth(selectedDate: string): GrowthCalendarMo
   return {
     selectedDate,
     monthStart,
+    rangeStart,
+    rangeEnd: days[days.length - 1].date,
+    days,
+  };
+}
+
+export function buildGrowthCalendarWeek(selectedDate: string): GrowthCalendarWeekGrid {
+  const selected = parseDateKey(selectedDate);
+  if (!selected) throw new RangeError("selectedDate must be a valid YYYY-MM-DD calendar date");
+  const mondayOffset = (new Date(selected.timestamp).getUTCDay() + 6) % 7;
+  const rangeStart = shiftCalendarDate(selectedDate, -mondayOffset);
+  const days = Array.from({ length: 7 }, (_, index) => {
+    const date = shiftCalendarDate(rangeStart, index);
+    return {
+      date,
+      dayOfMonth: parseDateKey(date)!.day,
+      inCurrentMonth: true,
+    };
+  });
+  return {
+    selectedDate,
     rangeStart,
     rangeEnd: days[days.length - 1].date,
     days,
@@ -155,16 +224,39 @@ export function shiftCalendarMonth(date: string, offset: number): string {
   return formatDateKey(targetMonth.getTime());
 }
 
+export function shiftCalendarWeek(date: string, offset: number): string {
+  if (!Number.isInteger(offset)) throw new RangeError("offset must be an integer");
+  return shiftCalendarDate(date, offset * 7);
+}
+
 export function growthCalendarUtcRange(
-  grid: Pick<GrowthCalendarMonthGrid, "rangeStart" | "rangeEnd">,
+  grid: Pick<GrowthCalendarMonthGrid | GrowthCalendarWeekGrid, "rangeStart" | "rangeEnd">,
   timezone: string,
 ): { scheduledFrom: string; scheduledTo: string } {
   const scheduledFrom = localMidnightToUtc(grid.rangeStart, timezone);
-  const endExclusive = localMidnightToUtc(addDays(grid.rangeEnd, 1), timezone);
+  const endExclusive = localMidnightToUtc(shiftCalendarDate(grid.rangeEnd, 1), timezone);
   return {
     scheduledFrom: new Date(scheduledFrom).toISOString(),
     scheduledTo: new Date(endExclusive - 1).toISOString(),
   };
+}
+
+export function rescheduleGrowthCalendarItem(
+  item: GrowthContentItem,
+  targetDate: string,
+  timezone: string,
+): GrowthContentItem {
+  if (!item.scheduledFor) throw new RangeError("item must have a scheduled date");
+  const instant = new Date(item.scheduledFor);
+  if (Number.isNaN(instant.getTime())) throw new RangeError("item must have a valid scheduled date");
+  const localTime = formatterParts(createTimezoneFormatter(timezone, true), instant);
+  const scheduledFor = new Date(localDateTimeToUtc(targetDate, {
+    hour: localTime.hour,
+    minute: localTime.minute,
+    second: localTime.second,
+    millisecond: instant.getUTCMilliseconds(),
+  }, timezone)).toISOString();
+  return { ...item, scheduledFor };
 }
 
 export function groupGrowthCalendarItems(

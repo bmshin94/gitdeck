@@ -33,7 +33,7 @@ Authoritative inventory of Growth Studio capabilities. Statuses: `EXISTING`
 | Deterministic slot builder from cadence, pillars, posting windows | `src/types/growth.ts`, `src/utils/growth/planSlots.ts`, `tests/utils/growth/planSlots.test.ts` | DONE | GS-030 |
 | AI planner assigning evidence-grounded angles to slots with deterministic fallback and atomic persistence | `src/server/growth/planner.ts`, `src/utils/growth/planAssignments.ts`, `src/server/growth/store.ts`, `src/api/growth.ts`, `/api/growth/plans`, `/api/growth/plans/generate` | DONE | GS-031 |
 | AI drafter producing media-aware drafts per slot | `src/server/growth/drafter.ts`, `src/utils/growth/contentDraft.ts`, `src/utils/growth/mediaCandidates.ts`, `src/server/growth/store.ts`, `src/api/growth.ts`, `/api/growth/content/:id/draft` | DONE | GS-032 |
-| Calendar month and week views with drag and drop | `src/components/growth/calendar/`, `src/utils/growth/calendar.ts`, `/growth/r/:owner/:repo/calendar` | IN_PROGRESS | GS-033 and GS-034 |
+| Calendar month and week views with drag and drop | `src/components/growth/calendar/`, `src/utils/growth/calendar.ts`, `/growth/r/:owner/:repo/calendar` | DONE | GS-033 and GS-034 |
 | Queue "this week" with copy and mark published | `src/components/growth/calendar/GrowthQueue.tsx`, `/growth/r/:owner/:repo/calendar?view=queue` | PLANNED | GS-035 |
 | ICS export | `src/utils/growth/ics.ts`, `/api/growth/calendar.ics` | PLANNED | GS-036 |
 | Content plan create, regenerate, and archive management | `src/components/growth/calendar/GrowthPlanManager.tsx`, `/api/growth/plans/:id/regenerate`, `/api/growth/plans/:id/archive` | PLANNED | GS-037 |

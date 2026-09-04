@@ -31,7 +31,7 @@ phase-closing tasks) are appended with `PENDING` rows and matching task files.
 | GS-031 | COMPLETED | Added account-scoped editorial plan generation with evidence-normalized AI assignments, deterministic fallback, atomic persistence, and typed plan APIs | VALIDATION OK; typecheck; 48 test files and 239 tests; production build; planner one-call, fallback, atomicity, overlap, ordering, validation, and account-scope tests; git diff --check | 2026-09-04 |
 | GS-032 | COMPLETED | Added account-scoped media-aware item drafting with validated AI copy, evidence-based fallback, verified media, and refresh protection | VALIDATION OK; typecheck; 51 test files and 253 tests; production build; fallback, platform validation, media allowlisting, protected status, refresh, and account-scope tests; git diff --check | 2026-09-04 |
 | GS-033 | COMPLETED | Added the timezone-aware repository month calendar with stable URL navigation, content indicators, reusable drawer updates, and stale-request protection | VALIDATION OK; typecheck; 53 test files and 261 tests; production build; month-grid, timezone grouping, URL normalization, drawer update, empty, error, and account-switch tests; git diff --check | 2026-09-04 |
-| GS-034 | PENDING | — | — | — |
+| GS-034 | COMPLETED | Added the timezone-aware week calendar with posting-hour guides and pointer or keyboard status-preserving rescheduling | VALIDATION OK; typecheck; 53 test files and 268 tests; production build; DST movement, pointer, keyboard, rollback, boundary, and drawer tests; git diff --check | 2026-09-04 |
 | GS-035 | PENDING | — | — | — |
 | GS-036 | PENDING | — | — | — |
 | GS-037 | PENDING | — | — | — |

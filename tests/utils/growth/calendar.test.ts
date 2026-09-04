@@ -2,11 +2,15 @@ import { describe, expect, it } from "vitest";
 import type { GrowthContentItem } from "../../../src/types/growth";
 import {
   buildGrowthCalendarMonth,
+  buildGrowthCalendarWeek,
   calendarDateInTimezone,
   groupGrowthCalendarItems,
   growthCalendarUtcRange,
   normalizeCalendarDate,
+  rescheduleGrowthCalendarItem,
+  shiftCalendarDate,
   shiftCalendarMonth,
+  shiftCalendarWeek,
 } from "../../../src/utils/growth/calendar";
 
 function contentItem(overrides: Partial<GrowthContentItem> = {}): GrowthContentItem {
@@ -52,6 +56,20 @@ describe("growth calendar utilities", () => {
     expect(grid.days[0]).toEqual({ date: "2026-07-27", dayOfMonth: 27, inCurrentMonth: false });
   });
 
+  it("builds and shifts a Monday-first seven-day week", () => {
+    const grid = buildGrowthCalendarWeek("2026-10-15");
+
+    expect(grid.rangeStart).toBe("2026-10-12");
+    expect(grid.rangeEnd).toBe("2026-10-18");
+    expect(grid.days).toHaveLength(7);
+    expect(grid.days.map((day) => day.date)).toEqual([
+      "2026-10-12", "2026-10-13", "2026-10-14", "2026-10-15",
+      "2026-10-16", "2026-10-17", "2026-10-18",
+    ]);
+    expect(shiftCalendarWeek("2026-10-15", -1)).toBe("2026-10-08");
+    expect(shiftCalendarDate("2026-10-31", 1)).toBe("2026-11-01");
+  });
+
   it("normalizes invalid dates and shifts months without overflowing shorter months", () => {
     expect(normalizeCalendarDate("2026-02-31", "2026-09-04")).toBe("2026-09-04");
     expect(normalizeCalendarDate("2026-02-14", "2026-09-04")).toBe("2026-02-14");
@@ -73,12 +91,35 @@ describe("growth calendar utilities", () => {
     expect([...grouped.values()].flat().map((item) => item.id)).not.toContain("skipped");
   });
 
-  it("converts the full local six-week grid to inclusive UTC API bounds across DST", () => {
-    const grid = buildGrowthCalendarMonth("2026-10-15");
-
-    expect(growthCalendarUtcRange(grid, "Europe/Rome")).toEqual({
+  it("converts month and week grids to inclusive UTC API bounds across DST", () => {
+    expect(growthCalendarUtcRange(buildGrowthCalendarMonth("2026-10-15"), "Europe/Rome")).toEqual({
       scheduledFrom: "2026-09-27T22:00:00.000Z",
       scheduledTo: "2026-11-08T22:59:59.999Z",
     });
+    expect(growthCalendarUtcRange(buildGrowthCalendarWeek("2026-10-25"), "Europe/Rome")).toEqual({
+      scheduledFrom: "2026-10-18T22:00:00.000Z",
+      scheduledTo: "2026-10-25T22:59:59.999Z",
+    });
+  });
+
+  it("reschedules across DST while preserving local time, milliseconds, and editorial status", () => {
+    const moved = rescheduleGrowthCalendarItem(contentItem({
+      status: "draft",
+      scheduledFor: "2026-03-27T08:30:15.250Z",
+    }), "2026-03-30", "Europe/Rome");
+
+    expect(moved.scheduledFor).toBe("2026-03-30T07:30:15.250Z");
+    expect(moved.status).toBe("draft");
+    expect(calendarDateInTimezone(moved.scheduledFor!, "Europe/Rome")).toBe("2026-03-30");
+  });
+
+  it("normalizes DST gaps forward and chooses the post-transition overlap", () => {
+    expect(rescheduleGrowthCalendarItem(contentItem({
+      scheduledFor: "2026-03-28T01:30:00.000Z",
+    }), "2026-03-29", "Europe/Rome").scheduledFor).toBe("2026-03-29T01:30:00.000Z");
+
+    expect(rescheduleGrowthCalendarItem(contentItem({
+      scheduledFor: "2026-10-24T00:30:00.000Z",
+    }), "2026-10-25", "Europe/Rome").scheduledFor).toBe("2026-10-25T01:30:00.000Z");
   });
 });

@@ -9,11 +9,13 @@ import type { GrowthContentItem, GrowthProfile } from "../../../src/types/growth
 const mocks = vi.hoisted(() => ({
   fetchGrowthProfile: vi.fn(),
   fetchGrowthContentItems: vi.fn(),
+  patchGrowthContentItem: vi.fn(),
 }));
 
 vi.mock("../../../src/api/growth", () => ({
   fetchGrowthProfile: mocks.fetchGrowthProfile,
   fetchGrowthContentItems: mocks.fetchGrowthContentItems,
+  patchGrowthContentItem: mocks.patchGrowthContentItem,
 }));
 vi.mock("../../../src/components/growth/ContentItemDrawer", () => ({
   ContentItemDrawer: ({ item, onUpdate }: {
@@ -41,7 +43,7 @@ function profile(): GrowthProfile {
     hashtags: [],
     avoid: "",
     timezone: "Europe/Rome",
-    postingWindows: [],
+    postingWindows: [{ weekday: 1, hour: 9 }, { weekday: 3, hour: 16 }],
     color: "#2563EB",
     updatedAt: "2026-09-04T08:00:00.000Z",
   };
@@ -93,6 +95,11 @@ beforeEach(() => {
   root = createRoot(container);
   mocks.fetchGrowthProfile.mockResolvedValue(profile());
   mocks.fetchGrowthContentItems.mockResolvedValue([contentItem()]);
+  mocks.patchGrowthContentItem.mockImplementation(async (id: string, updates: Partial<GrowthContentItem>) => ({
+    ...contentItem(id),
+    ...updates,
+    updatedAt: "2026-09-04T09:00:00.000Z",
+  }));
 });
 
 afterEach(async () => {
@@ -161,6 +168,143 @@ describe("GrowthCalendar", () => {
       .find((button) => button.textContent?.includes("Previous"));
     await act(async () => previous?.click());
     expect(container.querySelector('[data-testid="location"]')?.textContent).toContain("view=month&date=");
+  });
+
+  it("loads a URL-addressable week with posting-hour guides and week navigation", async () => {
+    const item = contentItem("week-item", "Weekly release");
+    item.scheduledFor = "2026-10-14T08:30:00.000Z";
+    mocks.fetchGrowthContentItems.mockResolvedValueOnce([item]);
+
+    await renderCalendar("account-a", "/growth/r/acme/rocket/calendar?view=week&date=2026-10-15");
+
+    expect(mocks.fetchGrowthContentItems).toHaveBeenCalledWith({
+      repository: "acme/rocket",
+      scheduledFrom: "2026-10-11T22:00:00.000Z",
+      scheduledTo: "2026-10-18T21:59:59.999Z",
+    }, expect.any(AbortSignal));
+    expect(container.querySelectorAll(".growth-calendar-week-day")).toHaveLength(7);
+    expect(container.querySelector(".growth-calendar-week-hours")?.textContent).toContain("09:00");
+    expect(container.querySelector(".growth-calendar-week-hours")?.textContent).toContain("16:00");
+    expect(container.textContent).toContain("Weekly release");
+
+    const next = [...container.querySelectorAll<HTMLButtonElement>("button")]
+      .find((button) => button.textContent?.includes("Next week"));
+    await act(async () => next?.click());
+    expect(container.querySelector('[data-testid="location"]')?.textContent).toContain("view=week&date=2026-10-22");
+
+    const month = [...container.querySelectorAll<HTMLButtonElement>("button")]
+      .find((button) => button.textContent === "Month");
+    await act(async () => month?.click());
+    expect(container.querySelector('[data-testid="location"]')?.textContent).toContain("view=month&date=2026-10-22");
+  });
+
+  it("preserves idea status during keyboard movement and keeps the moved item connected to the drawer", async () => {
+    const item = contentItem("keyboard-item", "Keyboard release");
+    item.scheduledFor = "2026-10-14T08:30:00.000Z";
+    mocks.fetchGrowthContentItems.mockResolvedValueOnce([item]);
+    mocks.patchGrowthContentItem.mockImplementationOnce(async (_id: string, updates: Partial<GrowthContentItem>) => ({
+      ...item,
+      ...updates,
+    }));
+    await renderCalendar("account-a", "/growth/r/acme/rocket/calendar?view=week&date=2026-10-15");
+
+    const itemButton = [...container.querySelectorAll<HTMLButtonElement>(".growth-calendar-item")]
+      .find((button) => button.textContent?.includes("Keyboard release"))!;
+    await act(async () => {
+      itemButton.dispatchEvent(new KeyboardEvent("keydown", {
+        key: "ArrowRight",
+        altKey: true,
+        bubbles: true,
+      }));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(mocks.patchGrowthContentItem).toHaveBeenCalledWith("keyboard-item", {
+      scheduledFor: "2026-10-15T08:30:00.000Z",
+      status: "idea",
+    });
+    const targetDay = container.querySelector('[data-calendar-date="2026-10-15"]');
+    expect(targetDay?.textContent).toContain("Keyboard release");
+
+    const movedButton = targetDay?.querySelector<HTMLButtonElement>(".growth-calendar-item");
+    await act(async () => movedButton?.click());
+    expect(document.body.querySelector('[role="dialog"]')?.textContent).toContain("Keyboard release");
+    const update = [...document.body.querySelectorAll("button")].find((button) => button.textContent === "Update item");
+    await act(async () => update?.click());
+    expect(targetDay?.textContent).toContain("Updated calendar title");
+  });
+
+  it("preserves draft status during pointer movement between visible day cells", async () => {
+    const item = contentItem("pointer-item", "Pointer release");
+    item.status = "draft";
+    item.scheduledFor = "2026-10-14T08:30:00.000Z";
+    mocks.fetchGrowthContentItems.mockResolvedValueOnce([item]);
+    mocks.patchGrowthContentItem.mockImplementationOnce(async (_id: string, updates: Partial<GrowthContentItem>) => ({
+      ...item,
+      ...updates,
+    }));
+    await renderCalendar("account-a", "/growth/r/acme/rocket/calendar?view=week&date=2026-10-15");
+
+    const values = new Map<string, string>();
+    const dataTransfer = {
+      effectAllowed: "none",
+      setData: (type: string, value: string) => values.set(type, value),
+      getData: (type: string) => values.get(type) ?? "",
+    };
+    const source = container.querySelector<HTMLButtonElement>(".growth-calendar-item")!;
+    const target = container.querySelector<HTMLElement>('[data-calendar-date="2026-10-16"]')!;
+    await act(async () => {
+      const dragStart = new Event("dragstart", { bubbles: true });
+      Object.defineProperty(dragStart, "dataTransfer", { value: dataTransfer });
+      source.dispatchEvent(dragStart);
+      const drop = new Event("drop", { bubbles: true, cancelable: true });
+      Object.defineProperty(drop, "dataTransfer", { value: dataTransfer });
+      target.dispatchEvent(drop);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(mocks.patchGrowthContentItem).toHaveBeenCalledWith("pointer-item", {
+      scheduledFor: "2026-10-16T08:30:00.000Z",
+      status: "draft",
+    });
+    expect(target.textContent).toContain("Pointer release");
+  });
+
+  it("rolls an optimistic movement back with an inline error and rejects keyboard movement outside the week", async () => {
+    const item = contentItem("rollback-item", "Rollback release");
+    item.scheduledFor = "2026-10-12T08:30:00.000Z";
+    mocks.fetchGrowthContentItems.mockResolvedValueOnce([item]);
+    mocks.patchGrowthContentItem.mockRejectedValueOnce(new Error("save unavailable"));
+    await renderCalendar("account-a", "/growth/r/acme/rocket/calendar?view=week&date=2026-10-15");
+
+    const itemButton = container.querySelector<HTMLButtonElement>(".growth-calendar-item")!;
+    await act(async () => {
+      itemButton.dispatchEvent(new KeyboardEvent("keydown", {
+        key: "ArrowRight",
+        altKey: true,
+        bubbles: true,
+      }));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain("save unavailable");
+    expect(container.querySelector('[data-calendar-date="2026-10-12"]')?.textContent).toContain("Rollback release");
+    expect(container.querySelector('[data-calendar-date="2026-10-13"]')?.textContent).not.toContain("Rollback release");
+
+    mocks.patchGrowthContentItem.mockClear();
+    const restored = container.querySelector<HTMLButtonElement>(".growth-calendar-item")!;
+    await act(async () => {
+      restored.dispatchEvent(new KeyboardEvent("keydown", {
+        key: "ArrowLeft",
+        altKey: true,
+        bubbles: true,
+      }));
+      await Promise.resolve();
+    });
+    expect(mocks.patchGrowthContentItem).not.toHaveBeenCalled();
   });
 
   it("renders localized empty and error states", async () => {
