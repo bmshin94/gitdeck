@@ -7,11 +7,11 @@ Authoritative inventory of Growth Studio capabilities. Statuses: `EXISTING`
 | Feature | Location (current or target) | Status | Task |
 |---|---|---|---|
 | Governance baseline and validation gate | `growth-studio-project/scripts/`, `src/utils/colors.ts`, `tests/utils/colors.test.ts` | DONE | GS-000 |
-| Goals CRUD with metric refresh (stars, forks, closed PRs, downloads) | `GoalsView.tsx`, `server/goals.ts`, `routes/goals.ts` | EXISTING | — |
-| AI suggestions per goal (3–5 actions) with deterministic fallback | `server/goals.ts` `generateGoalSuggestions` | EXISTING | GS-021 migrates |
-| AI proposals per suggestion (thread, LinkedIn, Mastodon, issue, doc…) with media suggestions | `server/goals.ts` `generateGoalProposals`, `GoalProposalsModal.tsx` | EXISTING | GS-021 migrates |
-| Repository content sources (repositories and websites) with SSRF guards | `goalStore.ts`, `routes/repository.ts`, `RepositoryContentSources.tsx` | EXISTING | GS-025 moves to Library |
-| AI provider settings and connection test | `preferences/AiIntegrationSettings.tsx`, `server/ai/*` | EXISTING | — |
+| Goals CRUD with metric refresh (stars, forks, closed PRs, downloads) | `src/components/views/GoalsView.tsx`, `src/api/github.ts`, `src/server/goalStore.ts`, `src/server/goals.ts`, `src/server/routes/goals.ts` | EXISTING | — |
+| AI suggestions per goal (3–5 actions); four deterministic actions when AI is not configured | `src/server/goals.ts` `generateGoalSuggestions`, `src/server/goalStore.ts` `saveGoalSuggestions`, `src/components/views/GoalsView.tsx` | EXISTING | GS-021 migrates |
+| AI proposals per suggestion (X thread, LinkedIn, Mastodon) with source-backed media suggestions when assets are available | `src/server/goals.ts` `generateGoalProposals`, `src/utils/socialProposals.ts`, `src/server/goalStore.ts` `saveGoalProposals`, `src/components/modals/GoalProposalsModal.tsx` | EXISTING | GS-021 migrates |
+| Repository content sources (repositories and websites) with SSRF-guarded website reads during generation | `src/server/goalStore.ts`, `src/server/routes/repository.ts`, `src/server/goals.ts`, `src/api/github.ts`, `src/components/common/RepositoryContentSources.tsx`, `src/components/common/ContentSourcePicker.tsx`, `src/utils/socialProposals.ts` | EXISTING | GS-025 moves to Library |
+| AI provider settings and connection test | `src/components/preferences/AiIntegrationSettings.tsx`, `src/api/github.ts`, `src/server/routes/ai.ts`, `src/server/ai/client.ts`, `src/server/ai/settings.ts`, `src/server/ai/providers.ts` | EXISTING | — |
 | `/growth` client routes served by the SPA | `server/spa.ts`, `main.tsx` | PLANNED | GS-010 |
 | Growth shell: own top bar, sidebar, `mode-growth` body class, no dashboard chrome | `components/growth/GrowthStudioApp.tsx`, `styles/growth/shell.css` | PLANNED | GS-011 |
 | Main-menu entry opening `/growth` in a new window; `goals` tab removed; `/goals` redirect | `App.tsx` | PLANNED | GS-012 |

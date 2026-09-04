@@ -57,25 +57,141 @@ tool of GitDeck:
 - D-006 The loop runs with pi by default; Telegram notifications reuse the
   Emailchef runner variables.
 
-## 4. Current state (inventory, 2026-09-04)
+## 4. Current state (inventory, verified 2026-09-04)
 
 Files a task will most often touch or extend:
 
-| Area | Files | Notes |
+| Area | Files | Verified responsibilities |
 |---|---|---|
-| Types | `src/types/goals.ts` | `RepositoryGoal`, `GoalSuggestion` (the current "intervention"), `GoalProposal` (the current draft), `GoalContentSource`, metric definitions |
-| Server store | `src/server/goalStore.ts` | SQLite tables `repository_goals` (suggestions and proposals stored as JSON in `suggestions`) and `repository_content_sources` |
-| Server logic | `src/server/goals.ts` | metric resolvers, `generateGoalSuggestions`, `generateGoalProposals`, README/release/website signal fetching with SSRF guards, `SOCIAL_PROPOSALS_VERSION` |
-| Routes | `src/server/routes/goals.ts`, `src/server/routes/repository.ts` (content sources), `src/server/routes/index.ts` | `/api/goals*` |
-| AI | `src/server/ai/client.ts` (`generateStructured`, `AiNotConfiguredError`, `AiRequestError`), `src/server/ai/settings.ts` (`isAiConfigured`), `src/server/aiDigest.ts` | provider-agnostic structured JSON generation |
-| Data helpers | `src/server/dashboardData.ts` (cached repos, issues, PRs), `src/server/githubClient.ts` (`restApi`, `restApiPaginate`, `ghApiJson`), `src/server/snapshots.ts` (daily stars and forks history, 90 days), `src/server/digests.ts` | reuse for signals and attribution |
-| Persistence helpers | `src/server/sqlite.ts` (`getDatabase`, `run`, `get`, `all`), `src/server/preferenceStore.ts` (JSON preferences by scope and key) | |
-| SPA | `src/server/spa.ts` (`APP_ROUTES`, `isClientRoutePath`), `src/main.tsx` (`BrowserRouter`), `src/App.tsx` (`Tab`, `TAB_ROUTES`, `tabs`, body classes `tab-*`) | |
-| UI | `src/components/views/GoalsView.tsx`, `src/components/views/GoalsLoadingState.tsx`, `src/components/modals/GoalProposalsModal.tsx`, `src/components/common/RepositoryPicker.tsx`, `RepositoryContentSources.tsx`, `ContentSourcePicker.tsx`, `src/components/preferences/AiIntegrationSettings.tsx` | |
-| Client API | `src/api/github.ts` (`fetchGoals`, `createGoal`, `deleteGoal`, `generateGoalAdvice`, `fetchGoalProposals`, content sources) | |
-| Pure utils and tests | `src/utils/goals.ts`, `src/utils/socialProposals.ts`; `tests/utils/goals.test.ts`, `tests/utils/socialProposals.test.ts`, `tests/server/aiClient.test.ts`, `tests/server/aiSettings.test.ts` | |
-| Styles | `src/styles/goals.css`, `src/styles/layout-sidebar.css`, `src/styles/navigation.css`, `src/styles/tokens.css` | |
-| Scripts | `package.json`: `dev`, `build`, `test` (vitest run), `typecheck` | |
+| Types | `src/types/goals.ts` | Defines the four metrics in `GOAL_METRIC_DEFINITIONS`; `RepositoryGoal`; `GoalSuggestion`; `GoalProposal`; `GoalProposalsData`; `GoalContentSource`; media suggestions; and all ten legacy proposal formats. The current generator emits only `x-thread`, `linkedin-post`, and `mastodon-post`. |
+| Server store | `src/server/goalStore.ts` | Lazily creates `repository_goals` with columns `id`, `account_id`, `repository`, `metric`, `target_value`, `current_value`, `deadline`, `created_at`, `updated_at`, `suggestions`, and `suggestions_generated_at`, plus `repository_content_sources` with `account_id`, `repository`, `sources`, and `updated_at`. Suggestions and their nested proposals are JSON in `repository_goals.suggestions`. Exports account-scoped goal CRUD, current-value updates, suggestion/proposal saves, and content-source get/save helpers. |
+| Server logic | `src/server/goals.ts` | `refreshGoal` uses metric resolvers for stars, forks, closed PRs, and release-asset downloads. `generateGoalSuggestions` uses a four-item `fallbackSuggestions` result when AI is not configured or structured generation yields an empty list, and otherwise requests 3–5 suggestions. `generateGoalProposals` requires AI and requests exactly one X thread, LinkedIn post, and Mastodon post. The module also privately fetches README and release signals, fetches repository and website source signals, guards website requests and redirects against SSRF, and exports `SOCIAL_PROPOSALS_VERSION` (currently `4`). |
+| Goal routes | `src/server/routes/goals.ts` | Registers `GET /api/goals`, `POST /api/goals`, `DELETE /api/goals/:id`, `POST /api/goals/:id/advice`, and `POST /api/goals/:id/suggestions/:index/proposals`. Every handler requires the active account; create validates repository, metric, positive integer target, and date. |
+| Content-source routes | `src/server/routes/repository.ts`, `src/server/routes/index.ts` | `registerRepositoryRoutes` registers account-scoped `GET` and `PUT /api/repository-content-sources?repo=owner/name`; the same route module also owns repository details, stargazers, forks, branches, and discussions. `registerApiRoutes` registers both repository and goal routes. |
+| AI | `src/server/ai/client.ts`, `src/server/ai/settings.ts`, `src/server/aiDigest.ts` | `generateStructured` provides provider-specific structured JSON generation and throws `AiNotConfiguredError` or `AiRequestError`; `testAiConnection` performs the connection test. Settings resolve database overrides, environment variables, and defaults, expose `isAiConfigured`, and persist through `preferenceStore`. `maybeGenerateAiDigest` is a separate optional structured-output consumer. |
+| Dashboard data | `src/server/dashboardData.ts` | Exports five-minute memoized `getReposCached`, `getIssuesCached`, and `getPullRequestsCached` loaders plus `invalidateDataCache`. Repository loads best-effort record and attach snapshots. |
+| GitHub API helpers | `src/server/githubClient.ts` | Server-only authenticated GitHub GraphQL and REST helpers: `gql`, `restApi`, `restApiPaginate`, and the `ghApiJson` alias. |
+| Historical data | `src/server/snapshots.ts`, `src/server/digests.ts` | Snapshots persist up to 90 daily star/fork records per repository in a JSON file, but `attachHistory` exposes only the latest 30. No raw snapshot reader is exported. Digests persist up to 120 daily records in a separate JSON file and expose daily/period delivery plus `getLatestRepoDigest`; AI enrichment is optional. |
+| Persistence helpers | `src/server/sqlite.ts`, `src/server/preferenceStore.ts` | SQLite exports `getDatabase`, `execute`, `run`, `get`, `all`, and `closeDatabase`; the singleton database enables WAL and foreign keys. Preferences lazily create a global `preferences(scope, key, value, updated_at)` table and expose JSON `setPreference`, `getPreference`, and `deletePreference`. |
+| SPA and entry point | `src/server/spa.ts`, `src/main.tsx` | The private `APP_ROUTES` set contains the fixed top-level routes including `/goals`; `isAppRoute` tests that set, while `isClientRoutePath` accepts any extensionless final path segment. `main.tsx` mounts only `App` inside shared `I18nProvider`, `AccountProvider`, and `BrowserRouter`. |
+| Dashboard tab | `src/App.tsx` | Defines the `Tab` union and `TAB_ROUTES`, derives a tab from the pathname, owns goal loading state/effects, applies `tab-goals`, gives Goals the repository-filter search branch, renders the goals tab button, and mounts `GoalsView`. See section 4.2. |
+| Goals UI | `src/components/views/GoalsView.tsx`, `src/components/views/GoalsLoadingState.tsx`, `src/components/modals/GoalProposalsModal.tsx` | `GoalsView` creates/deletes goals, groups them by repository, refreshes advice, opens source and proposal modals, and links to AI preferences. The loading component is a layout-matched skeleton. The proposal modal loads/caches/regenerates drafts, handles no-AI/error states, copies text, renders X posts and media, and closes on Escape. |
+| Shared goals controls | `src/components/common/RepositoryPicker.tsx`, `src/components/common/RepositoryContentSources.tsx`, `src/components/common/ContentSourcePicker.tsx` | Searchable repository combobox; account-scoped source-library modal with queued auto-save; and repository/website source editor. `RepositoryPicker` currently contains the hard-coded English strings `repositories`, `No repositories found`, and `No description`; the other two use `goals.*` translations. |
+| AI settings UI | `src/components/preferences/AiIntegrationSettings.tsx` | Loads, edits, tests, and resets the server-side AI provider settings and displays each resolved setting source. It is mounted by `PreferencesView` at `/preferences#preferences-ai`. |
+| Client API | `src/api/github.ts` | Goal methods are `fetchGoals`, `createGoal`, `deleteGoal`, `generateGoalAdvice`, and `fetchGoalProposals`. Source methods are `fetchRepositoryContentSources` and `updateRepositoryContentSources`; AI settings methods are in the same module. |
+| Pure goal utils | `src/utils/goals.ts`, `tests/utils/goals.test.ts` | Groups goals by repository, calculates bounded progress/deadline state, and formats an X thread for copying; mirrored tests cover all three. |
+| Pure proposal utils | `src/utils/socialProposals.ts`, `tests/utils/socialProposals.test.ts` | Normalizes source entries, extracts web text/media URLs, attaches source media, counts/validates platform content, normalizes AI proposals, and checks the three-format social set; mirrored tests cover these behaviors. |
+| AI tests | `tests/server/aiClient.test.ts`, `tests/server/aiSettings.test.ts` | Cover JSON parsing and provider wire formats/errors, plus settings precedence, reset, provider switching, and URL validation. |
+| i18n | `src/i18n/en.ts`, `src/i18n/it.ts` | Both files contain the same 70-key Goals set listed in section 4.1. |
+| Styles | `src/styles/goals.css`, `src/styles/layout-sidebar.css`, `src/styles/navigation.css`, `src/styles/tokens.css` | Goals CSS also owns repository-picker, source-picker, and proposals-modal styles. Layout/sidebar and navigation own dashboard chrome and tabs; tokens define dark, light, and automatic-theme values. All four are imported by `src/styles.css`. |
+| Scripts | `package.json` | `dev` runs the TSX API watcher and Vite concurrently; `build` bundles the Node server with esbuild then runs Vite; `test` is `vitest run`; `typecheck` is `tsc --noEmit`. |
+
+### 4.1 Goals i18n inventory
+
+`src/i18n/en.ts` and `src/i18n/it.ts` have identical key sets: one
+`tabs.goals` key and 69 `goals.*` keys. These are the keys that later shell and
+Missions work must preserve or deliberately replace:
+
+```text
+tabs.goals
+goals.createTitle
+goals.createDescription
+goals.repository
+goals.chooseRepository
+goals.searchRepository
+goals.metric
+goals.target
+goals.deadline
+goals.add
+goals.emptyTitle
+goals.emptyText
+goals.deleteConfirm
+goals.deleteTitle
+goals.deleteMessage
+goals.completed
+goals.remaining
+goals.overdue
+goals.daysLeft
+goals.aiPlan
+goals.mission
+goals.completedMissions
+goals.growthStudioEyebrow
+goals.growthStudio
+goals.growthStudioDescription
+goals.generateAdvice
+goals.refreshAdvice
+goals.proposals
+goals.proposalsOpen
+goals.proposalsKind
+goals.proposalsIntro
+goals.sourcesTitle
+goals.sourcesDescription
+goals.sourcesRepository
+goals.sourcesChooseRepository
+goals.sourcesWebsite
+goals.sourcesAdd
+goals.sourcesRepoBadge
+goals.sourcesWebBadge
+goals.sourcesRemove
+goals.sourcesInvalid
+goals.sourcesLimit
+goals.sourcesOptional
+goals.mediaTitle
+goals.mediaImage
+goals.mediaVideo
+goals.proposalsReadyTitle
+goals.proposalsReadyText
+goals.proposalsGenerate
+goals.proposalsRetry
+goals.proposalsLoading
+goals.proposalsRegenerate
+goals.proposalsRegenerateSources
+goals.proposalsGeneratedAt
+goals.proposalsNoAi
+goals.proposalsOpenPreferences
+goals.proposalsEmpty
+goals.proposalFormat.x-thread
+goals.proposalFormat.linkedin-post
+goals.proposalFormat.mastodon-post
+goals.proposalFormat.post
+goals.proposalFormat.issue
+goals.proposalFormat.discussion
+goals.proposalFormat.email
+goals.proposalFormat.checklist
+goals.proposalFormat.message
+goals.proposalFormat.doc
+goals.copyThread
+goals.copyPost
+goals.aiFallback
+```
+
+Four of these keys are currently defined in both locales but have no source
+consumer: `goals.chooseRepository`, `goals.deleteConfirm`,
+`goals.sourcesRepository`, and `goals.proposalsRegenerateSources`. The proposal
+format lookup is dynamic, so all `goals.proposalFormat.*` keys remain reachable
+for legacy stored proposals even though new generation emits only three social
+formats.
+
+### 4.2 `goals` tab consumers in `src/App.tsx`
+
+GS-012 must account for all of these direct consumers when it replaces the tab
+with the external Growth Studio link:
+
+| Concern | Current consumer |
+|---|---|
+| Imports | `fetchGoals`, `GoalIcon`, `GoalsView`, and the `RepositoryGoal` type exist only for the Goals tab in `App.tsx`. |
+| Tab type and route tables | `Tab` includes `goals`; `TAB_ROUTES.goals` is `/goals`; `ROUTE_TABS` derives the reverse mapping; `tabFromPath` therefore selects `goals` for `/goals`. |
+| View selection | `tab` comes from `location.pathname`; `view` mirrors it outside Preferences, enabling the Goals render branch. |
+| State | `goals` and `goalsLoaded` hold the list and initial-load state. |
+| Account lifecycle | `handleBaseAccountChange` clears `goals` and resets `goalsLoaded`; `handleLogout` does the same. |
+| Refresh callback | `refreshGoals` calls `fetchGoals`, replaces `goals`, and marks them loaded; it is passed to `GoalsView` as `onChange`. |
+| Route-triggered loading effect | When authenticated and `tab === "goals"`, an abortable effect calls `fetchGoals`; success stores the list and all non-abort failures still mark the initial load complete. The effect reruns for auth state, active account, or tab changes. |
+| Dashboard data dependency | `tab` is passed to `useDashboardData`; `dataRequirementsForTab` (in `src/utils/dataRequirements.ts`) currently maps `goals` to the repositories resource used by the picker. Top-bar refresh calls the same helper with `tab`. |
+| Body class | The body-class effect toggles `tab-goals` when `tab === "goals"`. |
+| Search and filters | Goals shares `repoFilters.search` with repositories, insights, alerts, and digests. `setSearch` updates `repoFilters` and resets `repoPage`; `resetFilters` restores `defaultRepoFilters`. `GoalsView` nevertheless receives the unfiltered `repos` array. |
+| Generic tab propagation | `tab` is passed to `SidebarControls`; `navigateTab` and `TAB_ROUTES[tab]` are used by tab buttons, modal closing, and `CommandPalette` navigation. These generic paths continue to compile only if their tab types remain compatible after `goals` is removed. |
+| Tab-strip entry | `tabs` adds the `goals` item with `tabs.goals`, `goals.length`, `goalsLoaded`, and `GoalIcon`; the shared map renders it as a `<button>` and calls `navigateTab("goals")`. |
+| View render | `view === "goals"` mounts `GoalsView` with `goals`, the full `repos` list, `loading={!goalsLoaded}`, and `onChange={refreshGoals}`. |
 
 ## 5. Target architecture
 
