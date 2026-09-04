@@ -33,6 +33,7 @@ import {
 } from "../growth/store";
 import {
   generateGrowthContentPlan,
+  generateMultipleGrowthContentPlans,
   regenerateGrowthContentPlan,
 } from "../growth/planner";
 import {
@@ -857,6 +858,48 @@ async function generatePlan(ctx: RouteContext): Promise<void> {
   }
 }
 
+async function generateMultiplePlans(ctx: RouteContext): Promise<void> {
+  const account = await requireAccount(ctx);
+  if (!account) return;
+  const body = await parseJsonBody<Record<string, unknown>>(ctx.req, ctx.res);
+  if (!body) return;
+  if (
+    !isRecord(body)
+    || Object.keys(body).length !== 3
+    || !hasOnlyKeys(body, ["repositories", "periodStart", "periodEnd"])
+    || !Array.isArray(body.repositories)
+    || body.repositories.length < 2
+    || body.repositories.length > 10
+    || typeof body.periodStart !== "string"
+    || typeof body.periodEnd !== "string"
+  ) return badRequest(ctx, "invalid multi-plan generation body");
+
+  const repositories = body.repositories.map(repositoryFromValue);
+  if (repositories.some((repository) => repository === null)) {
+    return badRequest(ctx, "invalid multi-plan generation body");
+  }
+  const validatedRepositories = repositories as string[];
+  if (new Set(validatedRepositories.map((repository) => repository.toLocaleLowerCase("en"))).size !== validatedRepositories.length) {
+    return badRequest(ctx, "multi-repository planning requires distinct repositories");
+  }
+
+  try {
+    const result = await generateMultipleGrowthContentPlans(account.id, {
+      repositories: validatedRepositories,
+      periodStart: body.periodStart,
+      periodEnd: body.periodEnd,
+    });
+    sendJson(ctx.res, 201, { ok: true, ...result });
+  } catch (error) {
+    if (sendStoreError(ctx, error)) return;
+    if (error instanceof RangeError) return badRequest(ctx, error.message);
+    sendJson(ctx.res, error instanceof AiRequestError ? 502 : 500, {
+      ok: false,
+      error: (error as Error).message,
+    });
+  }
+}
+
 async function regeneratePlan(ctx: RouteContext): Promise<void> {
   const account = await requireAccount(ctx);
   if (!account) return;
@@ -1264,6 +1307,7 @@ export function registerGrowthRoutes(router: AppRouter): void {
   router.get("/api/growth/assets/:id/file", assetFile);
   router.get("/api/growth/plans", plans);
   router.post("/api/growth/plans/generate", generatePlan);
+  router.post("/api/growth/plans/generate-multiple", generateMultiplePlans);
   router.post("/api/growth/plans/:id/regenerate", regeneratePlan);
   router.post("/api/growth/plans/:id/archive", archivePlan);
   router.get("/api/growth/calendar", unifiedCalendar);

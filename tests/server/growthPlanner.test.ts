@@ -27,6 +27,7 @@ vi.mock("../../src/server/growth/signals", () => ({
 const {
   GROWTH_PLANNER_GENERATION_VERSION,
   generateGrowthContentPlan,
+  generateMultipleGrowthContentPlans,
   regenerateGrowthContentPlan,
 } = await import("../../src/server/growth/planner");
 const store = await import("../../src/server/growth/store");
@@ -346,6 +347,106 @@ describe("Growth editorial planner", () => {
     expect(protectedItems.map(({ id }) => store.getContentItem("account-a", id)?.status))
       .toEqual(["ready", "scheduled", "published", "skipped"]);
     expect(store.listContentPlans("account-a", "acme/rocket")).toHaveLength(2);
+  });
+
+  it("deconflicts and atomically creates plans in stable repository order with one assignment call each", async () => {
+    const compact = profileInput();
+    compact.cadence.x = 1;
+    compact.postingWindows = [{ weekday: 1, hour: 10 }];
+    store.upsertGrowthProfile("account-a", "zeta/repo", compact);
+    store.upsertGrowthProfile("account-a", "alpha/repo", compact);
+    state.collectSignals.mockImplementation(async (_accountId: string, repository: string) => signals(repository));
+
+    const result = await generateMultipleGrowthContentPlans("account-a", {
+      repositories: ["zeta/repo", "alpha/repo"],
+      periodStart: "2026-09-07",
+      periodEnd: "2026-09-13",
+    });
+
+    expect(result.plans.map(({ plan }) => plan.repository)).toEqual(["alpha/repo", "zeta/repo"]);
+    expect(result.plans.map(({ contentItems }) => contentItems[0].scheduledFor)).toEqual([
+      "2026-09-07T10:00:00.000Z",
+      "2026-09-08T10:00:00.000Z",
+    ]);
+    expect(result.plans.map(({ contentItems }) => contentItems[0].pillar)).toEqual([
+      "product",
+      "product",
+    ]);
+    expect(result).toMatchObject({ deconflictedItemCount: 1, remainingCollisionCount: 0 });
+    expect(state.collectSignals.mock.calls.map(([, repository]) => repository))
+      .toEqual(["alpha/repo", "zeta/repo"]);
+    expect(state.generateStructured).toHaveBeenCalledTimes(2);
+    expect(result.plans.every(({ aiEnabled, usedFallback, weightsAdjusted }) => (
+      aiEnabled && !usedFallback && !weightsAdjusted
+    ))).toBe(true);
+  });
+
+  it("uses per-repository fallback and leaves no partial multi-plan writes on failures", async () => {
+    const compact = profileInput();
+    compact.cadence.x = 1;
+    saveProfile("account-a", "alpha/repo");
+    store.upsertGrowthProfile("account-a", "zeta/repo", compact);
+    state.collectSignals.mockImplementation(async (_accountId: string, repository: string) => signals(repository));
+    state.generateStructured
+      .mockResolvedValueOnce({ provider: "test", model: "test", data: { assignments: [] } })
+      .mockRejectedValueOnce(new AiRequestError("second repository failed"));
+
+    await expect(generateMultipleGrowthContentPlans("account-a", {
+      repositories: ["zeta/repo", "alpha/repo"],
+      periodStart: "2026-09-07",
+      periodEnd: "2026-09-13",
+    })).rejects.toThrow("second repository failed");
+    expect(store.listContentPlans("account-a")).toEqual([]);
+    expect(store.listContentItems("account-a")).toEqual([]);
+
+    state.aiConfigured = false;
+    const fallback = await generateMultipleGrowthContentPlans("account-a", {
+      repositories: ["zeta/repo", "alpha/repo"],
+      periodStart: "2026-09-07",
+      periodEnd: "2026-09-13",
+    });
+    expect(fallback.plans.every(({ usedFallback }) => usedFallback)).toBe(true);
+    expect(state.generateStructured).toHaveBeenCalledTimes(2);
+  });
+
+  it("preflights every multi-plan overlap and rolls back the complete set on a store failure", async () => {
+    const compact = profileInput();
+    compact.cadence.x = 1;
+    store.upsertGrowthProfile("account-a", "alpha/repo", compact);
+    store.upsertGrowthProfile("account-a", "zeta/repo", compact);
+    state.aiConfigured = false;
+    store.createContentPlan({
+      accountId: "account-a",
+      repository: "zeta/repo",
+      periodStart: "2026-09-07",
+      periodEnd: "2026-09-13",
+      cadence: compact.cadence,
+      pillars: compact.pillars,
+      status: "active",
+    });
+
+    await expect(generateMultipleGrowthContentPlans("account-a", {
+      repositories: ["alpha/repo", "zeta/repo"],
+      periodStart: "2026-09-07",
+      periodEnd: "2026-09-13",
+    })).rejects.toBeInstanceOf(store.ActivePlanOverlapError);
+    expect(state.collectSignals).not.toHaveBeenCalled();
+    expect(store.listContentPlans("account-a", "alpha/repo")).toEqual([]);
+
+    store.archiveContentPlan("account-a", store.listContentPlans("account-a", "zeta/repo")[0].id);
+    store.ensureGrowthSchema();
+    getDatabase().exec(`
+      CREATE TRIGGER fail_zeta_multi BEFORE INSERT ON content_items
+      WHEN NEW.repository = 'zeta/repo'
+      BEGIN SELECT RAISE(ABORT, 'forced multi failure'); END;
+    `);
+    await expect(generateMultipleGrowthContentPlans("account-a", {
+      repositories: ["alpha/repo", "zeta/repo"],
+      periodStart: "2026-09-07",
+      periodEnd: "2026-09-13",
+    })).rejects.toThrow("forced multi failure");
+    expect(store.listContentPlans("account-a", "alpha/repo")).toEqual([]);
+    expect(store.listContentPlans("account-a", "zeta/repo")).toHaveLength(1);
   });
 
   it("rejects overlapping active plans per account and lists plans in descending period order", async () => {

@@ -165,6 +165,12 @@ export interface GenerateGrowthContentPlanInput {
   periodEnd: string;
 }
 
+export interface GenerateMultipleGrowthContentPlansInput {
+  repositories: string[];
+  periodStart: string;
+  periodEnd: string;
+}
+
 export const GROWTH_CONTENT_ITEM_STATUSES = [
   "idea",
   "draft",
@@ -682,6 +688,15 @@ export interface GrowthGeneratedContentPlanData {
   aiEnabled: boolean;
   usedFallback: boolean;
   weightsAdjusted: boolean;
+}
+
+export type GrowthGeneratedContentPlanResult = Omit<GrowthGeneratedContentPlanData, "ok">;
+
+export interface GrowthGeneratedMultipleContentPlansData {
+  ok: true;
+  plans: GrowthGeneratedContentPlanResult[];
+  deconflictedItemCount: number;
+  remainingCollisionCount: number;
 }
 
 export interface GrowthArchivedContentPlanData {

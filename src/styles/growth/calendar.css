@@ -6,6 +6,7 @@
 
 .mode-growth .growth-calendar-hero,
 .mode-growth .growth-plan-manager,
+.mode-growth .growth-multi-plan,
 .mode-growth .growth-calendar-toolbar,
 .mode-growth .growth-calendar-month,
 .mode-growth .growth-calendar-week,
@@ -84,6 +85,119 @@
   border-radius: 999px;
   font-size: 10px;
   font-weight: 750;
+}
+
+.mode-growth .growth-multi-plan {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  padding: 16px;
+  border-top: 3px solid var(--accent-2);
+}
+
+.mode-growth .growth-multi-plan form,
+.mode-growth .growth-multi-plan fieldset {
+  display: grid;
+  min-width: 0;
+  gap: 9px;
+  margin: 0;
+}
+
+.mode-growth .growth-multi-plan fieldset {
+  padding: 11px;
+  background: color-mix(in srgb, var(--panel-2) 76%, transparent);
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+}
+
+.mode-growth .growth-multi-plan legend,
+.mode-growth .growth-multi-plan-period label > span {
+  padding: 0 4px;
+  color: var(--accent-2);
+  font-size: 8.5px;
+  font-weight: 850;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.mode-growth .growth-multi-plan fieldset > p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.mode-growth .growth-multi-plan-repositories {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 7px;
+  min-width: 0;
+}
+
+.mode-growth .growth-multi-plan-repositories label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  padding: 8px 9px;
+  background: var(--panel);
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  font-size: 10.5px;
+  cursor: pointer;
+}
+
+.mode-growth .growth-multi-plan-repositories label:focus-within {
+  border-color: var(--accent);
+  box-shadow: var(--ring);
+}
+
+.mode-growth .growth-multi-plan-repositories span {
+  overflow-wrap: anywhere;
+}
+
+.mode-growth .growth-multi-plan-period {
+  display: grid;
+  grid-template-columns: minmax(150px, .8fr) minmax(120px, .6fr) auto;
+  align-items: end;
+  gap: 9px;
+}
+
+.mode-growth .growth-multi-plan-period label {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+}
+
+.mode-growth .growth-multi-plan-period input,
+.mode-growth .growth-multi-plan-period select {
+  min-width: 0;
+  height: 34px;
+  padding: 0 9px;
+  color: var(--text);
+  color-scheme: dark;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font: inherit;
+  font-size: 10.5px;
+}
+
+:root[data-theme="light"] .mode-growth .growth-multi-plan-period input,
+:root[data-theme="light"] .mode-growth .growth-multi-plan-period select {
+  color-scheme: light;
+}
+
+.mode-growth .growth-multi-plan-period input:focus,
+.mode-growth .growth-multi-plan-period select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: var(--ring);
+}
+
+.mode-growth .growth-plan-message.success {
+  color: var(--success);
+  background: color-mix(in srgb, var(--success) 9%, var(--panel));
+  border-color: color-mix(in srgb, var(--success) 34%, var(--border));
 }
 
 .mode-growth .growth-unified-calendar-filters {
@@ -1011,8 +1125,13 @@
     grid-template-columns: 1fr;
   }
 
-  .mode-growth .growth-plan-create {
+  .mode-growth .growth-plan-create,
+  .mode-growth .growth-multi-plan-period {
     grid-template-columns: 1fr 1fr;
+  }
+
+  .mode-growth .growth-multi-plan-period .btn {
+    grid-column: 1 / -1;
   }
 
   .mode-growth .growth-plan-row {
@@ -1045,15 +1164,19 @@
     padding: 18px;
   }
 
-  .mode-growth .growth-plan-manager {
+  .mode-growth .growth-plan-manager,
+  .mode-growth .growth-multi-plan {
     padding: 12px;
   }
 
-  .mode-growth .growth-plan-create {
+  .mode-growth .growth-plan-create,
+  .mode-growth .growth-multi-plan-period,
+  .mode-growth .growth-multi-plan-repositories {
     grid-template-columns: 1fr;
   }
 
   .mode-growth .growth-plan-create .btn,
+  .mode-growth .growth-multi-plan-period .btn,
   .mode-growth .growth-plan-actions {
     width: 100%;
   }

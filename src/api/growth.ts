@@ -3,6 +3,7 @@ import type {
   CreateGrowthCardInput,
   CreateGrowthContentItemInput,
   GenerateGrowthContentPlanInput,
+  GenerateMultipleGrowthContentPlansInput,
   GrowthArchivedContentPlanData,
   GrowthAssetData,
   GrowthAssetImportCandidatesData,
@@ -19,6 +20,7 @@ import type {
   GrowthDraftContentData,
   GrowthDraftContentItemData,
   GrowthGeneratedContentPlanData,
+  GrowthGeneratedMultipleContentPlansData,
   GrowthGeneratedInterventionsData,
   GrowthInterventionData,
   GrowthInterventionFilters,
@@ -389,6 +391,26 @@ export async function generateGrowthContentPlan(
   return requestJson<GrowthGeneratedContentPlanData>(
     "/api/growth/plans/generate",
     jsonRequest("POST", input, signal),
+  );
+}
+
+export async function generateMultipleGrowthContentPlans(
+  input: GenerateMultipleGrowthContentPlansInput,
+  signal?: AbortSignal,
+): Promise<GrowthGeneratedMultipleContentPlansData> {
+  if (input.repositories.length < 2 || input.repositories.length > 10) {
+    throw new Error("multi-repository planning requires two through ten repositories");
+  }
+  const repositories = input.repositories.map((repository) => repository.trim());
+  if (repositories.some((repository) => !parseRepositoryName(repository))) {
+    throw new Error("invalid repository");
+  }
+  if (new Set(repositories.map((repository) => repository.toLocaleLowerCase("en"))).size !== repositories.length) {
+    throw new Error("multi-repository planning requires distinct repositories");
+  }
+  return requestJson<GrowthGeneratedMultipleContentPlansData>(
+    "/api/growth/plans/generate-multiple",
+    jsonRequest("POST", { ...input, repositories }, signal),
   );
 }
 

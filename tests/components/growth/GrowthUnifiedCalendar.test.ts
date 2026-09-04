@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   fetchGrowthAssetFile: vi.fn(),
   fetchGrowthAssets: vi.fn(),
   fetchGrowthUnifiedCalendar: vi.fn(),
+  generateMultipleGrowthContentPlans: vi.fn(),
   markGrowthContentPublished: vi.fn(),
   patchGrowthContentItem: vi.fn(),
 }));
@@ -26,6 +27,7 @@ vi.mock("../../../src/api/growth", () => ({
   fetchGrowthAssetFile: mocks.fetchGrowthAssetFile,
   fetchGrowthAssets: mocks.fetchGrowthAssets,
   fetchGrowthUnifiedCalendar: mocks.fetchGrowthUnifiedCalendar,
+  generateMultipleGrowthContentPlans: mocks.generateMultipleGrowthContentPlans,
   markGrowthContentPublished: mocks.markGrowthContentPublished,
   patchGrowthContentItem: mocks.patchGrowthContentItem,
 }));
@@ -117,6 +119,15 @@ beforeEach(() => {
   root = createRoot(container);
   mocks.fetchGrowthAssets.mockResolvedValue([]);
   mocks.fetchGrowthUnifiedCalendar.mockResolvedValue(calendar());
+  mocks.generateMultipleGrowthContentPlans.mockResolvedValue({
+    ok: true,
+    plans: [
+      { plan: { repository: "acme/rome" }, contentItems: [], aiEnabled: false, usedFallback: true, weightsAdjusted: false },
+      { plan: { repository: "acme/tokyo" }, contentItems: [], aiEnabled: false, usedFallback: true, weightsAdjusted: true },
+    ],
+    deconflictedItemCount: 1,
+    remainingCollisionCount: 0,
+  });
   mocks.patchGrowthContentItem.mockImplementation(async (id: string, updates: Partial<GrowthContentItem>) => {
     const original = calendar().repositories.flatMap((entry) => entry.contentItems).find((item) => item.id === id)!;
     return { ...original, ...updates };
@@ -149,6 +160,18 @@ async function renderCalendar(
     await Promise.resolve();
     await Promise.resolve();
   });
+}
+
+function setValue(element: HTMLInputElement | HTMLSelectElement, value: string) {
+  const prototype = element instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype;
+  Object.getOwnPropertyDescriptor(prototype, "value")?.set?.call(element, value);
+  element.dispatchEvent(new Event(element instanceof HTMLSelectElement ? "change" : "input", { bubbles: true }));
+}
+
+function checkboxFor(repositoryName: string): HTMLInputElement {
+  const label = [...container.querySelectorAll(".growth-multi-plan-repositories label")]
+    .find((entry) => entry.textContent === repositoryName);
+  return label!.querySelector("input")!;
 }
 
 function selectFor(label: string): HTMLSelectElement {
@@ -280,6 +303,87 @@ describe("GrowthUnifiedCalendar", () => {
     expect(target.textContent).toContain("Rome release");
   });
 
+  it("generates coordinated plans in stable order, reports planning states, and refreshes the visible range", async () => {
+    await renderCalendar();
+    const rome = checkboxFor("acme/rome");
+    const tokyo = checkboxFor("acme/tokyo");
+    await act(async () => {
+      rome.focus();
+      rome.dispatchEvent(new KeyboardEvent("keydown", { key: " ", bubbles: true }));
+      rome.click();
+      tokyo.click();
+    });
+    const start = container.querySelector<HTMLInputElement>('.growth-multi-plan input[type="date"]')!;
+    await act(async () => {
+      setValue(start, "2026-11-02");
+    });
+    const generate = [...container.querySelectorAll<HTMLButtonElement>("button")]
+      .find((button) => button.textContent === "Generate coordinated plans")!;
+    await act(async () => {
+      generate.click();
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(mocks.generateMultipleGrowthContentPlans).toHaveBeenCalledWith({
+      repositories: ["acme/rome", "acme/tokyo"],
+      periodStart: "2026-11-02",
+      periodEnd: "2026-11-08",
+    }, expect.any(AbortSignal));
+    expect(container.textContent).toContain("Created coordinated plans for 2 repositories.");
+    expect(container.textContent).toContain("deterministic angles");
+    expect(container.textContent).toContain("adjusted at least one plan's pillar mix");
+    expect(container.textContent).toContain("Moved 1 content items");
+    expect(mocks.fetchGrowthUnifiedCalendar).toHaveBeenCalledTimes(2);
+    expect(generate.disabled).toBe(false);
+  });
+
+  it("validates selection, disables duplicate submissions, and reports partial or failed generation", async () => {
+    let resolveGeneration: ((value: Record<string, unknown>) => void) | undefined;
+    mocks.generateMultipleGrowthContentPlans.mockImplementationOnce(() => new Promise((resolve) => {
+      resolveGeneration = resolve;
+    }));
+    await renderCalendar();
+    const generate = [...container.querySelectorAll<HTMLButtonElement>("button")]
+      .find((button) => button.textContent === "Generate coordinated plans")!;
+    await act(async () => generate.click());
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain("Select two through ten repositories");
+
+    await act(async () => {
+      checkboxFor("acme/rome").click();
+      checkboxFor("acme/tokyo").click();
+      generate.click();
+      generate.click();
+      await Promise.resolve();
+    });
+    expect(mocks.generateMultipleGrowthContentPlans).toHaveBeenCalledTimes(1);
+    expect(generate.disabled).toBe(true);
+    expect(generate.textContent).toContain("2 repositories");
+    await act(async () => {
+      resolveGeneration?.({
+        ok: true,
+        plans: [
+          { usedFallback: false, weightsAdjusted: false },
+          { usedFallback: false, weightsAdjusted: false },
+        ],
+        deconflictedItemCount: 3,
+        remainingCollisionCount: 2,
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(container.textContent).toContain("2 same-pillar date collisions remain");
+
+    mocks.generateMultipleGrowthContentPlans.mockRejectedValueOnce(new Error("provider offline"));
+    await act(async () => {
+      generate.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain("provider offline");
+  });
+
   it("opens the shared content drawer from every item and closes it with Escape", async () => {
     await renderCalendar();
     const item = [...container.querySelectorAll<HTMLButtonElement>(".growth-calendar-item")]
@@ -325,6 +429,24 @@ describe("GrowthUnifiedCalendar", () => {
     expect(container.textContent).not.toContain("Rome release");
   });
 
+  it("aborts an in-flight coordinated plan when the active account changes", async () => {
+    mocks.generateMultipleGrowthContentPlans.mockImplementationOnce(() => new Promise(() => {}));
+    await renderCalendar();
+    await act(async () => {
+      checkboxFor("acme/rome").click();
+      checkboxFor("acme/tokyo").click();
+      [...container.querySelectorAll<HTMLButtonElement>("button")]
+        .find((button) => button.textContent === "Generate coordinated plans")!
+        .click();
+      await Promise.resolve();
+    });
+    const generationSignal = mocks.generateMultipleGrowthContentPlans.mock.calls[0][1] as AbortSignal;
+
+    await renderCalendar("account-b");
+    expect(generationSignal.aborted).toBe(true);
+    expect(container.textContent).not.toContain("Created coordinated plans");
+  });
+
   it("renders localized failures, filtered empty states, and responsive controls in dark and light themes", async () => {
     mocks.fetchGrowthUnifiedCalendar.mockRejectedValueOnce(new Error("calendar unavailable"));
     await renderCalendar();
@@ -340,6 +462,7 @@ describe("GrowthUnifiedCalendar", () => {
         Object.defineProperty(window, "innerWidth", { configurable: true, value: width });
         window.dispatchEvent(new Event("resize"));
         expect(container.querySelector(".growth-unified-calendar-filters")).not.toBeNull();
+        expect(container.querySelector(".growth-multi-plan-repositories")).not.toBeNull();
         expect(container.querySelector(".growth-calendar-scroll")).not.toBeNull();
       }
     }

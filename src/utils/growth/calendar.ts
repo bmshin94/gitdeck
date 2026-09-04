@@ -251,22 +251,32 @@ export function growthCalendarUtcRange(
   };
 }
 
+export function rescheduleGrowthCalendarInstant(
+  scheduledFor: string,
+  targetDate: string,
+  timezone: string,
+): string {
+  const instant = new Date(scheduledFor);
+  if (Number.isNaN(instant.getTime())) throw new RangeError("scheduledFor must be a valid date");
+  const localTime = formatterParts(createTimezoneFormatter(timezone, true), instant);
+  return new Date(localDateTimeToUtc(targetDate, {
+    hour: localTime.hour,
+    minute: localTime.minute,
+    second: localTime.second,
+    millisecond: instant.getUTCMilliseconds(),
+  }, timezone)).toISOString();
+}
+
 export function rescheduleGrowthCalendarItem(
   item: GrowthContentItem,
   targetDate: string,
   timezone: string,
 ): GrowthContentItem {
   if (!item.scheduledFor) throw new RangeError("item must have a scheduled date");
-  const instant = new Date(item.scheduledFor);
-  if (Number.isNaN(instant.getTime())) throw new RangeError("item must have a valid scheduled date");
-  const localTime = formatterParts(createTimezoneFormatter(timezone, true), instant);
-  const scheduledFor = new Date(localDateTimeToUtc(targetDate, {
-    hour: localTime.hour,
-    minute: localTime.minute,
-    second: localTime.second,
-    millisecond: instant.getUTCMilliseconds(),
-  }, timezone)).toISOString();
-  return { ...item, scheduledFor };
+  return {
+    ...item,
+    scheduledFor: rescheduleGrowthCalendarInstant(item.scheduledFor, targetDate, timezone),
+  };
 }
 
 export function groupGrowthQueueItems(

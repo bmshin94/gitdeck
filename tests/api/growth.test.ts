@@ -4,6 +4,7 @@ import {
   fetchGrowthReview,
   fetchGrowthUnifiedCalendar,
   generateGrowthContentPlan,
+  generateMultipleGrowthContentPlans,
 } from "../../src/api/growth";
 
 const ZERO_SUMMARY = {
@@ -136,6 +137,46 @@ describe("Growth performance summary client", () => {
       }),
       signal: controller.signal,
     });
+  });
+
+  it("posts normalized distinct repositories for coordinated plan generation", async () => {
+    const generated = {
+      ok: true as const,
+      plans: [],
+      deconflictedItemCount: 2,
+      remainingCollisionCount: 0,
+    };
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 201,
+      json: vi.fn(async () => generated),
+    } as unknown as Response);
+    const controller = new AbortController();
+
+    await expect(generateMultipleGrowthContentPlans({
+      repositories: [" acme/zeta ", "acme/alpha"],
+      periodStart: "2026-09-07",
+      periodEnd: "2026-09-13",
+    }, controller.signal)).resolves.toEqual(generated);
+    expect(fetchMock).toHaveBeenLastCalledWith("/api/growth/plans/generate-multiple", {
+      cache: "no-store",
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        repositories: ["acme/zeta", "acme/alpha"],
+        periodStart: "2026-09-07",
+        periodEnd: "2026-09-13",
+      }),
+      signal: controller.signal,
+    });
+
+    fetchMock.mockClear();
+    await expect(generateMultipleGrowthContentPlans({
+      repositories: ["acme/alpha", "ACME/ALPHA"],
+      periodStart: "2026-09-07",
+      periodEnd: "2026-09-13",
+    })).rejects.toThrow("distinct repositories");
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("requests repository-scoped weekly reviews and validates the repository before fetching", async () => {

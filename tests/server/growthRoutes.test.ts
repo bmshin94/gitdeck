@@ -735,6 +735,95 @@ describe("Growth API routes", () => {
     expect(growthStore.listContentPlans("account-b", "acme/repo")).toHaveLength(1);
   });
 
+  it("generates deconflicted multi-repository plans with strict validation and account isolation", async () => {
+    const input = profileInput();
+    const compact = {
+      ...input,
+      channels: { ...input.channels, linkedin: false, mastodon: false },
+      cadence: { ...input.cadence, x: 1, linkedin: 0, mastodon: 0 },
+    };
+    await dispatch("PUT", "/api/growth/profiles/acme/alpha", compact);
+    await dispatch("PUT", "/api/growth/profiles/acme/zeta", compact);
+
+    const invalidBodies = [
+      { repositories: ["acme/alpha"], periodStart: "2026-09-07", periodEnd: "2026-09-13" },
+      { repositories: ["acme/alpha", "ACME/ALPHA"], periodStart: "2026-09-07", periodEnd: "2026-09-13" },
+      { repositories: ["acme/alpha", "bad"], periodStart: "2026-09-07", periodEnd: "2026-09-13" },
+      { repositories: ["acme/alpha", "acme/zeta"], periodStart: "2026-09-08", periodEnd: "2026-09-13" },
+      { repositories: ["acme/alpha", "acme/zeta"], periodStart: "2026-09-07", periodEnd: "2026-09-13", extra: true },
+    ];
+    for (const body of invalidBodies) {
+      expect((await dispatch("POST", "/api/growth/plans/generate-multiple", body)).status).toBe(400);
+    }
+
+    const generated = await dispatch("POST", "/api/growth/plans/generate-multiple", {
+      repositories: ["acme/zeta", "acme/alpha"],
+      periodStart: "2026-09-07",
+      periodEnd: "2026-09-13",
+    });
+    expect(generated.status).toBe(201);
+    expect(generated.body).toMatchObject({
+      ok: true,
+      deconflictedItemCount: 1,
+      remainingCollisionCount: 0,
+      plans: [
+        { plan: { accountId: "account-a", repository: "acme/alpha" }, aiEnabled: false, usedFallback: true },
+        { plan: { accountId: "account-a", repository: "acme/zeta" }, aiEnabled: false, usedFallback: true },
+      ],
+    });
+    expect(generated.body.plans.map((entry: Record<string, any>) => entry.contentItems[0].scheduledFor)).toEqual([
+      "2026-09-07T08:00:00.000Z",
+      "2026-09-08T08:00:00.000Z",
+    ]);
+
+    const accountAIds = generated.body.plans.map((entry: Record<string, any>) => entry.plan.id as string);
+    const beforeOverlapCounts = generated.body.plans.map((entry: Record<string, any>) => (
+      growthStore.listContentPlans("account-a", entry.plan.repository).length
+    ));
+    expect((await dispatch("POST", "/api/growth/plans/generate-multiple", {
+      repositories: ["acme/alpha", "acme/zeta"],
+      periodStart: "2026-09-07",
+      periodEnd: "2026-09-20",
+    })).status).toBe(400);
+    expect(generated.body.plans.map((entry: Record<string, any>) => (
+      growthStore.listContentPlans("account-a", entry.plan.repository).length
+    ))).toEqual(beforeOverlapCounts);
+
+    state.activeAccountId = "account-b";
+    const otherAccount = await dispatch("POST", "/api/growth/plans/generate-multiple", {
+      repositories: ["acme/alpha", "acme/zeta"],
+      periodStart: "2026-09-07",
+      periodEnd: "2026-09-13",
+    });
+    expect(otherAccount.status).toBe(201);
+    expect(otherAccount.body.plans.every((entry: Record<string, any>) => entry.plan.accountId === "account-b")).toBe(true);
+    expect(accountAIds.some((id: string) => JSON.stringify(otherAccount.body).includes(id))).toBe(false);
+  });
+
+  it("does not persist a partial multi-plan set when one provider call fails", async () => {
+    const input = profileInput();
+    const compact = {
+      ...input,
+      channels: { ...input.channels, linkedin: false, mastodon: false },
+      cadence: { ...input.cadence, x: 1, linkedin: 0, mastodon: 0 },
+    };
+    await dispatch("PUT", "/api/growth/profiles/acme/alpha", compact);
+    await dispatch("PUT", "/api/growth/profiles/acme/zeta", compact);
+    state.aiConfigured = true;
+    state.generateStructured
+      .mockResolvedValueOnce({ provider: "test", model: "test", data: { assignments: [] } })
+      .mockRejectedValueOnce(new AiRequestError("second planner failed"));
+
+    const response = await dispatch("POST", "/api/growth/plans/generate-multiple", {
+      repositories: ["acme/alpha", "acme/zeta"],
+      periodStart: "2026-09-07",
+      periodEnd: "2026-09-13",
+    });
+    expect(response).toEqual({ status: 502, body: { ok: false, error: "second planner failed" } });
+    expect(growthStore.listContentPlans("account-a")).toEqual([]);
+    expect(growthStore.listContentItems("account-a")).toEqual([]);
+  });
+
   it("regenerates and archives plans with strict bodies, account scope, and protected content", async () => {
     const input = profileInput();
     await dispatch("PUT", "/api/growth/profiles/acme/repo", {

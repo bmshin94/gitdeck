@@ -28,6 +28,7 @@ import {
 import { ContentItemDrawer } from "../ContentItemDrawer";
 import { GrowthCalendarMonth } from "./GrowthCalendarMonth";
 import { GrowthCalendarWeek } from "./GrowthCalendarWeek";
+import { GrowthMultiPlanManager } from "./GrowthMultiPlanManager";
 
 interface GrowthUnifiedCalendarProps {
   accountId: string | null;
@@ -67,6 +68,7 @@ export function GrowthUnifiedCalendar({ accountId, enabled }: GrowthUnifiedCalen
   );
   const requestRange = useMemo(() => growthUnifiedCalendarUtcRange(grid), [grid]);
   const requestKey = `${accountId ?? ""}:${requestRange.scheduledFrom}:${requestRange.scheduledTo}`;
+  const [reloadToken, setReloadToken] = useState(0);
   const [loaded, setLoaded] = useState<{
     key: string;
     calendar: GrowthUnifiedCalendar;
@@ -110,7 +112,7 @@ export function GrowthUnifiedCalendar({ accountId, enabled }: GrowthUnifiedCalen
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [accountId, enabled, requestKey, requestRange]);
+  }, [accountId, enabled, reloadToken, requestKey, requestRange]);
 
   const filterOptions = useMemo(
     () => calendar ? growthUnifiedCalendarFilterOptions(calendar) : {
@@ -234,6 +236,13 @@ export function GrowthUnifiedCalendar({ accountId, enabled }: GrowthUnifiedCalen
           </div>
         ) : null}
       </header>
+
+      <GrowthMultiPlanManager
+        accountId={accountId}
+        enabled={enabled}
+        repositories={calendar?.repositories.map(({ repository }) => repository) ?? []}
+        onGenerated={() => setReloadToken((current) => current + 1)}
+      />
 
       <div className="growth-unified-calendar-filters" role="group" aria-label={t("growth.unifiedCalendarFilters")}>
         <label>

@@ -2,17 +2,22 @@ import type {
   CreateGrowthContentItemInput,
   CreateGrowthContentPlanInput,
   GenerateGrowthContentPlanInput,
+  GenerateMultipleGrowthContentPlansInput,
   GrowthContentItem,
   GrowthContentPlan,
+  GrowthPlanSlot,
   GrowthPlanAssignment,
   GrowthPlanEvidence,
 } from "../../types/growth";
 import { normalizeGrowthPlanAssignments } from "../../utils/growth/planAssignments";
+import { deconflictGrowthPlanSlots } from "../../utils/growth/planDeconfliction";
 import { buildGrowthPlanSlots } from "../../utils/growth/planSlots";
+import { parseRepositoryName } from "../../utils/repository";
 import { AiNotConfiguredError, generateStructured } from "../ai/client";
 import { isAiConfigured } from "../ai/settings";
 import {
   createContentPlanWithItems,
+  createMultipleContentPlansWithItems,
   getContentPlan,
   getGrowthProfile,
   hasOverlappingActiveContentPlan,
@@ -37,11 +42,24 @@ export interface RegeneratedGrowthContentPlan extends GeneratedGrowthContentPlan
   affectedContentItems: GrowthContentItem[];
 }
 
+export interface GeneratedMultipleGrowthContentPlans {
+  plans: GeneratedGrowthContentPlan[];
+  deconflictedItemCount: number;
+  remainingCollisionCount: number;
+}
+
 interface PreparedGrowthContentPlan {
   planInput: CreateGrowthContentPlanInput;
   itemInputs: Array<Omit<CreateGrowthContentItemInput, "accountId" | "repository" | "planId">>;
   aiEnabled: boolean;
   usedFallback: boolean;
+  weightsAdjusted: boolean;
+}
+
+interface GrowthPlanPreparationContext {
+  input: GenerateGrowthContentPlanInput;
+  profile: ReturnType<typeof getGrowthProfile>;
+  slots: GrowthPlanSlot[];
   weightsAdjusted: boolean;
 }
 
@@ -202,11 +220,11 @@ async function requestAssignments(
   return result.data.assignments;
 }
 
-async function prepareGrowthContentPlan(
+function buildGrowthPlanPreparationContext(
   accountId: string,
   input: GenerateGrowthContentPlanInput,
   excludePlanId?: string,
-): Promise<PreparedGrowthContentPlan> {
+): GrowthPlanPreparationContext {
   const profile = getGrowthProfile(accountId, input.repository);
   const weightAdjustment = getPerformanceAdjustedPillars(
     accountId,
@@ -233,14 +251,27 @@ async function prepareGrowthContentPlan(
   )) {
     throw new ActivePlanOverlapError();
   }
+  return {
+    input,
+    profile: planningProfile,
+    slots,
+    weightsAdjusted: weightAdjustment.weightsAdjusted,
+  };
+}
 
+async function assignGrowthPlan(
+  accountId: string,
+  context: GrowthPlanPreparationContext,
+  preserveSlotPillars = false,
+): Promise<PreparedGrowthContentPlan> {
+  const { input, profile, slots, weightsAdjusted } = context;
   const signals = await collectRepositorySignals(accountId, input.repository);
   const evidence = planEvidence(signals);
   const aiEnabled = isAiConfigured();
   let candidates: unknown = [];
   if (aiEnabled && slots.length > 0) {
     try {
-      candidates = await requestAssignments(input, slots, planningProfile, signals, evidence);
+      candidates = await requestAssignments(input, slots, profile, signals, evidence);
     } catch (error) {
       if (!(error instanceof AiNotConfiguredError)) throw error;
     }
@@ -248,7 +279,7 @@ async function prepareGrowthContentPlan(
   const normalized = normalizeGrowthPlanAssignments(
     input.repository,
     slots,
-    planningProfile.pillars,
+    profile.pillars,
     evidence,
     candidates,
   );
@@ -259,8 +290,8 @@ async function prepareGrowthContentPlan(
       repository: input.repository,
       periodStart: input.periodStart,
       periodEnd: input.periodEnd,
-      cadence: planningProfile.cadence,
-      pillars: planningProfile.pillars,
+      cadence: profile.cadence,
+      pillars: profile.pillars,
       status: "active",
       generatedAt,
     },
@@ -270,7 +301,7 @@ async function prepareGrowthContentPlan(
         channel: slot.channel,
         format: slot.format,
         goalIds: [],
-        pillar: assignment.pillarId,
+        pillar: preserveSlotPillars ? slot.pillarId : assignment.pillarId,
         angle: assignment.angle,
         title: "",
         summary: assignment.cta,
@@ -287,8 +318,19 @@ async function prepareGrowthContentPlan(
     }),
     aiEnabled,
     usedFallback: !aiEnabled || normalized.usedFallback,
-    weightsAdjusted: weightAdjustment.weightsAdjusted,
+    weightsAdjusted,
   };
+}
+
+async function prepareGrowthContentPlan(
+  accountId: string,
+  input: GenerateGrowthContentPlanInput,
+  excludePlanId?: string,
+): Promise<PreparedGrowthContentPlan> {
+  return assignGrowthPlan(
+    accountId,
+    buildGrowthPlanPreparationContext(accountId, input, excludePlanId),
+  );
 }
 
 /** Builds, enriches, and atomically persists one repository editorial plan. */
@@ -303,6 +345,69 @@ export async function generateGrowthContentPlan(
     aiEnabled: prepared.aiEnabled,
     usedFallback: prepared.usedFallback,
     weightsAdjusted: prepared.weightsAdjusted,
+  };
+}
+
+/** Prepares every repository before atomically persisting a deconflicted plan set. */
+export async function generateMultipleGrowthContentPlans(
+  accountId: string,
+  input: GenerateMultipleGrowthContentPlansInput,
+): Promise<GeneratedMultipleGrowthContentPlans> {
+  if (!Array.isArray(input.repositories) || input.repositories.length < 2 || input.repositories.length > 10) {
+    throw new RangeError("multi-repository planning requires two through ten repositories");
+  }
+  if (input.repositories.some((repository) => typeof repository !== "string")) {
+    throw new RangeError("invalid repository");
+  }
+  const repositories = input.repositories.map((repository) => repository.trim());
+  if (repositories.some((repository) => !parseRepositoryName(repository))) {
+    throw new RangeError("invalid repository");
+  }
+  const normalizedRepositories = repositories.map((repository) => repository.toLocaleLowerCase("en"));
+  if (new Set(normalizedRepositories).size !== repositories.length) {
+    throw new RangeError("multi-repository planning requires distinct repositories");
+  }
+
+  const contexts = repositories
+    .sort((left, right) => left.localeCompare(right, "en", { sensitivity: "base" }) || left.localeCompare(right, "en"))
+    .map((repository) => buildGrowthPlanPreparationContext(accountId, {
+      repository,
+      periodStart: input.periodStart,
+      periodEnd: input.periodEnd,
+    }));
+  const deconflicted = deconflictGrowthPlanSlots(
+    contexts.map((context) => ({
+      repository: context.input.repository,
+      timezone: context.profile.timezone,
+      slots: context.slots,
+    })),
+    input.periodStart,
+    input.periodEnd,
+  );
+  const deconflictedByRepository = new Map(
+    deconflicted.repositories.map(({ repository, slots }) => [repository, slots]),
+  );
+  const prepared: PreparedGrowthContentPlan[] = [];
+  for (const context of contexts) {
+    prepared.push(await assignGrowthPlan(accountId, {
+      ...context,
+      slots: deconflictedByRepository.get(context.input.repository) ?? context.slots,
+    }, true));
+  }
+
+  const created = createMultipleContentPlansWithItems(accountId, prepared.map(({ planInput, itemInputs }) => ({
+    planInput,
+    itemInputs,
+  })));
+  return {
+    plans: created.map((result, index) => ({
+      ...result,
+      aiEnabled: prepared[index].aiEnabled,
+      usedFallback: prepared[index].usedFallback,
+      weightsAdjusted: prepared[index].weightsAdjusted,
+    })),
+    deconflictedItemCount: deconflicted.deconflictedItemCount,
+    remainingCollisionCount: deconflicted.remainingCollisionCount,
   };
 }
 

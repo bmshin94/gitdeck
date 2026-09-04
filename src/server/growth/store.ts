@@ -1101,10 +1101,15 @@ export function recycleEvergreenIntervention(
   })();
 }
 
+export interface GrowthContentPlanWithItemsInput {
+  planInput: CreateGrowthContentPlanInput;
+  itemInputs: Array<Omit<CreateGrowthContentItemInput, "accountId" | "repository" | "planId">>;
+}
+
 /** Creates a plan and all of its initial content items in one transaction. */
 export function createContentPlanWithItems(
   planInput: CreateGrowthContentPlanInput,
-  itemInputs: Array<Omit<CreateGrowthContentItemInput, "accountId" | "repository" | "planId">>,
+  itemInputs: GrowthContentPlanWithItemsInput["itemInputs"],
 ): { plan: GrowthContentPlan; contentItems: GrowthContentItem[] } {
   ensureGrowthAccountMigration(planInput.accountId);
   return getDatabase().transaction(() => {
@@ -1117,6 +1122,37 @@ export function createContentPlanWithItems(
     }));
     return { plan, contentItems };
   })();
+}
+
+/** Persists several fully prepared repository plans as one account-scoped unit. */
+export function createMultipleContentPlansWithItems(
+  accountId: string,
+  inputs: readonly GrowthContentPlanWithItemsInput[],
+): Array<{ plan: GrowthContentPlan; contentItems: GrowthContentItem[] }> {
+  ensureGrowthAccountMigration(accountId);
+  const repositories = new Set<string>();
+  if (inputs.length < 2 || inputs.length > 10) {
+    throw new GrowthStoreValidationError("Multi-repository planning requires two through ten repositories.");
+  }
+  for (const { planInput } of inputs) {
+    if (planInput.accountId !== accountId || repositories.has(planInput.repository)) {
+      throw new GrowthStoreValidationError("Multi-repository plans must use distinct account-owned repositories.");
+    }
+    repositories.add(planInput.repository);
+    if (
+      (planInput.status ?? "draft") === "active"
+      && hasOverlappingActiveContentPlan(
+        accountId,
+        planInput.repository,
+        planInput.periodStart,
+        planInput.periodEnd,
+      )
+    ) throw new ActivePlanOverlapError();
+  }
+
+  return getDatabase().transaction(() => inputs.map(({ planInput, itemInputs }) => (
+    createContentPlanWithItems(planInput, itemInputs)
+  )))();
 }
 
 function skipEditablePlanItems(accountId: string, planId: string): GrowthContentItem[] {

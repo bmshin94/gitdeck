@@ -457,6 +457,44 @@ describe("Growth Studio store", () => {
     expect(store.archiveContentPlan("account-a", plan.id)?.status).toBe("archived");
   });
 
+  it("creates multiple plans in one transaction after account and overlap validation", () => {
+    const input = profileInput();
+    const planInput = (repository: string) => ({
+      accountId: "account-a",
+      repository,
+      periodStart: "2026-09-07",
+      periodEnd: "2026-09-13",
+      cadence: input.cadence,
+      pillars: input.pillars,
+      status: "active" as const,
+    });
+    const itemInputs = [{ channel: "x" as const, format: "x-thread" as const, status: "idea" as const }];
+    const created = store.createMultipleContentPlansWithItems("account-a", [
+      { planInput: planInput("owner/alpha"), itemInputs },
+      { planInput: planInput("owner/zeta"), itemInputs },
+    ]);
+    expect(created.map(({ plan }) => plan.repository)).toEqual(["owner/alpha", "owner/zeta"]);
+    expect(created.every(({ plan, contentItems }) => contentItems[0].planId === plan.id)).toBe(true);
+
+    expect(() => store.createMultipleContentPlansWithItems("account-b", [
+      { planInput: planInput("owner/other"), itemInputs },
+      { planInput: planInput("owner/last"), itemInputs },
+    ])).toThrow("account-owned repositories");
+    expect(store.listContentPlans("account-b")).toEqual([]);
+
+    getDatabase().exec(`
+      CREATE TRIGGER fail_multi_store BEFORE INSERT ON content_items
+      WHEN NEW.repository = 'owner/fail'
+      BEGIN SELECT RAISE(ABORT, 'forced multi store failure'); END;
+    `);
+    expect(() => store.createMultipleContentPlansWithItems("account-a", [
+      { planInput: planInput("owner/before-fail"), itemInputs },
+      { planInput: planInput("owner/fail"), itemInputs },
+    ])).toThrow("forced multi store failure");
+    expect(store.listContentPlans("account-a", "owner/before-fail")).toEqual([]);
+    expect(store.listContentPlans("account-a", "owner/fail")).toEqual([]);
+  });
+
   it("filters content items by account, repository, status, and scheduled date range", () => {
     store.createContentItem({
       accountId: "account-a",
