@@ -5,6 +5,7 @@ import {
   buildGrowthCalendarWeek,
   calendarDateInTimezone,
   groupGrowthCalendarItems,
+  groupGrowthQueueItems,
   growthCalendarUtcRange,
   normalizeCalendarDate,
   rescheduleGrowthCalendarItem,
@@ -89,6 +90,26 @@ describe("growth calendar utilities", () => {
     expect(calendarDateInTimezone(first.scheduledFor!, "America/Los_Angeles")).toBe("2026-03-31");
     expect(grouped.get("2026-04-01")?.map((item) => item.id)).toEqual(["content-1", "content-2"]);
     expect([...grouped.values()].flat().map((item) => item.id)).not.toContain("skipped");
+  });
+
+  it("groups a timezone-local Monday-through-Sunday queue by workflow and local time", () => {
+    const week = buildGrowthCalendarWeek("2026-10-25");
+    const groups = groupGrowthQueueItems([
+      contentItem({ id: "later-draft", status: "draft", scheduledFor: "2026-10-20T14:00:00.000Z" }),
+      contentItem({ id: "published", status: "published", scheduledFor: "2026-10-25T22:30:00.000Z" }),
+      contentItem({ id: "outside", status: "ready", scheduledFor: "2026-10-25T23:30:00.000Z" }),
+      contentItem({ id: "idea", status: "idea", scheduledFor: "2026-10-18T22:30:00.000Z" }),
+      contentItem({ id: "earlier-draft", status: "draft", scheduledFor: "2026-10-20T08:00:00.000Z" }),
+      contentItem({ id: "skipped", status: "skipped", scheduledFor: "2026-10-21T08:00:00.000Z" }),
+      contentItem({ id: "backlog", status: "ready", scheduledFor: null }),
+    ], week, "Europe/Rome");
+
+    expect(week).toMatchObject({ rangeStart: "2026-10-19", rangeEnd: "2026-10-25" });
+    expect(groups.needsDraft.map((item) => item.id)).toEqual(["idea"]);
+    expect(groups.draft.map((item) => item.id)).toEqual(["earlier-draft", "later-draft"]);
+    expect(groups.published.map((item) => item.id)).toEqual(["published"]);
+    expect(Object.values(groups).flat().map((item) => item.id)).not.toContain("outside");
+    expect(Object.values(groups).flat().map((item) => item.id)).not.toContain("skipped");
   });
 
   it("converts month and week grids to inclusive UTC API bounds across DST", () => {

@@ -23,6 +23,16 @@ export interface GrowthCalendarWeekGrid {
   days: GrowthCalendarDay[];
 }
 
+export const GROWTH_QUEUE_SECTIONS = [
+  "needsDraft",
+  "draft",
+  "ready",
+  "scheduled",
+  "published",
+] as const;
+export type GrowthQueueSection = (typeof GROWTH_QUEUE_SECTIONS)[number];
+export type GrowthQueueGroups = Record<GrowthQueueSection, GrowthContentItem[]>;
+
 interface DateParts {
   year: number;
   month: number;
@@ -257,6 +267,40 @@ export function rescheduleGrowthCalendarItem(
     millisecond: instant.getUTCMilliseconds(),
   }, timezone)).toISOString();
   return { ...item, scheduledFor };
+}
+
+export function groupGrowthQueueItems(
+  items: readonly GrowthContentItem[],
+  week: Pick<GrowthCalendarWeekGrid, "rangeStart" | "rangeEnd">,
+  timezone: string,
+): GrowthQueueGroups {
+  const groups: GrowthQueueGroups = {
+    needsDraft: [],
+    draft: [],
+    ready: [],
+    scheduled: [],
+    published: [],
+  };
+  for (const item of items) {
+    if (!item.scheduledFor || item.status === "skipped") continue;
+    let localDate: string;
+    try {
+      localDate = calendarDateInTimezone(item.scheduledFor, timezone);
+    } catch {
+      continue;
+    }
+    if (localDate < week.rangeStart || localDate > week.rangeEnd) continue;
+    const section = item.status === "idea" ? "needsDraft" : item.status;
+    groups[section].push(item);
+  }
+  for (const entries of Object.values(groups)) {
+    entries.sort((left, right) => (
+      left.scheduledFor!.localeCompare(right.scheduledFor!)
+      || left.createdAt.localeCompare(right.createdAt)
+      || left.id.localeCompare(right.id)
+    ));
+  }
+  return groups;
 }
 
 export function groupGrowthCalendarItems(

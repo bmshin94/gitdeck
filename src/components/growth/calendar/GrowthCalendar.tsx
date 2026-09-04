@@ -21,6 +21,7 @@ import {
 import { ContentItemDrawer } from "../ContentItemDrawer";
 import { GrowthCalendarMonth } from "./GrowthCalendarMonth";
 import { GrowthCalendarWeek } from "./GrowthCalendarWeek";
+import { GrowthQueue } from "./GrowthQueue";
 
 interface GrowthCalendarProps {
   accountId: string | null;
@@ -39,7 +40,7 @@ export function GrowthCalendar({ accountId, enabled, repository }: GrowthCalenda
   const search = new URLSearchParams(location.search);
   const rawDate = search.get("date");
   const view = search.get("view");
-  const calendarView = view === "week" ? "week" : "month";
+  const calendarView = view === "week" || view === "queue" ? view : "month";
   const [loadedProfile, setLoadedProfile] = useState<{
     accountId: string;
     repository: string;
@@ -61,9 +62,9 @@ export function GrowthCalendar({ accountId, enabled, repository }: GrowthCalenda
     : utcToday();
   const selectedDate = normalizeCalendarDate(rawDate, today);
   const grid = useMemo(
-    () => calendarView === "week"
-      ? buildGrowthCalendarWeek(selectedDate)
-      : buildGrowthCalendarMonth(selectedDate),
+    () => calendarView === "month"
+      ? buildGrowthCalendarMonth(selectedDate)
+      : buildGrowthCalendarWeek(selectedDate),
     [calendarView, selectedDate],
   );
 
@@ -145,7 +146,7 @@ export function GrowthCalendar({ accountId, enabled, repository }: GrowthCalenda
   );
   const headingFormatter = new Intl.DateTimeFormat(language, {
     month: calendarView === "month" ? "long" : "short",
-    day: calendarView === "week" ? "numeric" : undefined,
+    day: calendarView !== "month" ? "numeric" : undefined,
     year: "numeric",
     timeZone: "UTC",
   });
@@ -167,7 +168,7 @@ export function GrowthCalendar({ accountId, enabled, repository }: GrowthCalenda
 
   function updateItem(updated: GrowthContentItem) {
     setItems((current) => current.map((item) => item.id === updated.id ? updated : item));
-    setSelectedItem(updated);
+    setSelectedItem((current) => current?.id === updated.id ? updated : current);
   }
 
   async function rescheduleItem(item: GrowthContentItem, targetDate: string) {
@@ -230,24 +231,25 @@ export function GrowthCalendar({ accountId, enabled, repository }: GrowthCalenda
           <div className="growth-calendar-view-switch" role="group" aria-label={t("growth.calendarViewLabel")}>
             <button className={`btn ghost${calendarView === "month" ? " active" : ""}`} type="button" aria-pressed={calendarView === "month"} onClick={() => navigateDate(selectedDate, "month")}>{t("growth.calendarMonthView")}</button>
             <button className={`btn ghost${calendarView === "week" ? " active" : ""}`} type="button" aria-pressed={calendarView === "week"} onClick={() => navigateDate(selectedDate, "week")}>{t("growth.calendarWeekView")}</button>
+            <button className={`btn ghost${calendarView === "queue" ? " active" : ""}`} type="button" aria-pressed={calendarView === "queue"} onClick={() => navigateDate(selectedDate, "queue")}>{t("growth.calendarQueueView")}</button>
           </div>
           <div className="growth-calendar-navigation">
-            <button className="btn ghost" type="button" disabled={!profile} onClick={() => navigateDate(calendarView === "week" ? shiftCalendarWeek(selectedDate, -1) : shiftCalendarMonth(selectedDate, -1))}>
-              <span aria-hidden="true">←</span> {t(calendarView === "week" ? "growth.calendarPreviousWeek" : "growth.calendarPreviousMonth")}
+            <button className="btn ghost" type="button" disabled={!profile} onClick={() => navigateDate(calendarView !== "month" ? shiftCalendarWeek(selectedDate, -1) : shiftCalendarMonth(selectedDate, -1))}>
+              <span aria-hidden="true">←</span> {t(calendarView !== "month" ? "growth.calendarPreviousWeek" : "growth.calendarPreviousMonth")}
             </button>
             <button className="btn ghost" type="button" disabled={!profile} onClick={() => navigateDate(today)}>{t("growth.calendarToday")}</button>
-            <button className="btn ghost" type="button" disabled={!profile} onClick={() => navigateDate(calendarView === "week" ? shiftCalendarWeek(selectedDate, 1) : shiftCalendarMonth(selectedDate, 1))}>
-              {t(calendarView === "week" ? "growth.calendarNextWeek" : "growth.calendarNextMonth")} <span aria-hidden="true">→</span>
+            <button className="btn ghost" type="button" disabled={!profile} onClick={() => navigateDate(calendarView !== "month" ? shiftCalendarWeek(selectedDate, 1) : shiftCalendarMonth(selectedDate, 1))}>
+              {t(calendarView !== "month" ? "growth.calendarNextWeek" : "growth.calendarNextMonth")} <span aria-hidden="true">→</span>
             </button>
           </div>
         </div>
         <h2>{headingLabel}</h2>
       </div>
 
-      {loading ? <div className="growth-calendar-state" role="status">{t("growth.calendarLoading")}</div> : null}
-      {error ? <div className="growth-calendar-error" role="alert">{t("growth.calendarError", { message: error })}</div> : null}
+      {calendarView !== "queue" && loading ? <div className="growth-calendar-state" role="status">{t("growth.calendarLoading")}</div> : null}
+      {calendarView !== "queue" && error ? <div className="growth-calendar-error" role="alert">{t("growth.calendarError", { message: error })}</div> : null}
       {rescheduleError ? <div className="growth-calendar-error" role="alert">{t("growth.calendarRescheduleError", { message: rescheduleError })}</div> : null}
-      {!loading && !error && profile && visibleItemCount === 0 ? (
+      {calendarView !== "queue" && !loading && !error && profile && visibleItemCount === 0 ? (
         <div className="growth-calendar-empty">
           <strong>{t(calendarView === "week" ? "growth.calendarEmptyWeekTitle" : "growth.calendarEmptyTitle")}</strong>
           <p>{t("growth.calendarEmptyDescription")}</p>
@@ -280,6 +282,19 @@ export function GrowthCalendar({ accountId, enabled, repository }: GrowthCalenda
           onOpenItem={setSelectedItem}
           onRescheduleItem={(item, date) => void rescheduleItem(item, date)}
           onDropItem={dropItem}
+        />
+      ) : null}
+
+      {calendarView === "queue" ? (
+        <GrowthQueue
+          items={items}
+          week={grid as ReturnType<typeof buildGrowthCalendarWeek>}
+          timezone={profile?.timezone ?? "UTC"}
+          pillarLabels={pillarLabels}
+          loading={loading}
+          error={error}
+          onOpenItem={setSelectedItem}
+          onUpdateItem={updateItem}
         />
       ) : null}
 
