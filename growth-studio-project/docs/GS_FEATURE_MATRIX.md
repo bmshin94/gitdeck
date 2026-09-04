@@ -20,10 +20,12 @@ Authoritative inventory of Growth Studio capabilities. Statuses: `EXISTING`
 | Missions panel hosting the existing goals UI | `src/components/growth/GrowthStudioApp.tsx`, `src/hooks/useGoals.ts`, `src/components/views/GoalsView.tsx` | DONE | GS-013 |
 | Growth home: repositories with profiles or goals, quick stats | `src/components/growth/GrowthHome.tsx`, `src/utils/growthHome.ts`, `/growth` | DONE | GS-014 |
 | Workspace overview per repository | `src/components/growth/GrowthWorkspaceOverview.tsx`, `src/types/growth.ts`, `src/api/growth.ts`, `/growth/r/:owner/:repo` | DONE | GS-015 |
-| Shell i18n, responsive layout, theme parity | shell components | PLANNED | GS-016 |
-| Growth store schema (profiles, interventions, plans, items, assets, performance) | `server/growth/store.ts` | PLANNED | GS-020 |
-| One-shot migration of legacy suggestions and proposals | `server/growth/store.ts` | PLANNED | GS-021 |
-| Growth API routes | `server/routes/growth.ts`, `api/growth.ts` | PLANNED | GS-022 |
+| Shell i18n, responsive layout, theme parity, and keyboard dismissal | `src/components/growth/`, `src/components/common/RepositoryPicker.tsx`, `src/styles/growth/`, `src/i18n/en.ts`, `src/i18n/it.ts` | DONE | GS-016 |
+| Growth Studio introduction and screenshot placeholder | `README.md` | DONE | GS-016 |
+| Growth store schema (profiles, interventions, plans, items, assets, performance) | `src/server/growth/store.ts`, `src/types/growth.ts` | PLANNED | GS-020 |
+| One-shot migration of legacy suggestions and proposals | `src/server/growth/store.ts` | PLANNED | GS-021 |
+| Growth API routes and account-wide workspace summaries | `src/server/routes/growth.ts`, `src/api/growth.ts` | PLANNED | GS-022 |
+| Shared repository signal collection with SSRF-guarded sources | `src/server/growth/signals.ts` | PLANNED | GS-023 |
 | Interventions backlog with statuses and manual creation | `/growth/r/:owner/:repo/interventions` | PLANNED | GS-023 |
 | Content items list and drawer with copy actions | Interventions and Calendar panels | PLANNED | GS-024 |
 | Library panel: sources, profile (voice, audience, channels), pillars, cadence | `/growth/r/:owner/:repo/library` | PLANNED | GS-025 |
@@ -45,4 +47,4 @@ Authoritative inventory of Growth Studio capabilities. Statuses: `EXISTING`
 | Unified calendar with per-repository colours and filters | `/growth/calendar` | PLANNED | Phase 6 |
 | Multi-repository deconfliction | planner | PLANNED | Phase 6 |
 | Growth settings (defaults, timezone) | `/growth/settings` | PLANNED | Phase 6 |
-| README, CHANGELOG and screenshots | `README.md`, `CHANGELOG.md` | PLANNED | Phase 6 |
+| Release documentation, CHANGELOG and final screenshots | `README.md`, `CHANGELOG.md` | PLANNED | Phase 6 |

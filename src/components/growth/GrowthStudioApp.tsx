@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import {
   AuthRequiredClientError,
@@ -70,6 +70,13 @@ export function GrowthStudioApp() {
   const [repositoryLoadKey, setRepositoryLoadKey] = useState(0);
   const [theme, setTheme] = useState<GrowthTheme>(initialTheme);
   const [navigationOpen, setNavigationOpen] = useState(false);
+  const navigationToggleRef = useRef<HTMLButtonElement>(null);
+
+  const closeNavigation = useCallback(() => {
+    if (!navigationOpen) return;
+    setNavigationOpen(false);
+    requestAnimationFrame(() => navigationToggleRef.current?.focus());
+  }, [navigationOpen]);
 
   useEffect(() => {
     document.body.classList.add("mode-growth");
@@ -108,11 +115,11 @@ export function GrowthStudioApp() {
   useEffect(() => {
     if (!navigationOpen) return;
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") setNavigationOpen(false);
+      if (event.key === "Escape") closeNavigation();
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [navigationOpen]);
+  }, [closeNavigation, navigationOpen]);
 
   useEffect(() => {
     if (authState !== "authenticated" || accountsLoading) return;
@@ -195,6 +202,7 @@ export function GrowthStudioApp() {
         theme={theme}
         authLogin={authLogin}
         canLogout={authMode === "device"}
+        navigationToggleRef={navigationToggleRef}
         onOpenNavigation={() => setNavigationOpen(true)}
         onRepositoryChange={handleRepositoryChange}
         onThemeChange={() => setTheme(theme === "dark" ? "light" : theme === "light" ? "auto" : "dark")}
@@ -205,10 +213,14 @@ export function GrowthStudioApp() {
         className="growth-sidebar-backdrop"
         type="button"
         aria-label={t("growth.closeNavigation")}
-        onClick={() => setNavigationOpen(false)}
+        onClick={closeNavigation}
       />
       <div className="growth-shell-layout">
-        <GrowthSidebar selectedRepository={selectedRepository} onNavigate={() => setNavigationOpen(false)} />
+        <GrowthSidebar
+          open={navigationOpen}
+          selectedRepository={selectedRepository}
+          onNavigate={closeNavigation}
+        />
         <main className="growth-main">
           {repositoryError ? (
             <div className="growth-error" role="alert">

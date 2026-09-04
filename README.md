@@ -28,7 +28,15 @@ The dashboard pulls data from the GitHub REST and GraphQL APIs and organizes it 
 - **Alerts** — dedicated security-alert view for Dependabot and code scanning findings, so you can jump straight to the repos that need attention.
 - **Daily digest** — short per-repo summary of the day's movement (stars, forks, issues), with an executive summary you can copy as Markdown. Optionally augmented by an AI-generated narrative when an [AI provider](#ai-integration) is configured.
 - **Board** — Kanban-style view that groups issues into columns (Backlog, To-do, In progress, Ready, In review, etc.).
-- **Goals** — persistent repository targets for stars, forks, closed PRs, and release downloads, with progress tracking and activity-aware AI action plans (including social post ideas).
+- **Growth Studio** — repository-focused missions for stars, forks, closed PRs, and release downloads, with progress tracking and activity-aware AI action plans.
+
+## Growth Studio
+
+Growth Studio is Gitdeck's focused workspace for turning repository goals and signals into measurable growth work. It organizes each repository around missions today, with interventions, editorial planning, and review workflows being added within the same dedicated shell.
+
+Open **Growth Studio** from the main dashboard navigation. It launches `/growth` in a new browser window so the growth workspace can stay open alongside the dashboard.
+
+> **Screenshot placeholder:** Growth Studio home and repository workspace preview will be added before release.
 
 ### Per-repository view
 

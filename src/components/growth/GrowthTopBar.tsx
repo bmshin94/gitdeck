@@ -1,3 +1,4 @@
+import type { RefObject } from "react";
 import appLogo from "../../assets/app-logo-mark.svg";
 import { useI18n } from "../../i18n/I18nProvider";
 import type { GhRepo } from "../../types/github";
@@ -13,6 +14,7 @@ interface GrowthTopBarProps {
   theme: GrowthTheme;
   authLogin: string | null;
   canLogout: boolean;
+  navigationToggleRef: RefObject<HTMLButtonElement | null>;
   onOpenNavigation: () => void;
   onRepositoryChange: (repository: string) => void;
   onThemeChange: () => void;
@@ -27,6 +29,7 @@ export function GrowthTopBar({
   theme,
   authLogin,
   canLogout,
+  navigationToggleRef,
   onOpenNavigation,
   onRepositoryChange,
   onThemeChange,
@@ -40,6 +43,7 @@ export function GrowthTopBar({
     <header className="growth-topbar">
       <div className="growth-brand">
         <button
+          ref={navigationToggleRef}
           className="growth-navigation-toggle"
           type="button"
           aria-label={t("growth.openNavigation")}

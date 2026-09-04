@@ -1,9 +1,10 @@
-import type { ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { NavLink } from "react-router-dom";
 import { useI18n } from "../../i18n/I18nProvider";
 import { growthRepositoryPath } from "../../utils/growthRoutes";
 
 interface GrowthSidebarProps {
+  open: boolean;
   selectedRepository: string;
   onNavigate: () => void;
 }
@@ -15,8 +16,12 @@ interface NavigationItem {
   end?: boolean;
 }
 
-export function GrowthSidebar({ selectedRepository, onNavigate }: GrowthSidebarProps) {
+export function GrowthSidebar({ open, selectedRepository, onNavigate }: GrowthSidebarProps) {
   const { t } = useI18n();
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (open) closeButtonRef.current?.focus();
+  }, [open]);
   const workspaceBase = selectedRepository ? growthRepositoryPath(selectedRepository) : null;
 
   const globalItems: NavigationItem[] = [
@@ -39,7 +44,7 @@ export function GrowthSidebar({ selectedRepository, onNavigate }: GrowthSidebarP
     <aside className="growth-sidebar" aria-label={t("growth.navigation")}>
       <div className="growth-sidebar-header">
         <span>{t("growth.navigation")}</span>
-        <button type="button" aria-label={t("growth.closeNavigation")} onClick={onNavigate}>×</button>
+        <button ref={closeButtonRef} type="button" aria-label={t("growth.closeNavigation")} onClick={onNavigate}>×</button>
       </div>
       <nav className="growth-navigation" aria-label={t("growth.globalNavigation")}>
         {globalItems.map((item) => <GrowthNavLink key={item.to} item={item} onNavigate={onNavigate} />)}

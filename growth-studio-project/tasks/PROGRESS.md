@@ -19,7 +19,7 @@ phase-closing tasks) are appended with `PENDING` rows and matching task files.
 | GS-013 | COMPLETED | Added the repository-scoped Missions panel with locked goal creation, refreshable account-aware loading, and new-window AI preferences | VALIDATION OK; typecheck; 31 test files and 161 tests; production build; useGoals cancellation and refresh tests; git diff --check | 2026-09-04 |
 | GS-014 | COMPLETED | Added the Growth home with goal-backed repository cards, quick stats, fallback identities, and a remaining-repository starter picker | VALIDATION OK; typecheck; 32 test files and 164 tests; production build; Growth home summary and account-wide goal hook tests; git diff --check | 2026-09-04 |
 | GS-015 | COMPLETED | Added the repository workspace overview with mission progress, typed phase 2 activity summaries, upcoming content, and panel shortcuts | VALIDATION OK; typecheck; 34 test files and 168 tests; production build; overview rendering and goal summary tests; git diff --check | 2026-09-04 |
-| GS-016 | PENDING | — | — | — |
+| GS-016 | COMPLETED | Polished responsive shell and Missions layouts, hardened keyboard dismissal, refined Italian copy, documented Growth Studio, and aligned phase 2 tasks | VALIDATION OK; typecheck; 35 test files and 169 tests; production build; 60-screen Chromium audit at 1440, 1024, and 390 in dark and light themes with no overflow; keyboard focus and Escape checks; 715 locale keys matched; phase 2 files and PENDING rows verified; git diff --check | 2026-09-04 |
 | GS-020 | PENDING | — | — | — |
 | GS-021 | PENDING | — | — | — |
 | GS-022 | PENDING | — | — | — |

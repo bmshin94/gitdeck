@@ -62,10 +62,30 @@ export function RepositoryPicker({ repos, value, placeholder, onChange }: Reposi
             setOpen(true);
           }}
           onKeyDown={(event) => {
-            if (event.key === "ArrowDown") { event.preventDefault(); setOpen(true); setActiveIndex((index) => Math.min(index + 1, matches.length - 1)); }
-            if (event.key === "ArrowUp") { event.preventDefault(); setActiveIndex((index) => Math.max(index - 1, 0)); }
+            if (event.key === "ArrowDown") {
+              event.preventDefault();
+              if (!open) {
+                setOpen(true);
+                setActiveIndex(0);
+              } else {
+                setActiveIndex((index) => Math.min(index + 1, matches.length - 1));
+              }
+            }
+            if (event.key === "ArrowUp") {
+              event.preventDefault();
+              if (!open) {
+                setOpen(true);
+                setActiveIndex(Math.max(matches.length - 1, 0));
+              } else {
+                setActiveIndex((index) => Math.max(index - 1, 0));
+              }
+            }
             if (event.key === "Enter" && open && matches[activeIndex]) { event.preventDefault(); select(matches[activeIndex]); }
-            if (event.key === "Escape") setOpen(false);
+            if (event.key === "Escape" && open) {
+              event.preventDefault();
+              event.stopPropagation();
+              setOpen(false);
+            }
           }}
         />
         <span className="repository-picker-chevron">⌄</span>
@@ -79,6 +99,7 @@ export function RepositoryPicker({ repos, value, placeholder, onChange }: Reposi
             <button
               type="button"
               role="option"
+              tabIndex={-1}
               aria-selected={repo.nameWithOwner === value}
               id={`${optionsId}-option-${index}`}
               className={index === activeIndex ? "active" : ""}
