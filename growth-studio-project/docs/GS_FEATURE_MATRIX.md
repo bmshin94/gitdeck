@@ -29,16 +29,19 @@ Authoritative inventory of Growth Studio capabilities. Statuses: `EXISTING`
 | Interventions backlog with statuses, AI and fallback generation, dedupe, manual creation, filters, and linked content | `src/components/growth/GrowthInterventions.tsx`, `src/server/routes/growth.ts`, `src/server/growth/store.ts`, `/growth/r/:owner/:repo/interventions` | DONE | GS-023 |
 | Content items list and drawer with editing, copy, scheduling, and publication actions | `src/components/growth/ContentItemDrawer.tsx`, `src/components/growth/GrowthInterventions.tsx`, `/api/growth/content/draft`; later reused by Calendar | DONE | GS-024 |
 | Library panel: sources, profile (voice, audience, channels), pillars, cadence | `src/components/growth/GrowthLibrary.tsx`, `src/utils/growth/profile.ts`, `/growth/r/:owner/:repo/library`, `/api/growth/profiles/:owner/:repo` | DONE | GS-025 |
-| Deterministic slot builder from cadence, pillars, posting windows | `utils/growth/planSlots.ts` | PLANNED | Phase 3 |
-| AI planner assigning angles to slots | `server/growth/planner.ts` | PLANNED | Phase 3 |
-| AI drafter producing media-aware drafts per slot | `server/growth/drafter.ts` | PLANNED | Phase 3 |
-| Calendar month and week views with drag and drop | `components/growth/calendar/` | PLANNED | Phase 3 |
-| Queue "this week" with copy and mark published | Calendar panel | PLANNED | Phase 3 |
-| ICS export | `/api/growth/calendar.ics` | PLANNED | Phase 3 |
+| Phase 2 closure and phase 3 task authoring | `growth-studio-project/tasks/GS-030.md` through `GS-038.md`, `growth-studio-project/tasks/PROGRESS.md`, `growth-studio-project/docs/GS_DECISIONS.md` | DONE | GS-026 |
+| Deterministic slot builder from cadence, pillars, posting windows | `src/utils/growth/planSlots.ts`, `tests/utils/growth/planSlots.test.ts` | PLANNED | GS-030 |
+| AI planner assigning angles to slots | `src/server/growth/planner.ts`, `/api/growth/plans`, `/api/growth/plans/generate` | PLANNED | GS-031 |
+| AI drafter producing media-aware drafts per slot | `src/server/growth/drafter.ts`, `src/utils/growth/mediaCandidates.ts`, `/api/growth/content/:id/draft` | PLANNED | GS-032 |
+| Calendar month and week views with drag and drop | `src/components/growth/calendar/`, `src/utils/growth/calendar.ts`, `/growth/r/:owner/:repo/calendar` | PLANNED | GS-033 and GS-034 |
+| Queue "this week" with copy and mark published | `src/components/growth/calendar/GrowthQueue.tsx`, `/growth/r/:owner/:repo/calendar?view=queue` | PLANNED | GS-035 |
+| ICS export | `src/utils/growth/ics.ts`, `/api/growth/calendar.ics` | PLANNED | GS-036 |
+| Content plan create, regenerate, and archive management | `src/components/growth/calendar/GrowthPlanManager.tsx`, `/api/growth/plans/:id/regenerate`, `/api/growth/plans/:id/archive` | PLANNED | GS-037 |
 | Assets library with uploads and imports from README and web sources | `server/growth/assets.ts` | PLANNED | Phase 4 |
 | Generated SVG cards (release, milestone, stats, quote, what's new) | `server/growth/cards.ts` | PLANNED | Phase 4 |
 | Client rasterization, copy image to clipboard, download | `utils/growth/rasterize.ts` | PLANNED | Phase 4 |
-| Media gate: `ready` requires media | `src/server/growth/store.ts`, `src/components/growth/ContentItemDrawer.tsx`; media attachment UI planned for Phase 4 | IN_PROGRESS | GS-020, GS-024, and Phase 4 |
+| Media gate: `ready`, `scheduled`, and `published` require media | `src/server/growth/store.ts`, `src/components/growth/ContentItemDrawer.tsx`, `tests/server/growthStore.test.ts`, `tests/server/growthRoutes.test.ts` | DONE | GS-020 and GS-024 |
+| Media attachment and removal UI | `src/components/growth/ContentItemDrawer.tsx`, asset library | PLANNED | Phase 4 |
 | Opportunity rules producing interventions | `utils/growth/opportunityRules.ts`, `server/growth/rules.ts` | PLANNED | Phase 5 |
 | Attribution of published items to metric deltas (48h, 7d) | `server/growth/attribution.ts` | PLANNED | Phase 5 |
 | Weekly Growth Review | `server/growth/review.ts`, `/growth/review` | PLANNED | Phase 5 |

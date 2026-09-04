@@ -321,7 +321,7 @@ next phase's task files and `PENDING` ledger rows when they do not exist yet.
 | 0 Governance | GS-000..GS-003 | baseline, inventory verification, decisions, gate baseline |
 | 1 Shell | GS-010..GS-016 | `/growth` routing, shell chrome, main-menu link, `/goals` redirect, Missions panel, home and workspace overview |
 | 2 Data model | GS-020..GS-026 | growth store and migration, API routes, interventions backlog UI, content items UI, profile and library panel, phase 3 authoring |
-| 3 Editorial plan | GS-030..GS-03x | pillars and cadence UI, slot builder, AI planner, drafter, calendar views, queue, mark published, ICS |
+| 3 Editorial plan | GS-030..GS-038 | slot builder, AI planner, media-aware drafter, calendar views, queue, mark published, ICS, plan management |
 | 4 Media | GS-040..GS-04x | assets library, imports from README and web sources, card templates, client rasterization and clipboard copy, media gate for `ready` |
 | 5 Loop | GS-050..GS-05x | opportunity rules, attribution, Growth Review, evergreen recycling, plan re-weighting |
 | 6 Unified and release | GS-060..GS-06x | unified calendar, multi-repository deconfliction, growth settings, README and CHANGELOG, final QA |
