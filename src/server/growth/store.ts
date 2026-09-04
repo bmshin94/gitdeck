@@ -27,6 +27,7 @@ import type {
   GrowthWorkspaceSummary,
   UpdateGrowthContentItemInput,
   UpdateGrowthInterventionInput,
+  UpsertGrowthRuleInterventionInput,
 } from "../../types/growth";
 import {
   GOAL_PROPOSAL_FORMATS,
@@ -490,6 +491,46 @@ export function upsertGrowthIntervention(input: CreateGrowthInterventionInput): 
        goal_id = ?, category = ?, title = ?, action = ?, dedupe_key = ?, updated_at = ?
      WHERE account_id = ? AND id = ?`,
     [goalId, input.category, input.title, input.action, dedupeKey, updatedAt, input.accountId, existing.id],
+  );
+  return getGrowthIntervention(input.accountId, existing.id)!;
+}
+
+/** Upserts a deterministic rule action without touching non-rule rows or resetting backlog decisions. */
+export function upsertGrowthRuleIntervention(input: UpsertGrowthRuleInterventionInput): GrowthIntervention {
+  ensureGrowthAccountMigration(input.accountId);
+  const ruleKey = input.ruleKey.trim();
+  if (!ruleKey) throw new GrowthStoreValidationError("Rule key must not be empty.");
+  const existing = get<GrowthInterventionRow>(
+    `SELECT * FROM growth_interventions
+     WHERE account_id = ? AND repository = ? AND origin = 'rule' AND rule_key = ?
+     ORDER BY created_at, id LIMIT 1`,
+    [input.accountId, input.repository, ruleKey],
+  );
+  const dedupeKey = `${input.repository}:rule:${ruleKey}`;
+  if (!existing) {
+    return createGrowthIntervention({
+      ...input,
+      goalId: input.goalId ?? null,
+      origin: "rule",
+      dedupeKey,
+      status: "proposed",
+    });
+  }
+
+  run(
+    `UPDATE growth_interventions SET
+       goal_id = ?, category = ?, title = ?, action = ?, dedupe_key = ?, updated_at = ?
+     WHERE account_id = ? AND id = ? AND origin = 'rule'`,
+    [
+      input.goalId ?? null,
+      input.category,
+      input.title,
+      input.action,
+      dedupeKey,
+      new Date().toISOString(),
+      input.accountId,
+      existing.id,
+    ],
   );
   return getGrowthIntervention(input.accountId, existing.id)!;
 }

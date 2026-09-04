@@ -118,6 +118,16 @@ export interface GrowthInterventionFilters {
   status?: GrowthInterventionStatus;
 }
 
+export interface UpsertGrowthRuleInterventionInput {
+  accountId: string;
+  repository: string;
+  goalId?: string | null;
+  category: GrowthInterventionCategory;
+  title: string;
+  action: string;
+  ruleKey: string;
+}
+
 export type UpdateGrowthInterventionInput = Partial<Pick<
   GrowthIntervention,
   "goalId" | "category" | "title" | "action" | "dedupeKey" | "status"
@@ -455,6 +465,28 @@ export interface GrowthInterventionData {
 
 export interface GrowthGeneratedInterventionsData extends GrowthInterventionsData {
   aiEnabled: boolean;
+}
+
+export interface GrowthScannedInterventionsData extends GrowthInterventionsData {
+  scannedAt: string;
+}
+
+export interface GrowthMergedPullRequestSignal {
+  number: number;
+  title: string;
+  url: string;
+  mergedAt: string;
+  additions: number;
+  deletions: number;
+  changedFiles: number;
+}
+
+export interface GrowthOpportunity {
+  ruleKey: string;
+  goalId: string | null;
+  category: GrowthInterventionCategory;
+  title: string;
+  action: string;
 }
 
 export interface GrowthContentPlansData {

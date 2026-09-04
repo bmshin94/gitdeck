@@ -25,7 +25,7 @@ Authoritative inventory of Growth Studio capabilities. Statuses: `EXISTING`
 | Growth store schema (profiles, interventions, plans, items, assets, performance) | `src/server/growth/store.ts`, `src/types/growth.ts`, `src/utils/growth/profileDefaults.ts`, `tests/server/growthStore.test.ts` | DONE | GS-020 |
 | One-shot migration of legacy suggestions and proposals | `src/server/growth/store.ts`, `src/utils/growth/legacySuggestions.ts`, `tests/server/growthStore.test.ts` | DONE | GS-021 |
 | Growth API routes and account-wide workspace summaries | `src/server/routes/growth.ts`, `src/server/growth/store.ts`, `src/api/growth.ts`, `tests/server/growthRoutes.test.ts` | DONE | GS-022 |
-| Shared repository signal collection with SSRF-guarded sources | `src/server/growth/signals.ts`, `src/server/snapshots.ts`, `tests/server/growthSignals.test.ts` | DONE | GS-023 |
+| Shared repository signal collection with SSRF-guarded sources | `src/server/growth/signals.ts`, `src/server/snapshots.ts`, `tests/server/growthSignals.test.ts` | DONE | GS-023 and GS-050 |
 | Interventions backlog with statuses, AI and fallback generation, dedupe, manual creation, filters, and linked content | `src/components/growth/GrowthInterventions.tsx`, `src/server/routes/growth.ts`, `src/server/growth/store.ts`, `/growth/r/:owner/:repo/interventions` | DONE | GS-023 |
 | Content items list and drawer with editing, copy, scheduling, and publication actions | `src/components/growth/ContentItemDrawer.tsx`, `src/components/growth/GrowthInterventions.tsx`, `/api/growth/content/draft`; later reused by Calendar | DONE | GS-024 |
 | Library panel: sources, profile (voice, audience, channels), pillars, cadence | `src/components/growth/GrowthLibrary.tsx`, `src/utils/growth/profile.ts`, `/growth/r/:owner/:repo/library`, `/api/growth/profiles/:owner/:repo` | DONE | GS-025 |
@@ -47,11 +47,11 @@ Authoritative inventory of Growth Studio capabilities. Statuses: `EXISTING`
 | Media gate: `ready`, `scheduled`, and `published` require account-valid media | `src/server/growth/store.ts`, `src/server/routes/growth.ts`, `src/components/growth/ContentItemDrawer.tsx`, `tests/server/growthStore.test.ts`, `tests/server/growthRoutes.test.ts` | DONE | GS-020, GS-024, and GS-046 |
 | Media attachment and removal UI with asset ownership validation | `src/components/growth/GrowthMediaPicker.tsx`, `src/components/growth/ContentItemDrawer.tsx`, `src/utils/growth/contentMedia.ts`, `src/server/growth/store.ts`, `src/server/routes/growth.ts` | DONE | GS-046 |
 | Phase 4 closure and phase 5 task authoring | `growth-studio-project/tasks/GS-050.md` through `GS-057.md`, `growth-studio-project/tasks/PROGRESS.md`, `growth-studio-project/docs/GS_DECISIONS.md` | DONE | GS-047 |
-| Opportunity rules producing interventions and explicit backlog scanning | `src/utils/growth/opportunityRules.ts`, `src/server/growth/rules.ts`, `src/components/growth/GrowthInterventions.tsx` | PLANNED | GS-050 and GS-051 |
+| Opportunity rules producing interventions and explicit backlog scanning | `src/utils/growth/opportunityRules.ts`, `src/server/growth/rules.ts`, `src/components/growth/GrowthInterventions.tsx` | IN_PROGRESS | GS-050 and GS-051 |
 | Attribution of published items to snapshot deltas at 48 hours and 7 days | `src/utils/growth/attribution.ts`, `src/server/growth/attribution.ts`, `src/server/growth/store.ts`, `/api/growth/performance` | PLANNED | GS-052 |
 | Channel and pillar performance summaries | `src/utils/growth/performanceSummary.ts`, `src/server/growth/performance.ts`, `/api/growth/performance/summary` | PLANNED | GS-053 |
 | Repository and global weekly Growth Review | `src/utils/growth/weeklyReview.ts`, `src/server/growth/review.ts`, `src/components/growth/GrowthReview.tsx`, `/growth/review` | PLANNED | GS-054 |
-| Evergreen recycling into deduplicated ideas | `src/utils/growth/evergreen.ts`, `src/server/growth/recycling.ts`, `src/components/growth/GrowthInterventions.tsx` | PLANNED | GS-050 and GS-055 |
+| Evergreen recycling into deduplicated ideas | `src/utils/growth/evergreen.ts`, `src/server/growth/recycling.ts`, `src/components/growth/GrowthInterventions.tsx` | IN_PROGRESS | GS-050 and GS-055 |
 | Bounded plan re-weighting from performance | `src/utils/growth/performanceWeights.ts`, `src/server/growth/planner.ts` | PLANNED | GS-056 |
 | Unified calendar with per-repository colours and filters | `/growth/calendar` | PLANNED | Phase 6 |
 | Multi-repository deconfliction | planner | PLANNED | Phase 6 |

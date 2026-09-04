@@ -166,6 +166,45 @@ describe("Growth Studio store", () => {
     expect(store.listGrowthInterventions("account-a", { status: "accepted" })).toHaveLength(2);
   });
 
+  it("upserts rule interventions by stable key without crossing accounts or changing decisions", () => {
+    const first = store.upsertGrowthRuleIntervention({
+      accountId: "account-a",
+      repository: "owner/repo",
+      category: "marketing",
+      title: "Share release v1",
+      action: "Publish the release follow-up.",
+      ruleKey: "release:v1",
+    });
+    store.updateGrowthInterventionStatus("account-a", first.id, "done");
+    const repeated = store.upsertGrowthRuleIntervention({
+      accountId: "account-a",
+      repository: "owner/repo",
+      category: "product",
+      title: "Share the v1 release",
+      action: "Publish updated release copy.",
+      ruleKey: "release:v1",
+    });
+    const otherAccount = store.upsertGrowthRuleIntervention({
+      accountId: "account-b",
+      repository: "owner/repo",
+      category: "marketing",
+      title: "Share release v1",
+      action: "Publish the release follow-up.",
+      ruleKey: "release:v1",
+    });
+
+    expect(repeated).toMatchObject({
+      id: first.id,
+      status: "done",
+      origin: "rule",
+      category: "product",
+      action: "Publish updated release copy.",
+    });
+    expect(otherAccount.id).not.toBe(first.id);
+    expect(store.listGrowthInterventions("account-a", { repository: "owner/repo" })).toHaveLength(1);
+    expect(store.listGrowthInterventions("account-b", { repository: "owner/repo" })).toHaveLength(1);
+  });
+
   it("creates, reads, and stably lists assets in one account and repository", () => {
     const first = store.createGrowthAsset({
       accountId: "account-a",

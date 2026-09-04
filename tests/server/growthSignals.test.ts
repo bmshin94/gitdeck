@@ -24,7 +24,11 @@ vi.mock("../../src/server/snapshots", () => ({
   getRepositorySnapshotHistory: mocks.getRepositorySnapshotHistory,
 }));
 
-const { collectRepositorySignals, fetchWebsiteSignal } = await import("../../src/server/growth/signals");
+const {
+  collectRepositorySignals,
+  fetchRecentlyMergedPullRequests,
+  fetchWebsiteSignal,
+} = await import("../../src/server/growth/signals");
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -64,6 +68,29 @@ beforeEach(() => {
     { date: "2026-09-04", stars: 95, forks: 8 },
   ]);
   mocks.restApi.mockImplementation(async (path: string) => {
+    if (path.includes("/pulls?")) {
+      return {
+        ok: true,
+        data: [{
+          number: 42,
+          merged_at: "2026-09-03T00:00:00Z",
+        }],
+      };
+    }
+    if (path.endsWith("/pulls/42")) {
+      return {
+        ok: true,
+        data: {
+          number: 42,
+          title: "Ship launch mode",
+          html_url: "https://github.com/acme/rocket/pull/42",
+          merged_at: "2026-09-03T00:00:00Z",
+          additions: 480,
+          deletions: 20,
+          changed_files: 12,
+        },
+      };
+    }
     if (path.endsWith("/readme")) {
       return {
         ok: true,
@@ -95,11 +122,43 @@ describe("Growth repository signals", () => {
     expect(signals.additionalSources).toHaveLength(1);
     expect(signals.recentCommits[0].sha).toBe("abc");
     expect(signals.starHistory).toHaveLength(2);
+    expect(signals.mergedPullRequests).toEqual([
+      expect.objectContaining({ number: 42, additions: 480, deletions: 20, changedFiles: 12 }),
+    ]);
     expect(signals.goals).toEqual([
-      expect.objectContaining({ id: "goal-1", percentage: 50, completed: false, overdue: false }),
+      expect.objectContaining({
+        id: "goal-1",
+        createdAt: "2026-09-01T00:00:00Z",
+        percentage: 50,
+        completed: false,
+        overdue: false,
+      }),
     ]);
     expect(mocks.getRepositoryContentSources).toHaveBeenCalledWith("account-a", "acme/rocket");
     expect(mocks.restApi).toHaveBeenCalledWith("/repos/acme/rocket/commits?per_page=20");
+    expect(mocks.restApi).toHaveBeenCalledWith(
+      "/repos/acme/rocket/pulls?state=closed&sort=updated&direction=desc&per_page=20",
+    );
+    expect(mocks.restApi).toHaveBeenCalledWith("/repos/acme/rocket/pulls/42");
+  });
+
+  it("bounds merged pull-request detail reads at twenty and fails closed when details are unavailable", async () => {
+    mocks.restApi.mockImplementation(async (path: string) => {
+      if (path.includes("/pulls?")) {
+        return {
+          ok: true,
+          data: Array.from({ length: 25 }, (_, index) => ({
+            number: index + 1,
+            merged_at: "2026-09-03T00:00:00Z",
+          })),
+        };
+      }
+      if (path.includes("/pulls/")) return { ok: false, error: "unavailable" };
+      return { ok: false, error: "not found" };
+    });
+
+    await expect(fetchRecentlyMergedPullRequests("acme/rocket")).resolves.toEqual([]);
+    expect(mocks.restApi.mock.calls.filter(([path]) => /\/pulls\/\d+$/.test(path))).toHaveLength(20);
   });
 
   it("rejects local website sources before making a request", async () => {

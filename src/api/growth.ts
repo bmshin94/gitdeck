@@ -24,6 +24,7 @@ import type {
   GrowthProfileData,
   GrowthProfileInput,
   GrowthRegeneratedContentPlanData,
+  GrowthScannedInterventionsData,
   GrowthWorkspaceData,
   GrowthWorkspacesData,
   GrowthWorkspaceSummary,
@@ -230,6 +231,14 @@ export async function generateGrowthInterventions(repository: string, goalId?: s
   return requestJson<GrowthGeneratedInterventionsData>(
     "/api/growth/interventions/generate",
     jsonRequest("POST", { repository, ...(goalId ? { goalId } : {}) }),
+  );
+}
+
+export async function scanGrowthInterventions(repository: string, signal?: AbortSignal) {
+  if (!parseRepositoryName(repository)) throw new Error("invalid repository");
+  return requestJson<GrowthScannedInterventionsData>(
+    "/api/growth/interventions/scan",
+    jsonRequest("POST", { repository }, signal),
   );
 }
 

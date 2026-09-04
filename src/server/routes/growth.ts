@@ -50,6 +50,7 @@ import {
   draftGrowthContentItem,
   GrowthContentDraftConflictError,
 } from "../growth/drafter";
+import { scanRepositoryGrowthOpportunities } from "../growth/rules";
 import { parseJsonBody, send, sendJson } from "../http";
 import type { AppRouter, RouteContext } from "../router";
 import {
@@ -325,6 +326,25 @@ async function generateInterventions(ctx: RouteContext): Promise<void> {
     });
   } catch (error) {
     sendJson(ctx.res, 502, { ok: false, error: (error as Error).message });
+  }
+}
+
+async function scanInterventions(ctx: RouteContext): Promise<void> {
+  const account = await requireAccount(ctx);
+  if (!account) return;
+  const body = await parseJsonBody<Record<string, unknown>>(ctx.req, ctx.res);
+  if (!body) return;
+  if (!isRecord(body) || !hasOnlyKeys(body, ["repository"])) {
+    return badRequest(ctx, "invalid intervention scan body");
+  }
+  const repository = repositoryFromValue(body.repository);
+  if (!repository) return badRequest(ctx, "invalid repository");
+
+  try {
+    const result = await scanRepositoryGrowthOpportunities(account.id, repository);
+    sendJson(ctx.res, 200, { ok: true, ...result });
+  } catch (error) {
+    sendJson(ctx.res, 500, { ok: false, error: (error as Error).message });
   }
 }
 
@@ -1051,6 +1071,7 @@ export function registerGrowthRoutes(router: AppRouter): void {
   router.get("/api/growth/interventions", interventions);
   router.post("/api/growth/interventions", interventions);
   router.post("/api/growth/interventions/generate", generateInterventions);
+  router.post("/api/growth/interventions/scan", scanInterventions);
   router.on("PATCH", "/api/growth/interventions/:id", patchIntervention);
   router.get("/api/growth/assets", assets);
   router.post("/api/growth/assets", assets);

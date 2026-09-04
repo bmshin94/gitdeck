@@ -155,6 +155,7 @@ beforeEach(async () => {
     repositoryMetadata: null,
     openIssues: [],
     openPullRequests: [],
+    mergedPullRequests: [],
     releases: [],
     readme: null,
     additionalSources: [],
@@ -853,6 +854,61 @@ describe("Growth API routes", () => {
       repository: "acme/other",
       goalId: goal.id,
     })).status).toBe(400);
+  });
+
+  it("scans deterministic interventions with strict validation, account scope, and status preservation", async () => {
+    expect((await dispatch("POST", "/api/growth/interventions/scan", {
+      repository: "invalid",
+    })).status).toBe(400);
+    expect((await dispatch("POST", "/api/growth/interventions/scan", {
+      repository: "acme/repo",
+      unknown: true,
+    })).status).toBe(400);
+
+    state.activeAccountId = null;
+    expect((await dispatch("POST", "/api/growth/interventions/scan", {
+      repository: "acme/repo",
+    })).status).toBe(401);
+    expect(state.collectSignals).not.toHaveBeenCalled();
+
+    state.activeAccountId = "account-a";
+    state.collectSignals.mockResolvedValue({
+      generatedOn: "2026-09-10",
+      repository: "acme/repo",
+      repositoryMetadata: null,
+      openIssues: [],
+      openPullRequests: [],
+      mergedPullRequests: [],
+      releases: [{
+        tag_name: "v1.0.0",
+        html_url: "https://github.com/acme/repo/releases/tag/v1.0.0",
+        published_at: new Date(Date.now() - 4 * 86_400_000).toISOString(),
+      }],
+      readme: null,
+      additionalSources: [],
+      recentCommits: [],
+      starHistory: [],
+      goals: [],
+    });
+    const first = await dispatch("POST", "/api/growth/interventions/scan", {
+      repository: "acme/repo",
+    });
+    expect(first.status).toBe(200);
+    expect(first.body.scannedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    expect(first.body.interventions).toEqual([
+      expect.objectContaining({ origin: "rule", ruleKey: "release:v1.0.0", status: "proposed" }),
+    ]);
+    expect(state.collectSignals).toHaveBeenCalledWith("account-a", "acme/repo");
+    const id = first.body.interventions[0].id as string;
+    await dispatch("PATCH", `/api/growth/interventions/${id}`, { status: "accepted" });
+    const repeated = await dispatch("POST", "/api/growth/interventions/scan", { repository: "acme/repo" });
+    expect(repeated.body.interventions[0]).toMatchObject({ id, status: "accepted" });
+    expect(growthStore.listGrowthInterventions("account-a", { repository: "acme/repo" })).toHaveLength(1);
+
+    state.activeAccountId = "account-b";
+    const otherAccount = await dispatch("POST", "/api/growth/interventions/scan", { repository: "acme/repo" });
+    expect(otherAccount.body.interventions[0].id).not.toBe(id);
+    expect(otherAccount.body.interventions[0].accountId).toBe("account-b");
   });
 
   it("deduplicates repeated manual interventions without resetting their status", async () => {

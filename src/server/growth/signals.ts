@@ -5,6 +5,7 @@ import {
   GROWTH_ASSET_MIME_TYPES,
   MAX_GROWTH_ASSET_BYTES,
   type GrowthAssetMimeType,
+  type GrowthMergedPullRequestSignal,
 } from "../../types/growth";
 import type { GoalContentSource, GoalMetric } from "../../types/goals";
 import { calculateGoalProgress } from "../../utils/goals";
@@ -35,6 +36,7 @@ export interface GrowthGoalSignal {
   current: number;
   target: number;
   deadline: string;
+  createdAt: string;
   percentage: number;
   completed: boolean;
   overdue: boolean;
@@ -46,6 +48,7 @@ export interface GrowthRepositorySignals {
   repositoryMetadata: GhRepo | null;
   openIssues: GhIssue[];
   openPullRequests: GhPullRequest[];
+  mergedPullRequests: GrowthMergedPullRequestSignal[];
   releases: GrowthReleaseSignal[];
   readme: GrowthReadmeSignal | null;
   additionalSources: unknown[];
@@ -286,6 +289,68 @@ async function fetchRecentCommits(repository: string): Promise<RepoCommit[]> {
   }
 }
 
+interface PullRequestRestValue {
+  number?: unknown;
+  title?: unknown;
+  html_url?: unknown;
+  merged_at?: unknown;
+  additions?: unknown;
+  deletions?: unknown;
+  changed_files?: unknown;
+}
+
+function mergedPullRequestFromRest(value: PullRequestRestValue): GrowthMergedPullRequestSignal | null {
+  if (
+    !Number.isSafeInteger(value.number)
+    || (value.number as number) <= 0
+    || typeof value.title !== "string"
+    || !value.title.trim()
+    || typeof value.html_url !== "string"
+    || !value.html_url.trim()
+    || typeof value.merged_at !== "string"
+    || !value.merged_at.trim()
+    || !Number.isSafeInteger(value.additions)
+    || (value.additions as number) < 0
+    || !Number.isSafeInteger(value.deletions)
+    || (value.deletions as number) < 0
+    || !Number.isSafeInteger(value.changed_files)
+    || (value.changed_files as number) < 0
+  ) return null;
+  return {
+    number: value.number as number,
+    title: value.title.trim(),
+    url: value.html_url.trim(),
+    mergedAt: value.merged_at,
+    additions: value.additions as number,
+    deletions: value.deletions as number,
+    changedFiles: value.changed_files as number,
+  };
+}
+
+/** Fetches bounded merged pull-request details needed by deterministic opportunity rules. */
+export async function fetchRecentlyMergedPullRequests(repository: string): Promise<GrowthMergedPullRequestSignal[]> {
+  try {
+    const result = await restApi<PullRequestRestValue[]>(
+      `/repos/${repository}/pulls?state=closed&sort=updated&direction=desc&per_page=20`,
+    );
+    if (!result.ok || !Array.isArray(result.data)) return [];
+    const merged = result.data
+      .filter((pullRequest) => typeof pullRequest?.merged_at === "string" && Number.isSafeInteger(pullRequest.number))
+      .slice(0, 20);
+    const details = await Promise.all(merged.map(async (pullRequest) => {
+      try {
+        const detail = await restApi<PullRequestRestValue>(`/repos/${repository}/pulls/${pullRequest.number}`);
+        return detail.ok && detail.data ? mergedPullRequestFromRest(detail.data) : null;
+      } catch {
+        return null;
+      }
+    }));
+    return details.filter((pullRequest): pullRequest is GrowthMergedPullRequestSignal => pullRequest !== null);
+  } catch {
+    return [];
+  }
+}
+
 /** Collects the account-scoped repository evidence shared by Growth Studio AI consumers. */
 export async function collectRepositorySignals(
   accountId: string,
@@ -293,7 +358,17 @@ export async function collectRepositorySignals(
   sources = getRepositoryContentSources(accountId, repository),
 ): Promise<GrowthRepositorySignals> {
   const repositoryGoals = listGoals(accountId).filter((goal) => goal.repository === repository);
-  const [issuesResult, prsResult, reposResult, releases, readme, additionalSources, recentCommits, starHistory] = await Promise.all([
+  const [
+    issuesResult,
+    prsResult,
+    reposResult,
+    releases,
+    readme,
+    additionalSources,
+    recentCommits,
+    starHistory,
+    mergedPullRequests,
+  ] = await Promise.all([
     getIssuesCached(false),
     getPullRequestsCached(false),
     getReposCached(false),
@@ -302,6 +377,7 @@ export async function collectRepositorySignals(
     fetchAdditionalSourceSignals(sources),
     fetchRecentCommits(repository),
     getRepositorySnapshotHistory(repository),
+    fetchRecentlyMergedPullRequests(repository),
   ]);
   const openIssues = issuesResult.ok
     ? issuesResult.issues.filter((item) => item.repository.nameWithOwner === repository)
@@ -320,6 +396,7 @@ export async function collectRepositorySignals(
       current: goal.currentValue,
       target: goal.targetValue,
       deadline: goal.deadline,
+      createdAt: goal.createdAt,
       percentage: progress.percentage,
       completed: progress.completed,
       overdue: progress.overdue,
@@ -332,6 +409,7 @@ export async function collectRepositorySignals(
     repositoryMetadata,
     openIssues,
     openPullRequests,
+    mergedPullRequests,
     releases,
     readme,
     additionalSources,
