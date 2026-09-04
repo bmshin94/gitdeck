@@ -40,7 +40,7 @@ phase-closing tasks) are appended with `PENDING` rows and matching task files.
 | GS-041 | COMPLETED | Added the account-aware Library asset grid with validated image and video uploads, browser dimensions, private previews, and responsive states | VALIDATION OK; typecheck; 59 test files and 312 tests; production build; account and repository cancellation, MIME and size validation, upload refresh, authenticated previews, and 1440px and 390px layout tests; git diff --check | 2026-09-04 |
 | GS-042 | COMPLETED | Added idempotent README and configured-source media imports with bounded SSRF-guarded verification, authenticated proxy previews, and account-aware Library controls | VALIDATION OK; typecheck; 60 test files and 321 tests; production build; URL normalization, account scope, forged URL, private address, redirect, size, MIME, proxy header, duplicate, stale request, and UI state tests; git diff --check | 2026-09-04 |
 | GS-043 | COMPLETED | Added five validated account-scoped SVG card templates with safe private rendering and a localized Library creator | VALIDATION OK; typecheck; 62 test files and 338 tests; production build; deterministic rendering, XML injection, bounds, persistence, account scope, malformed metadata, and creator state tests; git diff --check | 2026-09-04 |
-| GS-044 | PENDING | — | — | — |
+| GS-044 | COMPLETED | Added bounded 2x browser PNG rasterization with SVG sizing, safe filenames, explicit backgrounds, typed failures, and object URL cleanup | VALIDATION OK; typecheck; 63 test files and 353 tests; production build; SVG, raster, sizing, cap, filename, error, and cleanup tests; git diff --check | 2026-09-04 |
 | GS-045 | PENDING | — | — | — |
 | GS-046 | PENDING | — | — | — |
 | GS-047 | PENDING | — | — | — |
