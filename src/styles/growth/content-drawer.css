@@ -264,10 +264,59 @@
   line-height: 1.4;
 }
 
+.mode-growth .growth-media-actions {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.mode-growth .growth-media-action-buttons {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.mode-growth .growth-media-action-buttons .btn {
+  min-height: 27px;
+  padding: 5px 7px;
+  font-size: 8.5px;
+}
+
+.mode-growth .growth-media-action-buttons a,
 .mode-growth .growth-content-media-list article a,
 .mode-growth .growth-content-sources a {
   overflow-wrap: anywhere;
   color: var(--accent);
+}
+
+.mode-growth .growth-media-action-buttons a {
+  font-size: 9px;
+}
+
+.mode-growth .growth-media-action-message {
+  margin: 0;
+  padding: 5px 6px;
+  border: 1px solid var(--border-soft);
+  border-radius: 6px;
+  font-size: 8.5px;
+  line-height: 1.4;
+}
+
+.mode-growth .growth-media-action-message.success {
+  color: var(--success);
+  background: color-mix(in srgb, var(--success) 8%, var(--panel));
+}
+
+.mode-growth .growth-media-action-message.fallback {
+  color: var(--warn);
+  background: color-mix(in srgb, var(--warn) 8%, var(--panel));
+}
+
+.mode-growth .growth-media-action-message.error {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 8%, var(--panel));
+  border-color: color-mix(in srgb, var(--danger) 34%, var(--border));
 }
 
 .mode-growth .growth-content-sources {

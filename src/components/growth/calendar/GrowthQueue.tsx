@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import {
+  buildGrowthAssetFileUrl,
   draftGrowthContentItem,
   markGrowthContentPublished,
 } from "../../../api/growth";
 import { useI18n } from "../../../i18n/I18nProvider";
 import type { TranslationKey } from "../../../i18n/translations";
-import type { GrowthContentItem } from "../../../types/growth";
+import type { GrowthContentItem, GrowthContentMedia } from "../../../types/growth";
 import { formatXThreadForCopy } from "../../../utils/goals";
+import { GrowthMediaActions } from "../GrowthMediaActions";
 import {
   GROWTH_QUEUE_SECTIONS,
   groupGrowthQueueItems,
@@ -35,6 +37,10 @@ const sectionKeys: Record<GrowthQueueSection, TranslationKey> = {
 
 function queueItemTitle(item: GrowthContentItem): string {
   return item.title || item.angle || item.format;
+}
+
+function mediaPreviewUrl(media: GrowthContentMedia): string | undefined {
+  return media.assetId ? buildGrowthAssetFileUrl(media.assetId) : media.url;
 }
 
 function QueueCopyButton({ label, text }: { label: string; text: string }) {
@@ -156,14 +162,19 @@ function GrowthQueueItem({ item, timezone, pillarLabel, onOpen, onUpdate }: Grow
 
       {item.media.length ? (
         <div className="growth-queue-media" aria-label={t("growth.contentMediaTitle")}>
-          {item.media.map((media, index) => (
-            <figure key={`${media.assetId ?? media.url ?? "media"}-${index}`}>
-              {media.url && media.kind === "image" ? <img src={media.url} alt={media.alt} loading="lazy" referrerPolicy="no-referrer" /> : null}
-              {media.url && media.kind === "video" ? <video src={media.url} controls preload="metadata" /> : null}
-              {!media.url ? <span aria-hidden="true">{media.kind === "image" ? "▧" : "▶"}</span> : null}
-              <figcaption>{media.alt}</figcaption>
-            </figure>
-          ))}
+          {item.media.map((media, index) => {
+            const previewUrl = mediaPreviewUrl(media);
+            return (
+              <figure key={`${media.assetId ?? media.url ?? "media"}-${index}`}>
+                {previewUrl && media.kind === "image" ? <img src={previewUrl} alt={media.alt} loading="lazy" referrerPolicy="no-referrer" /> : null}
+                {previewUrl && media.kind === "video" ? <video src={previewUrl} controls preload="metadata" /> : null}
+                {!previewUrl ? <span aria-hidden="true">{media.kind === "image" ? "▧" : "▶"}</span> : null}
+                <figcaption>{media.alt}</figcaption>
+                <GrowthMediaActions media={media} filename={`${title}-${index + 1}`} />
+                {media.kind === "video" && previewUrl ? <a href={previewUrl} target="_blank" rel="noreferrer">{t("growth.contentOpenMedia")}</a> : null}
+              </figure>
+            );
+          })}
         </div>
       ) : null}
 

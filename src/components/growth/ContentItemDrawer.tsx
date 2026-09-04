@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import {
+  buildGrowthAssetFileUrl,
   markGrowthContentPublished,
   patchGrowthContentItem,
 } from "../../api/growth";
@@ -9,11 +10,13 @@ import type { TranslationKey } from "../../i18n/translations";
 import {
   type GrowthContentItem,
   type GrowthContentItemStatus,
+  type GrowthContentMedia,
 } from "../../types/growth";
 import { formatXThreadForCopy } from "../../utils/goals";
 import { socialCharacterCount } from "../../utils/socialProposals";
 import { CloseIcon } from "../common/Icons";
 import { Markdown } from "../common/Markdown";
+import { GrowthMediaActions } from "./GrowthMediaActions";
 
 interface ContentItemDrawerProps {
   item: GrowthContentItem;
@@ -22,6 +25,10 @@ interface ContentItemDrawerProps {
 }
 
 const EDITABLE_STATUSES: GrowthContentItemStatus[] = ["idea", "draft", "ready", "skipped"];
+
+function mediaPreviewUrl(media: GrowthContentMedia): string | undefined {
+  return media.assetId ? buildGrowthAssetFileUrl(media.assetId) : media.url;
+}
 
 function toLocalDateTime(isoDate: string | null): string {
   if (!isoDate) return "";
@@ -194,13 +201,22 @@ export function ContentItemDrawer({ item, onClose, onUpdate }: ContentItemDrawer
 
           <section className="growth-content-section">
             <h3>{t("growth.contentMediaTitle")}</h3>
-            {item.media.length ? <div className="growth-content-media-list">{item.media.map((media, index) => (
-              <article key={`${media.assetId ?? media.url ?? index}`}>
-                {media.url && media.kind === "image" ? <img src={media.url} alt={media.alt} loading="lazy" referrerPolicy="no-referrer" /> : null}
-                {media.url && media.kind === "video" ? <video src={media.url} controls preload="metadata" /> : null}
-                <div><strong>{media.alt}</strong><span>{media.kind}</span>{media.caption ? <p>{media.caption}</p> : null}{media.url ? <a href={media.url} target="_blank" rel="noreferrer">{t("growth.contentOpenMedia")}</a> : null}</div>
-              </article>
-            ))}</div> : <p className="growth-content-empty-note">{t("growth.contentMediaEmpty")}</p>}
+            {item.media.length ? <div className="growth-content-media-list">{item.media.map((media, index) => {
+              const previewUrl = mediaPreviewUrl(media);
+              return (
+                <article key={`${media.assetId ?? media.url ?? index}`}>
+                  {previewUrl && media.kind === "image" ? <img src={previewUrl} alt={media.alt} loading="lazy" referrerPolicy="no-referrer" /> : null}
+                  {previewUrl && media.kind === "video" ? <video src={previewUrl} controls preload="metadata" /> : null}
+                  <div>
+                    <strong>{media.alt}</strong>
+                    <span>{media.kind}</span>
+                    {media.caption ? <p>{media.caption}</p> : null}
+                    <GrowthMediaActions media={media} filename={`${item.title || item.repository}-${index + 1}`} />
+                    {media.kind === "video" && previewUrl ? <a href={previewUrl} target="_blank" rel="noreferrer">{t("growth.contentOpenMedia")}</a> : null}
+                  </div>
+                </article>
+              );
+            })}</div> : <p className="growth-content-empty-note">{t("growth.contentMediaEmpty")}</p>}
           </section>
 
           <section className="growth-content-section">

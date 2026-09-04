@@ -7,7 +7,9 @@ import { I18nProvider } from "../../../src/i18n/I18nProvider";
 import type { GrowthContentItem, GrowthProfile } from "../../../src/types/growth";
 
 const mocks = vi.hoisted(() => ({
+  buildGrowthAssetFileUrl: vi.fn((id: string) => `/api/growth/assets/${id}/file`),
   buildGrowthCalendarExportUrl: vi.fn(() => "/api/growth/calendar.ics?export=visible"),
+  fetchGrowthAssetFile: vi.fn(),
   fetchGrowthContentPlans: vi.fn(),
   generateGrowthContentPlan: vi.fn(),
   regenerateGrowthContentPlan: vi.fn(),
@@ -21,7 +23,9 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("../../../src/api/growth", () => ({
+  buildGrowthAssetFileUrl: mocks.buildGrowthAssetFileUrl,
   buildGrowthCalendarExportUrl: mocks.buildGrowthCalendarExportUrl,
+  fetchGrowthAssetFile: mocks.fetchGrowthAssetFile,
   fetchGrowthContentPlans: mocks.fetchGrowthContentPlans,
   generateGrowthContentPlan: mocks.generateGrowthContentPlan,
   regenerateGrowthContentPlan: mocks.regenerateGrowthContentPlan,
@@ -198,6 +202,8 @@ describe("GrowthQueue", () => {
     expect(container.textContent).toContain("Product news");
     expect(container.textContent).toContain("Media attached");
     expect(container.textContent).toContain("Release preview");
+    expect(container.textContent).toContain("Copy image");
+    expect(container.textContent).toContain("Download image");
     expect(container.textContent).toContain("https://example.com/release");
     expect(container.textContent).not.toContain("Outside item");
     expect(container.textContent).not.toContain("Skipped item");
@@ -207,6 +213,25 @@ describe("GrowthQueue", () => {
     await act(async () => nextWeek.click());
     expect(container.querySelector('[data-testid="location"]')?.textContent)
       .toContain("?view=queue&date=2026-11-01");
+  });
+
+  it("uses authenticated media previews and excludes videos from image actions", async () => {
+    mocks.fetchGrowthContentItems.mockResolvedValueOnce([contentItem({
+      media: [
+        { assetId: "asset-image", kind: "image", alt: "Private queue image" },
+        { assetId: "asset-video", kind: "video", alt: "Private queue video" },
+      ],
+    })]);
+    await renderQueue();
+
+    expect(container.querySelector<HTMLImageElement>('img[alt="Private queue image"]')?.src)
+      .toContain("/api/growth/assets/asset-image/file");
+    expect(container.querySelector<HTMLVideoElement>("video")?.src)
+      .toContain("/api/growth/assets/asset-video/file");
+    expect([...container.querySelectorAll("button")].filter((entry) => entry.textContent === "Copy image"))
+      .toHaveLength(1);
+    expect([...container.querySelectorAll("button")].filter((entry) => entry.textContent === "Download image"))
+      .toHaveLength(1);
   });
 
   it("copies body text and a formatted X thread inline", async () => {

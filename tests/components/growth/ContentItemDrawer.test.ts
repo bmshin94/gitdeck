@@ -6,12 +6,16 @@ import { I18nProvider } from "../../../src/i18n/I18nProvider";
 import type { GrowthContentItem } from "../../../src/types/growth";
 
 const mocks = vi.hoisted(() => ({
+  buildGrowthAssetFileUrl: vi.fn((id: string) => `/api/growth/assets/${id}/file`),
+  fetchGrowthAssetFile: vi.fn(),
   patchGrowthContentItem: vi.fn(),
   markGrowthContentPublished: vi.fn(),
   writeText: vi.fn(),
 }));
 
 vi.mock("../../../src/api/growth", () => ({
+  buildGrowthAssetFileUrl: mocks.buildGrowthAssetFileUrl,
+  fetchGrowthAssetFile: mocks.fetchGrowthAssetFile,
   patchGrowthContentItem: mocks.patchGrowthContentItem,
   markGrowthContentPublished: mocks.markGrowthContentPublished,
 }));
@@ -113,6 +117,8 @@ describe("ContentItemDrawer", () => {
     expect(document.body.textContent).toContain("First post");
     expect(document.body.textContent).toContain("10/280");
     expect(document.body.textContent).toContain("Release image");
+    expect(document.body.textContent).toContain("Copy image");
+    expect(document.body.textContent).toContain("Download image");
     expect(document.body.textContent).toContain("https://example.com/release");
 
     await act(async () => {
@@ -170,6 +176,26 @@ describe("ContentItemDrawer", () => {
       await Promise.resolve();
     });
     expect(document.body.querySelector('[role="alert"]')?.textContent).toContain("at least one media attachment");
+  });
+
+  it("uses authenticated asset previews and excludes videos from image actions", async () => {
+    item = {
+      ...item,
+      media: [
+        { assetId: "asset-image", kind: "image", alt: "Private image" },
+        { assetId: "asset-video", kind: "video", alt: "Private video" },
+      ],
+    };
+    await renderDrawer();
+
+    expect(document.body.querySelector<HTMLImageElement>('img[alt="Private image"]')?.src)
+      .toContain("/api/growth/assets/asset-image/file");
+    expect(document.body.querySelector<HTMLVideoElement>("video")?.src)
+      .toContain("/api/growth/assets/asset-video/file");
+    expect([...document.body.querySelectorAll("button")].filter((entry) => entry.textContent === "Copy image"))
+      .toHaveLength(1);
+    expect([...document.body.querySelectorAll("button")].filter((entry) => entry.textContent === "Download image"))
+      .toHaveLength(1);
   });
 
   it("closes on Escape", async () => {

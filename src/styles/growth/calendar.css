@@ -779,8 +779,9 @@
 
 .mode-growth .growth-queue-media figure {
   display: grid;
-  flex: 0 0 132px;
-  grid-template-rows: 82px auto;
+  flex: 0 0 174px;
+  grid-template-rows: 82px auto auto;
+  align-content: start;
   overflow: hidden;
   margin: 0;
   background: var(--panel);
@@ -812,6 +813,25 @@
   line-height: 1.35;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.mode-growth .growth-queue-media .growth-media-actions {
+  padding: 0 7px 7px;
+}
+
+.mode-growth .growth-queue-media .growth-media-action-buttons {
+  align-items: stretch;
+}
+
+.mode-growth .growth-queue-media .growth-media-action-buttons .btn {
+  flex: 1 1 auto;
+  justify-content: center;
+}
+
+.mode-growth .growth-queue-media figure > a {
+  padding: 0 7px 7px;
+  color: var(--accent);
+  font-size: 8.5px;
 }
 
 .mode-growth .growth-queue-sources {
