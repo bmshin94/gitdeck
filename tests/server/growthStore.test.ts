@@ -12,6 +12,7 @@ const { TMP_DIR } = vi.hoisted(() => {
 vi.mock("../../src/server/config", () => ({ DATA_DIR: TMP_DIR }));
 
 const store = await import("../../src/server/growth/store");
+const growthSettings = await import("../../src/server/growth/settings");
 const goalStore = await import("../../src/server/goalStore");
 const { closeDatabase, getDatabase } = await import("../../src/server/sqlite");
 
@@ -130,6 +131,44 @@ describe("Growth Studio store", () => {
     expect(updated.voice).toBe("Technical");
     expect(updated.hashtags).toEqual(["#gitdeck"]);
     expect(store.getGrowthProfile("account-b", "owner/repo").voice).toBe("");
+  });
+
+  it("inherits account settings only for unpersisted profiles and preserves defensive isolation", () => {
+    const persisted = store.upsertGrowthProfile("account-a", "owner/saved", profileInput());
+    growthSettings.saveGrowthSettings("account-a", {
+      timezone: "America/New_York",
+      cadence: { x: 6, linkedin: 2, mastodon: 1, bluesky: 0, discussion: 0, blog: 0 },
+      pillars: [{ id: "community", label: "Community", weight: 100, description: "Participation" }],
+    });
+
+    const inherited = store.getGrowthProfile("account-a", "owner/new");
+    expect(inherited).toMatchObject({
+      timezone: "America/New_York",
+      cadence: { x: 6, linkedin: 2, mastodon: 1 },
+      pillars: [{ id: "community", label: "Community", weight: 100, description: "Participation" }],
+      language: "en",
+      voice: "",
+      audience: "",
+      hashtags: [],
+      avoid: "",
+      postingWindows: [],
+      updatedAt: "1970-01-01T00:00:00.000Z",
+    });
+    expect(store.getGrowthProfile("account-a", "owner/saved")).toEqual(persisted);
+    expect(store.getGrowthProfile("account-b", "owner/new").timezone).toBe("UTC");
+
+    inherited.cadence.x = 0;
+    inherited.pillars[0].label = "Changed";
+    expect(store.getGrowthProfile("account-a", "owner/new").cadence.x).toBe(6);
+    expect(store.getGrowthProfile("account-a", "owner/new").pillars[0].label).toBe("Community");
+    expect((getDatabase().prepare("SELECT COUNT(*) AS count FROM growth_profiles").get() as { count: number }).count).toBe(1);
+
+    growthSettings.resetGrowthSettings("account-a");
+    expect(store.getGrowthProfile("account-a", "owner/new")).toMatchObject({
+      timezone: "UTC",
+      cadence: { x: 3, linkedin: 1, mastodon: 3 },
+    });
+    expect(store.getGrowthProfile("account-a", "owner/saved")).toEqual(persisted);
   });
 
   it("creates, lists, and updates interventions without crossing accounts", () => {

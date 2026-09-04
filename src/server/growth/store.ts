@@ -56,6 +56,7 @@ import {
 } from "../../utils/growth/profileDefaults";
 import { getPreference, setPreference } from "../preferenceStore";
 import { all, get, getDatabase, run } from "../sqlite";
+import { getGrowthSettings } from "./settings";
 
 interface GrowthProfileRow {
   account_id: string;
@@ -354,7 +355,9 @@ export function getGrowthProfile(accountId: string, repository: string): GrowthP
     "SELECT * FROM growth_profiles WHERE account_id = ? AND repository = ?",
     [accountId, repository],
   );
-  return row ? profileFromRow(row) : createDefaultGrowthProfile(accountId, repository);
+  return row
+    ? profileFromRow(row)
+    : createDefaultGrowthProfile(accountId, repository, getGrowthSettings(accountId));
 }
 
 export function upsertGrowthProfile(

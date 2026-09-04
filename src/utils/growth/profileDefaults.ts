@@ -3,6 +3,7 @@ import type {
   GrowthChannelSelection,
   GrowthPillar,
   GrowthProfile,
+  GrowthSettings,
 } from "../../types/growth";
 
 const PROFILE_COLORS = [
@@ -51,7 +52,11 @@ export function growthProfileColor(repository: string): string {
   return PROFILE_COLORS[(hash >>> 0) % PROFILE_COLORS.length];
 }
 
-export function createDefaultGrowthProfile(accountId: string, repository: string): GrowthProfile {
+export function createDefaultGrowthProfile(
+  accountId: string,
+  repository: string,
+  settings?: GrowthSettings,
+): GrowthProfile {
   return {
     accountId,
     repository,
@@ -59,11 +64,11 @@ export function createDefaultGrowthProfile(accountId: string, repository: string
     voice: "",
     audience: "",
     channels: { ...DEFAULT_GROWTH_CHANNELS },
-    cadence: { ...DEFAULT_GROWTH_CADENCE },
-    pillars: DEFAULT_GROWTH_PILLARS.map((pillar) => ({ ...pillar })),
+    cadence: { ...(settings?.cadence ?? DEFAULT_GROWTH_CADENCE) },
+    pillars: (settings?.pillars ?? DEFAULT_GROWTH_PILLARS).map((pillar) => ({ ...pillar })),
     hashtags: [],
     avoid: "",
-    timezone: "UTC",
+    timezone: settings?.timezone ?? "UTC",
     postingWindows: [],
     color: growthProfileColor(repository),
     updatedAt: "1970-01-01T00:00:00.000Z",

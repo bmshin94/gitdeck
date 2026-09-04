@@ -22,6 +22,7 @@ import { GrowthHome } from "./GrowthHome";
 import { GrowthInterventions } from "./GrowthInterventions";
 import { GrowthLibrary } from "./GrowthLibrary";
 import { GrowthReview } from "./GrowthReview";
+import { GrowthSettings } from "./GrowthSettings";
 import { GrowthSidebar } from "./GrowthSidebar";
 import { GrowthTopBar, type GrowthTheme } from "./GrowthTopBar";
 import { GrowthWorkspaceOverview } from "./GrowthWorkspaceOverview";
@@ -264,7 +265,15 @@ export function GrowthStudioApp() {
                 />
               )}
             />
-            <Route path="/growth/settings" element={<GrowthPlaceholder titleKey="growth.settings" />} />
+            <Route
+              path="/growth/settings"
+              element={(
+                <GrowthSettings
+                  accountId={activeAccount?.id ?? null}
+                  enabled={!accountsLoading}
+                />
+              )}
+            />
             <Route
               path="/growth/r/:owner/:repo"
               element={selectedRepository ? (

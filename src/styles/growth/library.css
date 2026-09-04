@@ -280,6 +280,69 @@
   font-size: 11px;
 }
 
+.mode-growth .growth-settings-fieldset {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.mode-growth .growth-settings-timezone {
+  grid-template-columns: minmax(220px, 420px);
+}
+
+.mode-growth .growth-settings-reset-confirmation {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 14px 16px;
+  background: color-mix(in srgb, var(--danger) 8%, var(--panel));
+  border: 1px solid color-mix(in srgb, var(--danger) 32%, var(--border));
+  border-radius: 11px;
+}
+
+.mode-growth .growth-settings-reset-confirmation strong {
+  font-size: 12px;
+}
+
+.mode-growth .growth-settings-reset-confirmation p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 10.5px;
+  line-height: 1.45;
+}
+
+.mode-growth .growth-settings-reset-confirmation > div:last-child {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 8px;
+}
+
+.mode-growth .growth-settings-savebar {
+  flex-wrap: wrap;
+}
+
+.mode-growth .growth-settings-savebar > a {
+  margin-right: auto;
+  color: var(--accent);
+  font-size: 10.5px;
+  font-weight: 750;
+  text-decoration: none;
+}
+
+.mode-growth .growth-settings-savebar > a:hover {
+  text-decoration: underline;
+}
+
+.mode-growth .growth-settings-savebar > a:focus-visible,
+.mode-growth .growth-settings-reset-confirmation .btn:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
 .mode-growth .growth-asset-library-heading {
   margin-bottom: 14px;
 }
@@ -650,6 +713,11 @@
     grid-column: 1 / -1;
     justify-self: start;
   }
+
+  .mode-growth .growth-settings-reset-confirmation {
+    align-items: stretch;
+    flex-direction: column;
+  }
 }
 
 @media (max-width: 520px) {
@@ -690,5 +758,22 @@
 
   .mode-growth .growth-library-pillar > .btn {
     width: 100%;
+  }
+
+  .mode-growth .growth-settings-savebar {
+    align-items: stretch;
+  }
+
+  .mode-growth .growth-settings-savebar > a,
+  .mode-growth .growth-settings-savebar > span {
+    width: 100%;
+  }
+
+  .mode-growth .growth-settings-savebar > .btn {
+    flex: 1 1 auto;
+  }
+
+  .mode-growth .growth-settings-reset-confirmation > div:last-child .btn {
+    flex: 1 1 0;
   }
 }
