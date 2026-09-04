@@ -1,6 +1,11 @@
 import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
 import type { GhIssue, GhPullRequest, GhRepo, RepoCommit, SnapshotEntry } from "../../types/github";
+import {
+  GROWTH_ASSET_MIME_TYPES,
+  MAX_GROWTH_ASSET_BYTES,
+  type GrowthAssetMimeType,
+} from "../../types/growth";
 import type { GoalContentSource, GoalMetric } from "../../types/goals";
 import { calculateGoalProgress } from "../../utils/goals";
 import { extractMediaUrls, extractWebPageSignal } from "../../utils/socialProposals";
@@ -74,25 +79,130 @@ export async function fetchReadmeSignal(repository: string): Promise<GrowthReadm
   }
 }
 
-function isPrivateAddress(address: string): boolean {
-  if (isIP(address) === 4) {
-    const [a, b] = address.split(".").map(Number);
-    return a === 0 || a === 10 || a === 127 || (a === 100 && b >= 64 && b <= 127)
-      || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168)
-      || (a === 198 && (b === 18 || b === 19)) || a >= 224;
-  }
-  const normalized = address.toLowerCase();
-  return normalized === "::" || normalized === "::1" || normalized.startsWith("fc") || normalized.startsWith("fd")
-    || /^fe[89ab]/.test(normalized) || normalized.startsWith("::ffff:") && isPrivateAddress(normalized.slice(7));
+function isPrivateIpv4(address: string): boolean {
+  const [a, b, c] = address.split(".").map(Number);
+  return a === 0 || a === 10 || a === 127
+    || (a === 100 && b >= 64 && b <= 127)
+    || (a === 169 && b === 254)
+    || (a === 172 && b >= 16 && b <= 31)
+    || (a === 192 && (b === 0 || b === 168))
+    || (a === 198 && (b === 18 || b === 19 || (b === 51 && c === 100)))
+    || (a === 203 && b === 0 && c === 113)
+    || a >= 224;
+}
+
+function ipv6Words(address: string): number[] | null {
+  if (isIP(address) !== 6) return null;
+  const [leftValue, rightValue = ""] = address.split("::");
+  const left = leftValue ? leftValue.split(":") : [];
+  const right = rightValue ? rightValue.split(":") : [];
+  const missing = 8 - left.length - right.length;
+  const parts = address.includes("::") ? [...left, ...Array(missing).fill("0"), ...right] : left;
+  if (parts.length !== 8) return null;
+  return parts.map((part) => Number.parseInt(part || "0", 16));
+}
+
+function isPrivateAddress(value: string): boolean {
+  const address = value.replace(/^\[|\]$/g, "").toLowerCase();
+  if (isIP(address) === 4) return isPrivateIpv4(address);
+  const dottedMapped = address.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/)?.[1];
+  if (dottedMapped) return isPrivateIpv4(dottedMapped);
+  const words = ipv6Words(address);
+  if (!words) return true;
+  const mapped = words.slice(0, 5).every((word) => word === 0) && words[5] === 0xffff
+    ? `${words[6] >> 8}.${words[6] & 255}.${words[7] >> 8}.${words[7] & 255}`
+    : null;
+  if (mapped) return isPrivateIpv4(mapped);
+  return words.every((word) => word === 0)
+    || words.slice(0, 7).every((word) => word === 0) && words[7] === 1
+    || (words[0] & 0xfe00) === 0xfc00
+    || (words[0] & 0xffc0) === 0xfe80
+    || (words[0] & 0xff00) === 0xff00
+    || words[0] === 0x2001 && words[1] === 0x0db8;
 }
 
 async function assertPublicWebsite(url: URL): Promise<void> {
   if (!["http:", "https:"].includes(url.protocol) || url.username || url.password) throw new Error("unsupported source URL");
-  if (url.hostname === "localhost" || url.hostname.endsWith(".localhost")) throw new Error("private source URL");
-  const addresses = isIP(url.hostname)
-    ? [{ address: url.hostname }]
-    : await lookup(url.hostname, { all: true, verbatim: true });
+  const hostname = url.hostname.replace(/^\[|\]$/g, "");
+  if (hostname === "localhost" || hostname.endsWith(".localhost")) throw new Error("private source URL");
+  const addresses = isIP(hostname)
+    ? [{ address: hostname }]
+    : await lookup(hostname, { all: true, verbatim: true });
   if (!addresses.length || addresses.some((entry) => isPrivateAddress(entry.address))) throw new Error("private source URL");
+}
+
+export class PublicMediaTooLargeError extends Error {
+  constructor() {
+    super("asset exceeds the 25 MiB limit");
+    this.name = "PublicMediaTooLargeError";
+  }
+}
+
+export class UnsupportedPublicMediaTypeError extends Error {
+  constructor() {
+    super("unsupported asset content type");
+    this.name = "UnsupportedPublicMediaTypeError";
+  }
+}
+
+export interface PublicMediaFile {
+  body: Buffer;
+  contentType: GrowthAssetMimeType;
+  length: number;
+  finalUrl: string;
+}
+
+/** Reads allowlisted public media while validating DNS, redirects, type, and the byte limit. */
+export async function readPublicMedia(value: string, maxBytes = MAX_GROWTH_ASSET_BYTES): Promise<PublicMediaFile> {
+  if (!Number.isSafeInteger(maxBytes) || maxBytes <= 0 || maxBytes > MAX_GROWTH_ASSET_BYTES) {
+    throw new Error("invalid media byte limit");
+  }
+  let url = new URL(value);
+  for (let redirects = 0; redirects <= 3; redirects += 1) {
+    await assertPublicWebsite(url);
+    const response = await fetch(url, {
+      redirect: "manual",
+      signal: AbortSignal.timeout(10_000),
+      headers: { Accept: GROWTH_ASSET_MIME_TYPES.join(","), "User-Agent": "GitDeck/1.0 media-reader" },
+    });
+    if (response.status >= 300 && response.status < 400) {
+      const location = response.headers.get("location");
+      if (!location || redirects === 3) throw new Error("too many media redirects");
+      url = new URL(location, url);
+      continue;
+    }
+    if (!response.ok) throw new Error(`media returned ${response.status}`);
+    const contentType = response.headers.get("content-type")?.split(";", 1)[0].trim().toLowerCase();
+    if (!GROWTH_ASSET_MIME_TYPES.includes(contentType as GrowthAssetMimeType)) {
+      throw new UnsupportedPublicMediaTypeError();
+    }
+    const declaredLength = response.headers.get("content-length");
+    if (declaredLength && /^\d+$/.test(declaredLength) && Number(declaredLength) > maxBytes) {
+      throw new PublicMediaTooLargeError();
+    }
+    if (!response.body) throw new Error("media body unavailable");
+    const reader = response.body.getReader();
+    const chunks: Buffer[] = [];
+    let length = 0;
+    while (true) {
+      const { done, value: chunk } = await reader.read();
+      if (done) break;
+      length += chunk.byteLength;
+      if (length > maxBytes) {
+        await reader.cancel();
+        throw new PublicMediaTooLargeError();
+      }
+      chunks.push(Buffer.from(chunk));
+    }
+    if (length === 0) throw new Error("media body unavailable");
+    return {
+      body: Buffer.concat(chunks, length),
+      contentType: contentType as GrowthAssetMimeType,
+      length,
+      finalUrl: url.toString(),
+    };
+  }
+  throw new Error("media unavailable");
 }
 
 async function readBoundedText(response: Response, maxBytes = 600_000): Promise<string> {

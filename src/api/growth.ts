@@ -4,6 +4,7 @@ import type {
   GenerateGrowthContentPlanInput,
   GrowthArchivedContentPlanData,
   GrowthAssetData,
+  GrowthAssetImportCandidatesData,
   GrowthAssetsData,
   GrowthContentItemData,
   GrowthContentItemFilters,
@@ -17,6 +18,8 @@ import type {
   GrowthInterventionFilters,
   GrowthInterventionsData,
   GrowthInterventionCategory,
+  GrowthImportedAssetData,
+  ImportGrowthAssetInput,
   GrowthProfileData,
   GrowthProfileInput,
   GrowthRegeneratedContentPlanData,
@@ -109,6 +112,23 @@ export async function fetchGrowthAssets(repository: string, signal?: AbortSignal
     repo: repository,
   }), { signal });
   return data.assets;
+}
+
+export async function fetchGrowthAssetImportCandidates(repository: string, signal?: AbortSignal) {
+  if (!parseRepositoryName(repository)) throw new Error("invalid repository");
+  const data = await requestJson<GrowthAssetImportCandidatesData>(addFilters(
+    "/api/growth/assets/import-candidates",
+    { repo: repository },
+  ), { signal });
+  return data.candidates;
+}
+
+export async function importGrowthAsset(input: ImportGrowthAssetInput, signal?: AbortSignal) {
+  if (!parseRepositoryName(input.repository)) throw new Error("invalid repository");
+  return requestJson<GrowthImportedAssetData>(
+    "/api/growth/assets/import",
+    jsonRequest("POST", input, signal),
+  );
 }
 
 export async function uploadGrowthAsset(input: UploadGrowthAssetInput, signal?: AbortSignal) {

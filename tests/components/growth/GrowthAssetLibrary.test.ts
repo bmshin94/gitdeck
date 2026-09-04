@@ -7,13 +7,17 @@ import type { GrowthAssetMetadata } from "../../../src/types/growth";
 
 const mocks = vi.hoisted(() => ({
   buildGrowthAssetFileUrl: vi.fn((id: string) => `/api/growth/assets/${id}/file`),
+  fetchGrowthAssetImportCandidates: vi.fn(),
   fetchGrowthAssets: vi.fn(),
+  importGrowthAsset: vi.fn(),
   uploadGrowthAsset: vi.fn(),
 }));
 
 vi.mock("../../../src/api/growth", () => ({
   buildGrowthAssetFileUrl: mocks.buildGrowthAssetFileUrl,
+  fetchGrowthAssetImportCandidates: mocks.fetchGrowthAssetImportCandidates,
   fetchGrowthAssets: mocks.fetchGrowthAssets,
+  importGrowthAsset: mocks.importGrowthAsset,
   uploadGrowthAsset: mocks.uploadGrowthAsset,
 }));
 
@@ -63,7 +67,9 @@ beforeEach(() => {
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
+  mocks.fetchGrowthAssetImportCandidates.mockResolvedValue([]);
   mocks.fetchGrowthAssets.mockResolvedValue([]);
+  mocks.importGrowthAsset.mockResolvedValue({ asset: asset({ origin: "readme" }), duplicate: false });
   mocks.uploadGrowthAsset.mockResolvedValue(asset());
 
   originalCreateObjectUrl = Object.getOwnPropertyDescriptor(URL, "createObjectURL");
@@ -139,7 +145,7 @@ describe("GrowthAssetLibrary", () => {
     }));
 
     await renderLibrary();
-    expect(container.querySelector('[role="status"]')?.textContent).toContain("Loading repository assets");
+    expect(container.textContent).toContain("Loading repository assets");
 
     await act(async () => {
       resolveAssets?.([]);
@@ -271,6 +277,94 @@ describe("GrowthAssetLibrary", () => {
       await flush();
     });
     expect(container.textContent).not.toContain("Stale upload");
+  });
+
+  it("discovers candidates, requires editable alt text, imports, and reports duplicates through private previews", async () => {
+    mocks.fetchGrowthAssetImportCandidates.mockResolvedValueOnce([{
+      origin: "readme",
+      source: "acme/rocket README",
+      url: "https://cdn.example/release.png",
+      title: "Release image",
+      alt: "Release image",
+    }]);
+    const imported = asset({ id: "imported", origin: "readme", url: "https://cdn.example/release.png" });
+    mocks.importGrowthAsset
+      .mockResolvedValueOnce({ asset: imported, duplicate: false })
+      .mockResolvedValueOnce({ asset: imported, duplicate: true });
+    await renderLibrary();
+
+    expect(container.textContent).toContain("acme/rocket README");
+    const importAlt = field("growth-asset-import-alt-0");
+    await act(async () => setValue(importAlt, " "));
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>(".growth-asset-import-card .btn")?.click();
+      await flush();
+    });
+    expect(container.textContent).toContain("useful alt text");
+    expect(mocks.importGrowthAsset).not.toHaveBeenCalled();
+
+    await act(async () => setValue(importAlt, "Release dashboard from the README"));
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>(".growth-asset-import-card .btn")?.click();
+      await flush();
+    });
+    expect(mocks.importGrowthAsset).toHaveBeenCalledWith(expect.objectContaining({
+      repository: "acme/rocket",
+      origin: "readme",
+      url: "https://cdn.example/release.png",
+      alt: "Release dashboard from the README",
+    }), expect.any(AbortSignal));
+    expect(container.textContent).toContain("private media proxy");
+    expect(container.querySelector<HTMLImageElement>(".growth-asset-import-preview img")?.src)
+      .toContain("/api/growth/assets/imported/file");
+
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>(".growth-asset-import-card .btn")?.click();
+      await flush();
+    });
+    expect(container.textContent).toContain("already in the repository library");
+  });
+
+  it("shows candidate errors and aborts stale discovery and import requests", async () => {
+    let resolveDiscovery: ((value: never[]) => void) | undefined;
+    let resolveImport: ((value: { asset: GrowthAssetMetadata; duplicate: boolean }) => void) | undefined;
+    mocks.fetchGrowthAssetImportCandidates
+      .mockImplementationOnce((_repository, signal: AbortSignal) => new Promise<never[]>((resolve) => {
+        resolveDiscovery = resolve;
+        expect(signal.aborted).toBe(false);
+      }))
+      .mockResolvedValueOnce([{
+        origin: "website",
+        source: "https://project.example",
+        url: "https://cdn.example/demo.webm",
+        title: "Demo",
+        alt: "Demo",
+      }]);
+    await renderLibrary("account-a", "acme/rocket");
+    const staleDiscoverySignal = mocks.fetchGrowthAssetImportCandidates.mock.calls[0][1] as AbortSignal;
+    await renderLibrary("account-b", "acme/comet");
+    expect(staleDiscoverySignal.aborted).toBe(true);
+
+    mocks.importGrowthAsset.mockImplementationOnce((_input, signal: AbortSignal) => new Promise((resolve) => {
+      resolveImport = resolve;
+    }));
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>(".growth-asset-import-card .btn")?.click();
+      await flush();
+    });
+    const staleImportSignal = mocks.importGrowthAsset.mock.calls[0][1] as AbortSignal;
+    await renderLibrary("account-c", "acme/other");
+    expect(staleImportSignal.aborted).toBe(true);
+    await act(async () => {
+      resolveDiscovery?.([]);
+      resolveImport?.({ asset: asset({ title: "Stale import" }), duplicate: false });
+      await flush();
+    });
+    expect(container.textContent).not.toContain("Stale import");
+
+    mocks.fetchGrowthAssetImportCandidates.mockRejectedValueOnce(new Error("sources unavailable"));
+    await renderLibrary("account-d", "acme/failure");
+    expect(container.textContent).toContain("sources unavailable");
   });
 
   it.each([1440, 390])("keeps accessible controls and authenticated previews at %ipx", async (width) => {

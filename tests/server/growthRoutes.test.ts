@@ -17,6 +17,9 @@ const state = vi.hoisted(() => {
     aiConfigured: false,
     generateStructured: vi.fn(),
     collectSignals: vi.fn(),
+    fetchReadmeSignal: vi.fn(),
+    fetchAdditionalSourceSignals: vi.fn(),
+    readPublicMedia: vi.fn(),
   };
 });
 
@@ -49,6 +52,11 @@ vi.mock("../../src/server/ai/client", async (importActual) => ({
 }));
 vi.mock("../../src/server/growth/signals", () => ({
   collectRepositorySignals: state.collectSignals,
+  fetchReadmeSignal: state.fetchReadmeSignal,
+  fetchAdditionalSourceSignals: state.fetchAdditionalSourceSignals,
+  readPublicMedia: state.readPublicMedia,
+  PublicMediaTooLargeError: class PublicMediaTooLargeError extends Error {},
+  UnsupportedPublicMediaTypeError: class UnsupportedPublicMediaTypeError extends Error {},
 }));
 
 const { registerGrowthRoutes } = await import("../../src/server/routes/growth");
@@ -153,6 +161,17 @@ beforeEach(async () => {
     recentCommits: [],
     starHistory: [],
     goals: [],
+  });
+  state.fetchReadmeSignal.mockReset();
+  state.fetchReadmeSignal.mockResolvedValue(null);
+  state.fetchAdditionalSourceSignals.mockReset();
+  state.fetchAdditionalSourceSignals.mockResolvedValue([]);
+  state.readPublicMedia.mockReset();
+  state.readPublicMedia.mockResolvedValue({
+    body: Buffer.from("remote media"),
+    contentType: "image/png",
+    length: 12,
+    finalUrl: "https://cdn.example/media.png",
   });
   state.generateStructured.mockReset();
   state.generateSuggestions.mockReset();
@@ -280,7 +299,104 @@ describe("Growth API routes", () => {
     expect(files).toEqual([]);
   });
 
-  it("returns a generic not-found response for missing, traversing, and non-upload asset files", async () => {
+  it("discovers, verifies, deduplicates, and privately proxies account-scoped source imports", async () => {
+    goalStore.saveRepositoryContentSources("account-a", "acme/repo", [
+      { type: "website", value: "https://project.example" },
+      { type: "repository", value: "acme/docs" },
+    ]);
+    state.fetchReadmeSignal.mockResolvedValueOnce({
+      excerpt: "README",
+      mediaUrls: ["https://cdn.example/readme.png#preview"],
+    });
+    state.fetchAdditionalSourceSignals.mockResolvedValueOnce([
+      { type: "website", title: "Project", mediaUrls: ["https://cdn.example/site.webm"] },
+      { type: "repository", mediaUrls: ["https://cdn.example/docs.png"] },
+    ]);
+    const candidates = await dispatch("GET", "/api/growth/assets/import-candidates?repo=acme%2Frepo");
+    expect(candidates.status).toBe(200);
+    expect(candidates.body.candidates).toEqual([
+      expect.objectContaining({ origin: "readme", url: "https://cdn.example/readme.png" }),
+      expect.objectContaining({ origin: "website", source: "https://project.example" }),
+      expect.objectContaining({ origin: "readme", source: "acme/docs" }),
+    ]);
+
+    const selected = candidates.body.candidates[1];
+    state.fetchReadmeSignal.mockResolvedValue({
+      excerpt: "README",
+      mediaUrls: ["https://cdn.example/readme.png"],
+    });
+    state.fetchAdditionalSourceSignals.mockResolvedValue([
+      { type: "website", title: "Project", mediaUrls: ["https://cdn.example/site.webm"] },
+      { type: "repository", mediaUrls: ["https://cdn.example/docs.png"] },
+    ]);
+    state.readPublicMedia.mockResolvedValue({
+      body: Buffer.from("remote video"),
+      contentType: "video/webm",
+      length: 12,
+      finalUrl: selected.url,
+    });
+    const input = {
+      repository: "acme/repo",
+      origin: "website",
+      url: selected.url,
+      title: "Project demo",
+      alt: "A walkthrough of the project",
+    };
+    const imported = await dispatch("POST", "/api/growth/assets/import", input);
+    expect(imported.status).toBe(201);
+    expect(imported.body).toMatchObject({
+      ok: true,
+      duplicate: false,
+      asset: { accountId: "account-a", kind: "video", origin: "website", url: selected.url },
+    });
+    expect(imported.body.asset).not.toHaveProperty("path");
+    expect(state.readPublicMedia).toHaveBeenCalledWith(selected.url);
+
+    const duplicate = await dispatch("POST", "/api/growth/assets/import", input);
+    expect(duplicate).toMatchObject({ status: 200, body: { duplicate: true } });
+    expect(state.readPublicMedia).toHaveBeenCalledTimes(1);
+    const forged = await dispatch("POST", "/api/growth/assets/import", {
+      ...input,
+      url: "https://attacker.example/forged.png",
+    });
+    expect(forged.status).toBe(400);
+
+    const id = imported.body.asset.id as string;
+    const proxied = await dispatchRaw("GET", `/api/growth/assets/${id}/file`);
+    expect(proxied.status).toBe(200);
+    expect(proxied.buffer).toEqual(Buffer.from("remote video"));
+    expect(proxied.headers).toMatchObject({
+      "content-type": "video/webm",
+      "content-length": "12",
+      "cache-control": "private, no-store",
+      "x-content-type-options": "nosniff",
+    });
+    expect(state.readPublicMedia).toHaveBeenCalledTimes(2);
+
+    state.activeAccountId = "account-b";
+    expect((await dispatch("GET", `/api/growth/assets/${id}/file`)).status).toBe(404);
+    expect((await dispatch("GET", "/api/growth/assets?repo=acme%2Frepo")).body.assets).toEqual([]);
+  });
+
+  it("rejects malformed and unavailable import requests", async () => {
+    const valid = {
+      repository: "acme/repo",
+      origin: "readme",
+      url: "https://cdn.example/readme.png",
+      title: "README image",
+      alt: "README image",
+    };
+    state.fetchReadmeSignal.mockResolvedValue({ excerpt: "README", mediaUrls: [valid.url] });
+    expect((await dispatch("GET", "/api/growth/assets/import-candidates")).status).toBe(400);
+    expect((await dispatch("GET", "/api/growth/assets/import-candidates?repo=bad")).status).toBe(400);
+    expect((await dispatch("POST", "/api/growth/assets/import", { ...valid, extra: true })).status).toBe(400);
+    expect((await dispatch("POST", "/api/growth/assets/import", { ...valid, origin: "upload" })).status).toBe(400);
+    expect((await dispatch("POST", "/api/growth/assets/import", { ...valid, alt: " " })).status).toBe(400);
+    state.readPublicMedia.mockRejectedValueOnce(new Error("unavailable"));
+    expect((await dispatch("POST", "/api/growth/assets/import", valid)).status).toBe(422);
+  });
+
+  it("returns a generic not-found response for missing, traversing, and generated asset files", async () => {
     await mkdir(state.tmpDir, { recursive: true });
     await writeFile(resolve(state.tmpDir, "secret.png"), "secret");
     const traversal = growthStore.createGrowthAsset({
@@ -301,17 +417,18 @@ describe("Growth API routes", () => {
       title: "Missing",
       alt: "Missing",
     });
-    const remote = growthStore.createGrowthAsset({
+    const generated = growthStore.createGrowthAsset({
       accountId: "account-a",
       repository: "acme/repo",
       kind: "image",
-      origin: "website",
-      url: "https://example.com/remote.png",
-      title: "Remote",
-      alt: "Remote",
+      origin: "generated",
+      cardTemplate: "release",
+      cardData: { title: "Release" },
+      title: "Generated",
+      alt: "Generated",
     });
 
-    for (const id of [traversal.id, missing.id, remote.id, "unknown-id"]) {
+    for (const id of [traversal.id, missing.id, generated.id, "unknown-id"]) {
       const response = await dispatch("GET", `/api/growth/assets/${id}/file`);
       expect(response).toEqual({ status: 404, body: { ok: false, error: "asset not found" } });
       expect(JSON.stringify(response.body)).not.toContain("secret");

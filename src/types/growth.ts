@@ -259,6 +259,7 @@ export interface GrowthContentItemFilters {
 
 export type GrowthAssetKind = "image" | "video";
 export type GrowthAssetOrigin = "upload" | "readme" | "website" | "generated";
+export type GrowthAssetImportOrigin = Extract<GrowthAssetOrigin, "readme" | "website">;
 export const MAX_GROWTH_ASSET_BYTES = 25 * 1024 * 1024;
 export const GROWTH_ASSET_MIME_TYPES = [
   "image/png",
@@ -310,9 +311,34 @@ export interface GrowthAssetsData {
   assets: GrowthAssetMetadata[];
 }
 
+export interface GrowthAssetImportCandidate {
+  origin: GrowthAssetImportOrigin;
+  source: string;
+  url: string;
+  title: string;
+  alt: string;
+}
+
+export interface GrowthAssetImportCandidatesData {
+  ok: true;
+  candidates: GrowthAssetImportCandidate[];
+}
+
+export interface ImportGrowthAssetInput {
+  repository: string;
+  origin: GrowthAssetImportOrigin;
+  url: string;
+  title: string;
+  alt: string;
+}
+
 export interface GrowthAssetData {
   ok: true;
   asset: GrowthAssetMetadata;
+}
+
+export interface GrowthImportedAssetData extends GrowthAssetData {
+  duplicate: boolean;
 }
 
 export interface UploadGrowthAssetInput {

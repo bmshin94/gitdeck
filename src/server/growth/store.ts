@@ -648,6 +648,21 @@ export function getGrowthAsset(accountId: string, id: string): GrowthAsset | nul
   return row ? growthAssetFromRow(row) : null;
 }
 
+export function findGrowthAssetByUrl(
+  accountId: string,
+  repository: string,
+  url: string,
+): GrowthAsset | null {
+  ensureGrowthAccountMigration(accountId);
+  const row = get<GrowthAssetRow>(
+    `SELECT * FROM growth_assets
+     WHERE account_id = ? AND repository = ? AND url = ?
+     ORDER BY created_at, id LIMIT 1`,
+    [accountId, repository, url],
+  );
+  return row ? growthAssetFromRow(row) : null;
+}
+
 /** Lists the stored media library for exactly one account and repository. */
 export function listGrowthAssets(accountId: string, repository: string): GrowthAsset[] {
   ensureGrowthAccountMigration(accountId);

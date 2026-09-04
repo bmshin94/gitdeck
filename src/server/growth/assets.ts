@@ -6,13 +6,28 @@ import {
   GROWTH_ASSET_MIME_TYPES,
   MAX_GROWTH_ASSET_BYTES,
   type GrowthAsset,
+  type GrowthAssetImportCandidate,
+  type GrowthAssetImportOrigin,
   type GrowthAssetKind,
   type GrowthAssetMetadata,
   type GrowthAssetMimeType,
 } from "../../types/growth";
+import {
+  normalizeGrowthAssetImportCandidates,
+  normalizeGrowthAssetImportUrl,
+  type GrowthAssetImportSource,
+} from "../../utils/growth/importCandidates";
 import { parseRepositoryName } from "../../utils/repository";
 import { DATA_DIR } from "../config";
-import { createGrowthAsset, getGrowthAsset } from "./store";
+import { getRepositoryContentSources } from "../goalStore";
+import {
+  fetchAdditionalSourceSignals,
+  fetchReadmeSignal,
+  PublicMediaTooLargeError,
+  readPublicMedia,
+  UnsupportedPublicMediaTypeError,
+} from "./signals";
+import { createGrowthAsset, findGrowthAssetByUrl, getGrowthAsset } from "./store";
 
 export { GROWTH_ASSET_MIME_TYPES, MAX_GROWTH_ASSET_BYTES } from "../../types/growth";
 export type { GrowthAssetMimeType } from "../../types/growth";
@@ -76,6 +91,20 @@ export interface GrowthAssetFile {
   body: Buffer;
   contentType: GrowthAssetMimeType;
   length: number;
+}
+
+export interface ImportGrowthAssetOptions {
+  accountId: string;
+  repository: string;
+  origin: GrowthAssetImportOrigin;
+  url: string;
+  title: string;
+  alt: string;
+}
+
+export interface ImportedGrowthAssetResult {
+  asset: GrowthAsset;
+  duplicate: boolean;
 }
 
 export function getGrowthAssetRoot(): string {
@@ -200,10 +229,110 @@ function isContainedPath(root: string, candidate: string): boolean {
   return child.length > 0 && !child.startsWith("..") && !isAbsolute(child);
 }
 
-/** Reads only a local uploaded file owned by the requested account. */
+function signalMediaUrls(value: unknown): unknown[] {
+  if (!value || typeof value !== "object") return [];
+  const mediaUrls = (value as { mediaUrls?: unknown }).mediaUrls;
+  return Array.isArray(mediaUrls) ? mediaUrls : [];
+}
+
+function signalTitle(value: unknown): string | null {
+  if (!value || typeof value !== "object") return null;
+  const title = (value as { title?: unknown }).title;
+  return typeof title === "string" ? title : null;
+}
+
+/** Discovers repository and configured-source media without persisting or exposing its bytes. */
+export async function discoverGrowthAssetImportCandidates(
+  accountId: string,
+  repository: string,
+): Promise<GrowthAssetImportCandidate[]> {
+  if (!accountId.trim()) throw new GrowthAssetValidationError("invalid account");
+  if (!parseRepositoryName(repository)) throw new GrowthAssetValidationError("invalid repository");
+  const sources = getRepositoryContentSources(accountId, repository);
+  const [readme, additionalSignals] = await Promise.all([
+    fetchReadmeSignal(repository),
+    fetchAdditionalSourceSignals(sources),
+  ]);
+  const importSources: GrowthAssetImportSource[] = [];
+  if (readme) {
+    importSources.push({
+      origin: "readme",
+      source: `${repository} README`,
+      title: null,
+      mediaUrls: readme.mediaUrls,
+    });
+  }
+  sources.forEach((source, index) => {
+    const signal = additionalSignals[index];
+    importSources.push({
+      origin: source.type === "website" ? "website" : "readme",
+      source: source.value,
+      title: signalTitle(signal),
+      baseUrl: source.type === "website" ? source.value : null,
+      mediaUrls: signalMediaUrls(signal),
+    });
+  });
+  return normalizeGrowthAssetImportCandidates(importSources);
+}
+
+/** Verifies a current source candidate and persists one URL-backed repository asset. */
+export async function persistImportedGrowthAsset(
+  options: ImportGrowthAssetOptions,
+): Promise<ImportedGrowthAssetResult> {
+  if (!options.accountId.trim()) throw new GrowthAssetValidationError("invalid account");
+  if (!parseRepositoryName(options.repository)) throw new GrowthAssetValidationError("invalid repository");
+  if (options.origin !== "readme" && options.origin !== "website") {
+    throw new GrowthAssetValidationError("invalid import origin");
+  }
+  const url = normalizeGrowthAssetImportUrl(options.url);
+  if (!url) throw new GrowthAssetValidationError("invalid asset URL");
+  const title = normalizeText(options.title, "title", 500);
+  const alt = normalizeText(options.alt, "alt", 2_000);
+  const candidates = await discoverGrowthAssetImportCandidates(options.accountId, options.repository);
+  if (!candidates.some((candidate) => candidate.origin === options.origin && candidate.url === url)) {
+    throw new GrowthAssetValidationError("asset URL is not a current import candidate");
+  }
+  const existing = findGrowthAssetByUrl(options.accountId, options.repository, url);
+  if (existing) return { asset: existing, duplicate: true };
+
+  let media;
+  try {
+    media = await readPublicMedia(url);
+  } catch (error) {
+    if (error instanceof PublicMediaTooLargeError) throw new GrowthAssetTooLargeError();
+    if (error instanceof UnsupportedPublicMediaTypeError) throw new UnsupportedGrowthAssetTypeError();
+    throw error;
+  }
+  const duplicate = findGrowthAssetByUrl(options.accountId, options.repository, url);
+  if (duplicate) return { asset: duplicate, duplicate: true };
+  return {
+    asset: createGrowthAsset({
+      accountId: options.accountId,
+      repository: options.repository,
+      kind: MIME_DETAILS[media.contentType].kind,
+      origin: options.origin,
+      url,
+      title,
+      alt,
+    }),
+    duplicate: false,
+  };
+}
+
+/** Reads one local upload or revalidates and proxies one URL-backed asset owned by the account. */
 export async function readGrowthAssetFile(accountId: string, id: string): Promise<GrowthAssetFile | null> {
   const asset = getGrowthAsset(accountId, id);
-  if (!asset || asset.origin !== "upload" || asset.path === null || asset.url !== null) return null;
+  if (!asset) return null;
+  if ((asset.origin === "readme" || asset.origin === "website") && asset.path === null && asset.url !== null) {
+    try {
+      const media = await readPublicMedia(asset.url);
+      if (MIME_DETAILS[media.contentType].kind !== asset.kind) return null;
+      return { body: media.body, contentType: media.contentType, length: media.length };
+    } catch {
+      return null;
+    }
+  }
+  if (asset.origin !== "upload" || asset.path === null || asset.url !== null) return null;
 
   const root = getGrowthAssetRoot();
   const candidate = resolve(root, asset.path);

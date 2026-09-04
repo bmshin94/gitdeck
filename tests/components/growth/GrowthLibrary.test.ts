@@ -7,7 +7,9 @@ import type { GrowthProfile } from "../../../src/types/growth";
 
 const mocks = vi.hoisted(() => ({
   buildGrowthAssetFileUrl: vi.fn((id: string) => `/api/growth/assets/${id}/file`),
+  fetchGrowthAssetImportCandidates: vi.fn(),
   fetchGrowthAssets: vi.fn(),
+  importGrowthAsset: vi.fn(),
   fetchGrowthProfile: vi.fn(),
   updateGrowthProfile: vi.fn(),
   uploadGrowthAsset: vi.fn(),
@@ -15,7 +17,9 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("../../../src/api/growth", () => ({
   buildGrowthAssetFileUrl: mocks.buildGrowthAssetFileUrl,
+  fetchGrowthAssetImportCandidates: mocks.fetchGrowthAssetImportCandidates,
   fetchGrowthAssets: mocks.fetchGrowthAssets,
+  importGrowthAsset: mocks.importGrowthAsset,
   fetchGrowthProfile: mocks.fetchGrowthProfile,
   updateGrowthProfile: mocks.updateGrowthProfile,
   uploadGrowthAsset: mocks.uploadGrowthAsset,
@@ -65,6 +69,7 @@ beforeEach(() => {
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
+  mocks.fetchGrowthAssetImportCandidates.mockResolvedValue([]);
   mocks.fetchGrowthAssets.mockResolvedValue([]);
   mocks.fetchGrowthProfile.mockResolvedValue(growthProfile());
   mocks.updateGrowthProfile.mockImplementation(async (_repository, input) => growthProfile({

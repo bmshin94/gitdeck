@@ -34,8 +34,10 @@ import {
   regenerateGrowthContentPlan,
 } from "../growth/planner";
 import {
+  discoverGrowthAssetImportCandidates,
   GrowthAssetTooLargeError,
   GrowthAssetValidationError,
+  persistImportedGrowthAsset,
   persistUploadedGrowthAsset,
   readGrowthAssetFile,
   toGrowthAssetMetadata,
@@ -51,6 +53,7 @@ import {
   GROWTH_CHANNELS,
   GROWTH_CONTENT_ITEM_STATUSES,
   GROWTH_INTERVENTION_STATUSES,
+  type GrowthAssetImportOrigin,
   type GrowthContentChannel,
   type GrowthContentMedia,
   type GrowthContentItemStatus,
@@ -628,6 +631,62 @@ async function assets(ctx: RouteContext): Promise<void> {
   }
 }
 
+async function assetImportCandidates(ctx: RouteContext): Promise<void> {
+  const account = await requireAccount(ctx);
+  if (!account) return;
+  if (!hasStrictQueryFields(ctx, ["repo"], ["repo"])) return badRequest(ctx, "invalid asset filter");
+  const repository = repositoryFromValue(ctx.url.searchParams.get("repo"));
+  if (!repository) return badRequest(ctx, "invalid repository");
+  try {
+    const candidates = await discoverGrowthAssetImportCandidates(account.id, repository);
+    sendJson(ctx.res, 200, { ok: true, candidates });
+  } catch {
+    sendJson(ctx.res, 502, { ok: false, error: "asset candidate discovery failed" });
+  }
+}
+
+async function importAsset(ctx: RouteContext): Promise<void> {
+  const account = await requireAccount(ctx);
+  if (!account) return;
+  const body = await parseJsonBody<Record<string, unknown>>(ctx.req, ctx.res);
+  if (!body) return;
+  const fields = ["repository", "origin", "url", "title", "alt"] as const;
+  if (
+    !isRecord(body)
+    || !hasOnlyKeys(body, fields)
+    || fields.some((field) => typeof body[field] !== "string")
+  ) return badRequest(ctx, "invalid asset import body");
+  const repository = repositoryFromValue(body.repository);
+  const origin = body.origin as GrowthAssetImportOrigin;
+  if (!repository || (origin !== "readme" && origin !== "website")) {
+    return badRequest(ctx, "invalid asset import body");
+  }
+  try {
+    const result = await persistImportedGrowthAsset({
+      accountId: account.id,
+      repository,
+      origin,
+      url: body.url as string,
+      title: body.title as string,
+      alt: body.alt as string,
+    });
+    sendJson(ctx.res, result.duplicate ? 200 : 201, {
+      ok: true,
+      asset: toGrowthAssetMetadata(result.asset),
+      duplicate: result.duplicate,
+    });
+  } catch (error) {
+    if (error instanceof GrowthAssetTooLargeError) {
+      return sendJson(ctx.res, 413, { ok: false, error: error.message });
+    }
+    if (error instanceof UnsupportedGrowthAssetTypeError) {
+      return sendJson(ctx.res, 415, { ok: false, error: error.message });
+    }
+    if (error instanceof GrowthAssetValidationError) return badRequest(ctx, error.message);
+    sendJson(ctx.res, 422, { ok: false, error: "import media is unavailable" });
+  }
+}
+
 async function assetFile(ctx: RouteContext): Promise<void> {
   const account = await requireAccount(ctx);
   if (!account) return;
@@ -954,6 +1013,8 @@ export function registerGrowthRoutes(router: AppRouter): void {
   router.on("PATCH", "/api/growth/interventions/:id", patchIntervention);
   router.get("/api/growth/assets", assets);
   router.post("/api/growth/assets", assets);
+  router.get("/api/growth/assets/import-candidates", assetImportCandidates);
+  router.post("/api/growth/assets/import", importAsset);
   router.get("/api/growth/assets/:id/file", assetFile);
   router.get("/api/growth/plans", plans);
   router.post("/api/growth/plans/generate", generatePlan);

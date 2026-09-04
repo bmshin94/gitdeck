@@ -1,7 +1,7 @@
 import { Readable } from "node:stream";
 import { mkdir, readdir, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const { TMP_DIR } = vi.hoisted(() => {
   const { tmpdir } = require("node:os") as typeof import("node:os");
@@ -12,6 +12,7 @@ const { TMP_DIR } = vi.hoisted(() => {
 vi.mock("../../src/server/config", () => ({ DATA_DIR: TMP_DIR }));
 
 const assets = await import("../../src/server/growth/assets");
+const signals = await import("../../src/server/growth/signals");
 const store = await import("../../src/server/growth/store");
 const { closeDatabase, getDatabase } = await import("../../src/server/sqlite");
 
@@ -41,9 +42,70 @@ beforeEach(async () => {
   await rm(TMP_DIR, { recursive: true, force: true });
 });
 
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
 afterAll(async () => {
   closeDatabase();
   await rm(TMP_DIR, { recursive: true, force: true });
+});
+
+describe("bounded public media reads", () => {
+  it("rejects private IPv4, IPv6, credentials, and redirect targets before requesting them", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(signals.readPublicMedia("http://127.0.0.1/image.png")).rejects.toThrow("private source URL");
+    await expect(signals.readPublicMedia("http://[::1]/image.png")).rejects.toThrow("private source URL");
+    await expect(signals.readPublicMedia("https://user:secret@93.184.216.34/image.png"))
+      .rejects.toThrow("unsupported source URL");
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    fetchMock.mockResolvedValueOnce(new Response(null, {
+      status: 302,
+      headers: { Location: "http://[::ffff:7f00:1]/private.png" },
+    }));
+    await expect(signals.readPublicMedia("https://93.184.216.34/image.png"))
+      .rejects.toThrow("private source URL");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("reads allowlisted media with bounded bytes and rejects HTML or oversized responses", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(Buffer.from("png"), {
+        status: 200,
+        headers: { "Content-Type": "image/png", "Content-Length": "3" },
+      }))
+      .mockResolvedValueOnce(new Response("<html></html>", {
+        status: 200,
+        headers: { "Content-Type": "text/html" },
+      }))
+      .mockResolvedValueOnce(new Response(Buffer.from("12345"), {
+        status: 200,
+        headers: { "Content-Type": "video/webm" },
+      }))
+      .mockResolvedValueOnce(new Response(Buffer.from("x"), {
+        status: 200,
+        headers: { "Content-Type": "image/jpeg", "Content-Length": "26" },
+      }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(signals.readPublicMedia("https://93.184.216.34/image.png", 4)).resolves.toEqual({
+      body: Buffer.from("png"),
+      contentType: "image/png",
+      length: 3,
+      finalUrl: "https://93.184.216.34/image.png",
+    });
+    const firstInit = fetchMock.mock.calls[0][1] as RequestInit;
+    expect(firstInit.redirect).toBe("manual");
+    expect(new Headers(firstInit.headers).get("accept")).toContain("video/webm");
+    await expect(signals.readPublicMedia("https://93.184.216.34/page", 20))
+      .rejects.toBeInstanceOf(signals.UnsupportedPublicMediaTypeError);
+    await expect(signals.readPublicMedia("https://93.184.216.34/video.webm", 4))
+      .rejects.toBeInstanceOf(signals.PublicMediaTooLargeError);
+    await expect(signals.readPublicMedia("https://93.184.216.34/declared.jpg", 4))
+      .rejects.toBeInstanceOf(signals.PublicMediaTooLargeError);
+  });
 });
 
 describe("Growth asset persistence", () => {
