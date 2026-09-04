@@ -30,7 +30,7 @@ Authoritative inventory of Growth Studio capabilities. Statuses: `EXISTING`
 | Content items list and drawer with editing, copy, scheduling, and publication actions | `src/components/growth/ContentItemDrawer.tsx`, `src/components/growth/GrowthInterventions.tsx`, `/api/growth/content/draft`; later reused by Calendar | DONE | GS-024 |
 | Library panel: sources, profile (voice, audience, channels), pillars, cadence | `src/components/growth/GrowthLibrary.tsx`, `src/utils/growth/profile.ts`, `/growth/r/:owner/:repo/library`, `/api/growth/profiles/:owner/:repo` | DONE | GS-025 |
 | Phase 2 closure and phase 3 task authoring | `growth-studio-project/tasks/GS-030.md` through `GS-038.md`, `growth-studio-project/tasks/PROGRESS.md`, `growth-studio-project/docs/GS_DECISIONS.md` | DONE | GS-026 |
-| Deterministic slot builder from cadence, pillars, posting windows | `src/utils/growth/planSlots.ts`, `tests/utils/growth/planSlots.test.ts` | PLANNED | GS-030 |
+| Deterministic slot builder from cadence, pillars, posting windows | `src/types/growth.ts`, `src/utils/growth/planSlots.ts`, `tests/utils/growth/planSlots.test.ts` | DONE | GS-030 |
 | AI planner assigning angles to slots | `src/server/growth/planner.ts`, `/api/growth/plans`, `/api/growth/plans/generate` | PLANNED | GS-031 |
 | AI drafter producing media-aware drafts per slot | `src/server/growth/drafter.ts`, `src/utils/growth/mediaCandidates.ts`, `/api/growth/content/:id/draft` | PLANNED | GS-032 |
 | Calendar month and week views with drag and drop | `src/components/growth/calendar/`, `src/utils/growth/calendar.ts`, `/growth/r/:owner/:repo/calendar` | PLANNED | GS-033 and GS-034 |

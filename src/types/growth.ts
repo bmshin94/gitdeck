@@ -47,6 +47,24 @@ export interface GrowthProfile {
 
 export type GrowthProfileInput = Omit<GrowthProfile, "accountId" | "repository" | "updatedAt">;
 
+export interface GrowthPlanSlot {
+  key: string;
+  channel: GrowthChannel;
+  format: GoalProposalFormat;
+  pillarId: string;
+  scheduledFor: string;
+}
+
+export interface BuildGrowthPlanSlotsInput {
+  periodStart: string;
+  periodEnd: string;
+  channels: GrowthChannelSelection;
+  cadence: GrowthCadence;
+  pillars: readonly GrowthPillar[];
+  postingWindows: readonly GrowthPostingWindow[];
+  timezone: string;
+}
+
 export const GROWTH_INTERVENTION_STATUSES = ["proposed", "accepted", "dismissed", "done"] as const;
 export type GrowthInterventionStatus = (typeof GROWTH_INTERVENTION_STATUSES)[number];
 export type GrowthInterventionCategory = "product" | "community" | "engineering" | "marketing";

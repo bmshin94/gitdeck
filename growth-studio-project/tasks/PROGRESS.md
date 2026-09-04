@@ -27,7 +27,7 @@ phase-closing tasks) are appended with `PENDING` rows and matching task files.
 | GS-024 | COMPLETED | Added idempotent intervention drafting and a reusable content drawer with editing, copy, scheduling, publication, and inline media-rule feedback | VALIDATION OK; typecheck; 44 test files and 211 tests; production build; account scope, draft refresh protection, AI error, drawer persistence, copy, and Escape tests; git diff --check | 2026-09-04 |
 | GS-025 | COMPLETED | Added the repository Library with source management and editable validated profile, channel, cadence, pillar, and posting-window settings | VALIDATION OK; typecheck; 45 test files and 218 tests; production build; profile UI, round-trip, account-scope, and constraint tests; git diff --check | 2026-09-04 |
 | GS-026 | COMPLETED | Closed phase 2 and authored nine contract-aligned phase 3 tasks with pending ledger rows | VALIDATION OK; app checks cache hit with unchanged source; phase 2 DONE audit; task structure and no-source-change checks; git diff --check | 2026-09-04 |
-| GS-030 | PENDING | — | — | — |
+| GS-030 | COMPLETED | Added deterministic timezone-aware editorial slots with cadence distribution, channel formats, and weighted pillars | VALIDATION OK; typecheck; 46 test files and 231 tests; production build; DST, four-week cadence, fallback windows, format mapping, ordering, and invalid-period tests; git diff --check | 2026-09-04 |
 | GS-031 | PENDING | — | — | — |
 | GS-032 | PENDING | — | — | — |
 | GS-033 | PENDING | — | — | — |
