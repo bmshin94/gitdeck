@@ -43,4 +43,12 @@ phase-closing tasks) are appended with `PENDING` rows and matching task files.
 | GS-044 | COMPLETED | Added bounded 2x browser PNG rasterization with SVG sizing, safe filenames, explicit backgrounds, typed failures, and object URL cleanup | VALIDATION OK; typecheck; 63 test files and 353 tests; production build; SVG, raster, sizing, cap, filename, error, and cleanup tests; git diff --check | 2026-09-04 |
 | GS-045 | COMPLETED | Added reusable browser PNG clipboard and download actions with authenticated assets, legacy source fallback, and Queue and drawer integration | VALIDATION OK; typecheck; 64 test files and 363 tests; production build; generated SVG, raster, exact clipboard MIME, fallback, CORS source, cleanup, video exclusion, and integration tests; git diff --check | 2026-09-04 |
 | GS-046 | COMPLETED | Added repository-library media attachment, metadata editing, safe removal, and account-scoped asset validation across protected content statuses | VALIDATION OK; typecheck; 66 test files and 376 tests; production build; create, patch, scheduling, publication, ownership, stale request, keyboard, and 390px coverage; git diff --check | 2026-09-04 |
-| GS-047 | PENDING | — | — | — |
+| GS-047 | COMPLETED | Closed phase 4 and authored eight contract-aligned phase 5 learning-loop tasks with pending ledger rows | VALIDATION OK; typecheck; 66 test files and 376 tests; production build; 18-screen Chromium audit at 1440, 1024, and 390 in dark and light themes with no overflow, alerts, broken images, or console errors; five-card, upload, remote import, private serving, clipboard fallback, Escape, media-gate, 109-key locale, task-structure, and dependency checks; git diff --check | 2026-09-04 |
+| GS-050 | PENDING | — | — | — |
+| GS-051 | PENDING | — | — | — |
+| GS-052 | PENDING | — | — | — |
+| GS-053 | PENDING | — | — | — |
+| GS-054 | PENDING | — | — | — |
+| GS-055 | PENDING | — | — | — |
+| GS-056 | PENDING | — | — | — |
+| GS-057 | PENDING | — | — | — |

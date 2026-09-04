@@ -46,11 +46,13 @@ Authoritative inventory of Growth Studio capabilities. Statuses: `EXISTING`
 | Image clipboard copy with download fallback | `src/components/growth/GrowthMediaActions.tsx`, `src/components/growth/calendar/GrowthQueue.tsx`, `src/components/growth/ContentItemDrawer.tsx` | DONE | GS-045 |
 | Media gate: `ready`, `scheduled`, and `published` require account-valid media | `src/server/growth/store.ts`, `src/server/routes/growth.ts`, `src/components/growth/ContentItemDrawer.tsx`, `tests/server/growthStore.test.ts`, `tests/server/growthRoutes.test.ts` | DONE | GS-020, GS-024, and GS-046 |
 | Media attachment and removal UI with asset ownership validation | `src/components/growth/GrowthMediaPicker.tsx`, `src/components/growth/ContentItemDrawer.tsx`, `src/utils/growth/contentMedia.ts`, `src/server/growth/store.ts`, `src/server/routes/growth.ts` | DONE | GS-046 |
-| Opportunity rules producing interventions | `utils/growth/opportunityRules.ts`, `server/growth/rules.ts` | PLANNED | Phase 5 |
-| Attribution of published items to metric deltas (48h, 7d) | `server/growth/attribution.ts` | PLANNED | Phase 5 |
-| Weekly Growth Review | `server/growth/review.ts`, `/growth/review` | PLANNED | Phase 5 |
-| Evergreen recycling | planner and rules | PLANNED | Phase 5 |
-| Plan re-weighting from performance | planner | PLANNED | Phase 5 |
+| Phase 4 closure and phase 5 task authoring | `growth-studio-project/tasks/GS-050.md` through `GS-057.md`, `growth-studio-project/tasks/PROGRESS.md`, `growth-studio-project/docs/GS_DECISIONS.md` | DONE | GS-047 |
+| Opportunity rules producing interventions and explicit backlog scanning | `src/utils/growth/opportunityRules.ts`, `src/server/growth/rules.ts`, `src/components/growth/GrowthInterventions.tsx` | PLANNED | GS-050 and GS-051 |
+| Attribution of published items to snapshot deltas at 48 hours and 7 days | `src/utils/growth/attribution.ts`, `src/server/growth/attribution.ts`, `src/server/growth/store.ts`, `/api/growth/performance` | PLANNED | GS-052 |
+| Channel and pillar performance summaries | `src/utils/growth/performanceSummary.ts`, `src/server/growth/performance.ts`, `/api/growth/performance/summary` | PLANNED | GS-053 |
+| Repository and global weekly Growth Review | `src/utils/growth/weeklyReview.ts`, `src/server/growth/review.ts`, `src/components/growth/GrowthReview.tsx`, `/growth/review` | PLANNED | GS-054 |
+| Evergreen recycling into deduplicated ideas | `src/utils/growth/evergreen.ts`, `src/server/growth/recycling.ts`, `src/components/growth/GrowthInterventions.tsx` | PLANNED | GS-050 and GS-055 |
+| Bounded plan re-weighting from performance | `src/utils/growth/performanceWeights.ts`, `src/server/growth/planner.ts` | PLANNED | GS-056 |
 | Unified calendar with per-repository colours and filters | `/growth/calendar` | PLANNED | Phase 6 |
 | Multi-repository deconfliction | planner | PLANNED | Phase 6 |
 | Growth settings (defaults, timezone) | `/growth/settings` | PLANNED | Phase 6 |
