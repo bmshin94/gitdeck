@@ -415,6 +415,7 @@ export const en = {
   "growth.planValidation": "Choose a valid Monday and a duration from one to four complete weeks.",
   "growth.planRequestError": "Could not update the editorial plan: {message}",
   "growth.planFallback": "The plan is complete, but one or more angles used the deterministic fallback because AI was unavailable or unusable.",
+  "growth.planWeightsAdjusted": "Recent seven-day results gently adjusted this plan's pillar mix. Your saved profile was not changed.",
   "growth.planLoading": "Loading editorial plans…",
   "growth.planLoadError": "Could not load editorial plans: {message}",
   "growth.planEmptyTitle": "No editorial plans yet",

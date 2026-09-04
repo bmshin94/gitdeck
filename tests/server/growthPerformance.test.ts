@@ -16,7 +16,10 @@ vi.mock("../../src/server/snapshots", () => ({
 }));
 
 const store = await import("../../src/server/growth/store");
-const { getGrowthPerformanceSummary } = await import("../../src/server/growth/performance");
+const {
+  getGrowthPerformanceSummary,
+  getPerformanceAdjustedPillars,
+} = await import("../../src/server/growth/performance");
 const { closeDatabase, getDatabase } = await import("../../src/server/sqlite");
 
 const MEDIA = [{ kind: "image" as const, url: "https://example.com/card.png", alt: "Card" }];
@@ -51,11 +54,12 @@ function measure(
   contentId: string,
   window: "48h" | "7d",
   metrics: Record<string, number>,
+  measuredAt = "2026-09-10T00:00:00.000Z",
 ): void {
   store.upsertContentPerformance(accountId, {
     contentId,
     window,
-    measuredAt: "2026-09-10T00:00:00.000Z",
+    measuredAt,
     metrics,
   });
 }
@@ -157,5 +161,50 @@ describe("Growth performance summary reads", () => {
       from: "2026-09-03T00:00:00.000Z",
       to: "2026-09-01T00:00:00.000Z",
     })).toThrow("invalid performance date range");
+  });
+
+  it("derives weights only from the requested account and repository", () => {
+    const productOne = createPublished({ publishedAt: "2026-09-01T00:00:00.000Z", pillar: "product" });
+    const productTwo = createPublished({ publishedAt: "2026-09-02T00:00:00.000Z", pillar: "product" });
+    const community = createPublished({ publishedAt: "2026-09-03T00:00:00.000Z", pillar: "community" });
+    const otherRepository = createPublished({
+      repository: "acme/other",
+      publishedAt: "2026-09-03T00:00:00.000Z",
+      pillar: "community",
+    });
+    const otherAccount = createPublished({
+      accountId: "account-b",
+      publishedAt: "2026-09-03T00:00:00.000Z",
+      pillar: "community",
+    });
+    measure("account-a", productOne.id, "7d", { starsDelta: 10, forksDelta: 0 });
+    measure("account-a", productTwo.id, "7d", { starsDelta: 10, forksDelta: 0 });
+    measure("account-a", community.id, "7d", { starsDelta: 0, forksDelta: 0 });
+    measure("account-a", otherRepository.id, "7d", { starsDelta: 100_000, forksDelta: 0 });
+    measure("account-b", otherAccount.id, "7d", { starsDelta: 100_000, forksDelta: 0 });
+    const pillars = [
+      { id: "product", label: "Product", weight: 50, description: "" },
+      { id: "community", label: "Community", weight: 50, description: "" },
+    ];
+
+    expect(getPerformanceAdjustedPillars(
+      "account-a",
+      "acme/rocket",
+      pillars,
+      "2026-10-05",
+    )).toEqual({
+      weightsAdjusted: true,
+      pillars: [
+        { ...pillars[0], weight: 58 },
+        { ...pillars[1], weight: 42 },
+      ],
+    });
+    expect(getPerformanceAdjustedPillars(
+      "account-b",
+      "acme/rocket",
+      pillars,
+      "2026-10-05",
+    )).toEqual({ weightsAdjusted: false, pillars });
+    expect(state.getSnapshotHistory).not.toHaveBeenCalled();
   });
 });

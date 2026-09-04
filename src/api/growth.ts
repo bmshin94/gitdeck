@@ -371,7 +371,10 @@ export async function generateGrowthContentPlan(
   );
 }
 
-export async function regenerateGrowthContentPlan(id: string, signal?: AbortSignal) {
+export async function regenerateGrowthContentPlan(
+  id: string,
+  signal?: AbortSignal,
+): Promise<GrowthRegeneratedContentPlanData> {
   return requestJson<GrowthRegeneratedContentPlanData>(
     `/api/growth/plans/${encodeURIComponent(id)}/regenerate`,
     jsonRequest("POST", {}, signal),

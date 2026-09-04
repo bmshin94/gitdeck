@@ -117,6 +117,7 @@ describe("GrowthPlanManager", () => {
       contentItems: [],
       aiEnabled: false,
       usedFallback: true,
+      weightsAdjusted: true,
     });
     await renderManager();
 
@@ -143,6 +144,7 @@ describe("GrowthPlanManager", () => {
       periodEnd: "2026-10-11",
     }, expect.any(AbortSignal));
     expect(container.textContent).toContain("deterministic fallback");
+    expect(container.textContent).toContain("Recent seven-day results gently adjusted");
     expect(container.textContent).toContain("Active");
     expect(onContentItemsChange).toHaveBeenCalledTimes(1);
   });
@@ -163,6 +165,7 @@ describe("GrowthPlanManager", () => {
       contentItems: [],
       aiEnabled: true,
       usedFallback: false,
+      weightsAdjusted: false,
     });
     mocks.archiveGrowthContentPlan.mockResolvedValue({
       ok: true,

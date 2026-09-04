@@ -48,6 +48,7 @@ export function GrowthPlanManager({
   const [requestError, setRequestError] = useState("");
   const [validationError, setValidationError] = useState("");
   const [fallbackNotice, setFallbackNotice] = useState("");
+  const [weightsNotice, setWeightsNotice] = useState("");
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
   const actionController = useRef<AbortController | null>(null);
 
@@ -67,6 +68,7 @@ export function GrowthPlanManager({
     setRequestError("");
     setValidationError("");
     setFallbackNotice("");
+    setWeightsNotice("");
     setPendingAction(null);
     setPeriodStart(defaultPeriod.periodStart);
     setWeeks(1);
@@ -112,6 +114,7 @@ export function GrowthPlanManager({
     setRequestError("");
     setValidationError("");
     setFallbackNotice("");
+    setWeightsNotice("");
     try {
       const result = await action(controller.signal);
       if (controller.signal.aborted) return;
@@ -121,6 +124,12 @@ export function GrowthPlanManager({
         && "usedFallback" in result
         && result.usedFallback === true
       ) setFallbackNotice(t("growth.planFallback"));
+      if (
+        typeof result === "object"
+        && result !== null
+        && "weightsAdjusted" in result
+        && result.weightsAdjusted === true
+      ) setWeightsNotice(t("growth.planWeightsAdjusted"));
       onContentItemsChange();
       await refreshPlans(controller.signal);
     } catch (cause) {
@@ -218,6 +227,7 @@ export function GrowthPlanManager({
       {validationError ? <div className="growth-plan-message error" role="alert">{validationError}</div> : null}
       {requestError ? <div className="growth-plan-message error" role="alert">{t("growth.planRequestError", { message: requestError })}</div> : null}
       {fallbackNotice ? <div className="growth-plan-message fallback" role="status">{fallbackNotice}</div> : null}
+      {weightsNotice ? <div className="growth-plan-message" role="status">{weightsNotice}</div> : null}
       {loading ? <div className="growth-plan-message" role="status">{t("growth.planLoading")}</div> : null}
       {!loading && loadError ? <div className="growth-plan-message error" role="alert">{t("growth.planLoadError", { message: loadError })}</div> : null}
       {!loading && !loadError && plans.length === 0 ? (

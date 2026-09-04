@@ -19,6 +19,7 @@ import {
   replaceContentPlanWithItems,
   ActivePlanOverlapError,
 } from "./store";
+import { getPerformanceAdjustedPillars } from "./performance";
 import { collectRepositorySignals, type GrowthRepositorySignals } from "./signals";
 
 export const GROWTH_PLANNER_GENERATION_VERSION = 1;
@@ -28,6 +29,7 @@ export interface GeneratedGrowthContentPlan {
   contentItems: GrowthContentItem[];
   aiEnabled: boolean;
   usedFallback: boolean;
+  weightsAdjusted: boolean;
 }
 
 export interface RegeneratedGrowthContentPlan extends GeneratedGrowthContentPlan {
@@ -40,6 +42,7 @@ interface PreparedGrowthContentPlan {
   itemInputs: Array<Omit<CreateGrowthContentItemInput, "accountId" | "repository" | "planId">>;
   aiEnabled: boolean;
   usedFallback: boolean;
+  weightsAdjusted: boolean;
 }
 
 interface PlannerAnswer {
@@ -205,14 +208,21 @@ async function prepareGrowthContentPlan(
   excludePlanId?: string,
 ): Promise<PreparedGrowthContentPlan> {
   const profile = getGrowthProfile(accountId, input.repository);
+  const weightAdjustment = getPerformanceAdjustedPillars(
+    accountId,
+    input.repository,
+    profile.pillars,
+    input.periodStart,
+  );
+  const planningProfile = { ...profile, pillars: weightAdjustment.pillars };
   const slots = buildGrowthPlanSlots({
     periodStart: input.periodStart,
     periodEnd: input.periodEnd,
-    channels: profile.channels,
-    cadence: profile.cadence,
-    pillars: profile.pillars,
-    postingWindows: profile.postingWindows,
-    timezone: profile.timezone,
+    channels: planningProfile.channels,
+    cadence: planningProfile.cadence,
+    pillars: planningProfile.pillars,
+    postingWindows: planningProfile.postingWindows,
+    timezone: planningProfile.timezone,
   });
   if (hasOverlappingActiveContentPlan(
     accountId,
@@ -230,7 +240,7 @@ async function prepareGrowthContentPlan(
   let candidates: unknown = [];
   if (aiEnabled && slots.length > 0) {
     try {
-      candidates = await requestAssignments(input, slots, profile, signals, evidence);
+      candidates = await requestAssignments(input, slots, planningProfile, signals, evidence);
     } catch (error) {
       if (!(error instanceof AiNotConfiguredError)) throw error;
     }
@@ -238,7 +248,7 @@ async function prepareGrowthContentPlan(
   const normalized = normalizeGrowthPlanAssignments(
     input.repository,
     slots,
-    profile.pillars,
+    planningProfile.pillars,
     evidence,
     candidates,
   );
@@ -249,8 +259,8 @@ async function prepareGrowthContentPlan(
       repository: input.repository,
       periodStart: input.periodStart,
       periodEnd: input.periodEnd,
-      cadence: profile.cadence,
-      pillars: profile.pillars,
+      cadence: planningProfile.cadence,
+      pillars: planningProfile.pillars,
       status: "active",
       generatedAt,
     },
@@ -277,6 +287,7 @@ async function prepareGrowthContentPlan(
     }),
     aiEnabled,
     usedFallback: !aiEnabled || normalized.usedFallback,
+    weightsAdjusted: weightAdjustment.weightsAdjusted,
   };
 }
 
@@ -291,6 +302,7 @@ export async function generateGrowthContentPlan(
     ...created,
     aiEnabled: prepared.aiEnabled,
     usedFallback: prepared.usedFallback,
+    weightsAdjusted: prepared.weightsAdjusted,
   };
 }
 
@@ -316,5 +328,6 @@ export async function regenerateGrowthContentPlan(
     ...replaced,
     aiEnabled: prepared.aiEnabled,
     usedFallback: prepared.usedFallback,
+    weightsAdjusted: prepared.weightsAdjusted,
   } : null;
 }

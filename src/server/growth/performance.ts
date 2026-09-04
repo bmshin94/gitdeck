@@ -1,12 +1,47 @@
 import type {
   GrowthPerformanceSummary,
   GrowthPerformanceSummaryFilters,
+  GrowthPillar,
 } from "../../types/growth";
+import {
+  adjustGrowthPillarWeights,
+  type GrowthPillarWeightAdjustment,
+} from "../../utils/growth/performanceWeights";
 import {
   parseUtcIsoDateTime,
   summarizeGrowthPerformance,
 } from "../../utils/growth/performanceSummary";
 import { listContentItems, listContentPerformance } from "./store";
+
+/** Reads repository-scoped history and derives the pillar snapshot for a future plan. */
+export function getPerformanceAdjustedPillars(
+  accountId: string,
+  repository: string,
+  pillars: readonly GrowthPillar[],
+  periodStart: string,
+): GrowthPillarWeightAdjustment {
+  const contentItems = listContentItems(accountId, {
+    repository,
+    status: "published",
+  });
+  const contentById = new Map(contentItems.map((item) => [item.id, item]));
+  const measurements = listContentPerformance(accountId, {
+    repository,
+    window: "7d",
+  }).flatMap((performance) => {
+    const item = contentById.get(performance.contentId);
+    if (!item?.publishedAt) return [];
+    return [{
+      contentId: item.id,
+      pillarId: item.pillar,
+      publishedAt: item.publishedAt,
+      measuredAt: performance.measuredAt,
+      window: performance.window,
+      metrics: performance.metrics,
+    }];
+  });
+  return adjustGrowthPillarWeights(pillars, measurements, periodStart);
+}
 
 function rangeTimestamp(value: string | undefined, label: string): number | undefined {
   if (value === undefined) return undefined;

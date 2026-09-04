@@ -52,7 +52,7 @@ Authoritative inventory of Growth Studio capabilities. Statuses: `EXISTING`
 | Channel and pillar performance summaries | `src/utils/growth/performanceSummary.ts`, `src/server/growth/performance.ts`, `src/types/growth.ts`, `src/api/growth.ts`, `/api/growth/performance/summary` | DONE | GS-053 |
 | Repository and global weekly Growth Review | `src/utils/growth/weeklyReview.ts`, `src/server/growth/review.ts`, `src/server/routes/growth.ts`, `src/api/growth.ts`, `src/components/growth/GrowthReview.tsx`, `src/styles/growth/review.css`, `/api/growth/review`, `/growth/review` | DONE | GS-054 |
 | Evergreen recycling into deduplicated ideas | `src/utils/growth/evergreen.ts`, `src/server/growth/recycling.ts`, `src/server/growth/store.ts`, `src/server/routes/growth.ts`, `src/api/growth.ts`, `src/components/growth/GrowthInterventions.tsx`, `src/components/growth/ContentItemDrawer.tsx` | DONE | GS-050 and GS-055 |
-| Bounded plan re-weighting from performance | `src/utils/growth/performanceWeights.ts`, `src/server/growth/planner.ts` | PLANNED | GS-056 |
+| Bounded plan re-weighting from performance with plan-only snapshots and UI notice | `src/utils/growth/performanceWeights.ts`, `src/server/growth/performance.ts`, `src/server/growth/planner.ts`, `src/components/growth/calendar/GrowthPlanManager.tsx` | DONE | GS-056 |
 | Unified calendar with per-repository colours and filters | `/growth/calendar` | PLANNED | Phase 6 |
 | Multi-repository deconfliction | planner | PLANNED | Phase 6 |
 | Growth settings (defaults, timezone) | `/growth/settings` | PLANNED | Phase 6 |

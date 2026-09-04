@@ -693,6 +693,7 @@ describe("Growth API routes", () => {
       ok: true,
       aiEnabled: false,
       usedFallback: true,
+      weightsAdjusted: false,
       plan: { accountId: "account-a", repository: "acme/repo", status: "active" },
     });
     expect(generated.body.contentItems).toHaveLength(1);
@@ -784,6 +785,7 @@ describe("Growth API routes", () => {
       plan: { status: "active", repository: "acme/repo" },
       aiEnabled: false,
       usedFallback: true,
+      weightsAdjusted: false,
     });
     expect(regenerated.body.contentItems).toHaveLength(2);
     expect(regenerated.body.affectedContentItems.map((item: { id: string }) => item.id))

@@ -653,6 +653,7 @@ export interface GrowthGeneratedContentPlanData {
   contentItems: GrowthContentItem[];
   aiEnabled: boolean;
   usedFallback: boolean;
+  weightsAdjusted: boolean;
 }
 
 export interface GrowthArchivedContentPlanData {

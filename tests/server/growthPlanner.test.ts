@@ -87,6 +87,32 @@ function saveProfile(accountId = "account-a", repository = "acme/rocket") {
   return store.upsertGrowthProfile(accountId, repository, profileInput());
 }
 
+function addMeasuredHistory(
+  accountId: string,
+  repository: string,
+  pillar: string,
+  score: number,
+  index: number,
+) {
+  const item = store.createContentItem({
+    accountId,
+    repository,
+    channel: "x",
+    format: "x-thread",
+    pillar,
+    status: "published",
+    publishedAt: `2026-09-${String(index + 1).padStart(2, "0")}T00:00:00.000Z`,
+    media: [{ kind: "image", url: "https://example.com/history.png", alt: "History" }],
+  });
+  store.upsertContentPerformance(accountId, {
+    contentId: item.id,
+    window: "7d",
+    measuredAt: "2026-09-15T00:00:00.000Z",
+    metrics: { starsDelta: score, forksDelta: 0 },
+  });
+  return item;
+}
+
 beforeEach(async () => {
   closeDatabase();
   await rm(state.tmpDir, { recursive: true, force: true });
@@ -130,7 +156,12 @@ describe("Growth editorial planner", () => {
     expect(state.collectSignals).toHaveBeenCalledTimes(1);
     expect(state.collectSignals).toHaveBeenCalledWith("account-a", "acme/rocket");
     expect(state.generateStructured).toHaveBeenCalledTimes(1);
-    expect(result).toMatchObject({ aiEnabled: true, usedFallback: false, plan: { status: "active" } });
+    expect(result).toMatchObject({
+      aiEnabled: true,
+      usedFallback: false,
+      weightsAdjusted: false,
+      plan: { status: "active" },
+    });
     expect(result.contentItems).toHaveLength(2);
     expect(result.contentItems[0]).toMatchObject({
       planId: result.plan.id,
@@ -187,6 +218,54 @@ describe("Growth editorial planner", () => {
     });
     expect(malformed.usedFallback).toBe(true);
     expect(malformed.contentItems).toHaveLength(2);
+  });
+
+  it("uses eligible performance only for the plan snapshot and weighted slot distribution", async () => {
+    const configured = profileInput();
+    configured.cadence.x = 10;
+    configured.pillars = [
+      { id: "product", label: "Product", weight: 50, description: "Outcomes" },
+      { id: "community", label: "Community", weight: 50, description: "Contributors" },
+    ];
+    const savedProfile = store.upsertGrowthProfile("account-a", "acme/rocket", configured);
+    addMeasuredHistory("account-a", "acme/rocket", "product", 10, 0);
+    addMeasuredHistory("account-a", "acme/rocket", "product", 10, 1);
+    addMeasuredHistory("account-a", "acme/rocket", "community", 0, 2);
+    addMeasuredHistory("account-b", "acme/rocket", "community", 100_000, 3);
+    addMeasuredHistory("account-a", "acme/other", "community", 100_000, 4);
+    state.aiConfigured = false;
+
+    const result = await generateGrowthContentPlan("account-a", {
+      repository: "acme/rocket",
+      periodStart: "2026-10-05",
+      periodEnd: "2026-10-11",
+    });
+
+    expect(result.weightsAdjusted).toBe(true);
+    expect(result.plan.pillars.map(({ id, weight }) => ({ id, weight }))).toEqual([
+      { id: "product", weight: 58 },
+      { id: "community", weight: 42 },
+    ]);
+    expect(result.contentItems.reduce<Record<string, number>>((counts, item) => {
+      counts[item.pillar] = (counts[item.pillar] ?? 0) + 1;
+      return counts;
+    }, {})).toEqual({ product: 6, community: 4 });
+    const ready = store.createContentItem({
+      accountId: "account-a",
+      repository: "acme/rocket",
+      planId: result.plan.id,
+      channel: "x",
+      format: "x-thread",
+      status: "ready",
+      media: [{ kind: "image", url: "https://example.com/ready.png", alt: "Ready" }],
+    });
+    const regenerated = await regenerateGrowthContentPlan("account-a", result.plan.id);
+    expect(regenerated).toMatchObject({
+      weightsAdjusted: true,
+      plan: { pillars: [{ weight: 58 }, { weight: 42 }] },
+    });
+    expect(store.getContentItem("account-a", ready.id)?.status).toBe("ready");
+    expect(store.getGrowthProfile("account-a", "acme/rocket")).toEqual(savedProfile);
   });
 
   it("does not persist configured-provider failures or partial database writes", async () => {
@@ -256,6 +335,7 @@ describe("Growth editorial planner", () => {
       sourcePlan: { id: source.plan.id, status: "archived" },
       plan: { status: "active", repository: "acme/rocket" },
       usedFallback: true,
+      weightsAdjusted: false,
     });
     expect(result?.affectedContentItems.map(({ id }) => id)).toEqual([
       source.contentItems[0].id,

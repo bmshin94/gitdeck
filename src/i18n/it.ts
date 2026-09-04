@@ -417,6 +417,7 @@ export const it: Record<keyof typeof en, string> = {
   "growth.planValidation": "Scegli un lunedì valido e una durata da una a quattro settimane complete.",
   "growth.planRequestError": "Impossibile aggiornare il piano editoriale: {message}",
   "growth.planFallback": "Il piano è completo, ma una o più proposte usano il fallback deterministico perché l’AI non era disponibile o utilizzabile.",
+  "growth.planWeightsAdjusted": "I risultati recenti a sette giorni hanno adattato leggermente i temi di questo piano. Il profilo salvato non è stato modificato.",
   "growth.planLoading": "Caricamento dei piani editoriali…",
   "growth.planLoadError": "Impossibile caricare i piani editoriali: {message}",
   "growth.planEmptyTitle": "Nessun piano editoriale",
