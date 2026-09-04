@@ -14,7 +14,7 @@ Authoritative inventory of Growth Studio capabilities. Statuses: `EXISTING`
 | AI proposals per suggestion (X thread, LinkedIn, Mastodon) with source-backed media suggestions when assets are available | `src/server/goals.ts` `generateGoalProposals`, `src/utils/socialProposals.ts`, `src/server/goalStore.ts` `saveGoalProposals`, `src/components/modals/GoalProposalsModal.tsx` | EXISTING | GS-021 migrates |
 | Repository content sources (repositories and websites) with SSRF-guarded website reads during generation | `src/server/goalStore.ts`, `src/server/routes/repository.ts`, `src/server/goals.ts`, `src/api/github.ts`, `src/components/common/RepositoryContentSources.tsx`, `src/components/common/ContentSourcePicker.tsx`, `src/utils/socialProposals.ts` | EXISTING | GS-025 moves to Library |
 | AI provider settings and connection test | `src/components/preferences/AiIntegrationSettings.tsx`, `src/api/github.ts`, `src/server/routes/ai.ts`, `src/server/ai/client.ts`, `src/server/ai/settings.ts`, `src/server/ai/providers.ts` | EXISTING | — |
-| `/growth` client routes served by the SPA | `server/spa.ts`, `main.tsx` | PLANNED | GS-010 |
+| `/growth` client routes served by the SPA | `src/server/spa.ts`, `src/main.tsx`, `src/components/growth/GrowthStudioApp.tsx`, `tests/server/spa.test.ts` | DONE | GS-010 |
 | Growth shell: own top bar, sidebar, `mode-growth` body class, no dashboard chrome | `components/growth/GrowthStudioApp.tsx`, `styles/growth/shell.css` | PLANNED | GS-011 |
 | Main-menu entry opening `/growth` in a new window; `goals` tab removed; `/goals` redirect | `App.tsx` | PLANNED | GS-012 |
 | Missions panel hosting the existing goals UI | `/growth/r/:owner/:repo/missions` | PLANNED | GS-013 |

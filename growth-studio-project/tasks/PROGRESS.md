@@ -13,7 +13,7 @@ phase-closing tasks) are appended with `PENDING` rows and matching task files.
 | GS-001 | COMPLETED | Verified the current goals architecture, locale inventory, tab consumers, and existing feature locations | VALIDATION OK; 70 locale keys matched in English and Italian; branch and no-source-change checks; git diff --check | 2026-09-04 |
 | GS-002 | COMPLETED | Settled phase 1 and phase 2 routing, shell, account, migration, API, and data-model choices with provisional recommendations where needed | VALIDATION OK; decision coverage for GS-010 through GS-016 and GS-020 through GS-026; no source changes; git diff --check | 2026-09-04 |
 | GS-003 | COMPLETED | Hardened the gate with fixture-free test-placement and symmetric English/Italian locale-key guards | VALIDATION OK twice; full typecheck; 28 test files and 151 tests; production build; second-run cache hit; misplaced test and both locale mismatch directions failed as expected; clean guards passed; git diff --check | 2026-09-04 |
-| GS-010 | PENDING | — | — | — |
+| GS-010 | COMPLETED | Added extension-safe Growth Studio SPA routes and route-aware placeholder mounting without changing dashboard routes | VALIDATION OK; typecheck; 29 test files and 156 tests; production build; dev HTTP and Chromium checks for both Growth routes and repositories | 2026-09-04 |
 | GS-011 | PENDING | — | — | — |
 | GS-012 | PENDING | — | — | — |
 | GS-013 | PENDING | — | — | — |
