@@ -147,6 +147,7 @@ export const en = {
   "tabs.digest": "Digest",
   "tabs.board": "Board",
   "tabs.goals": "Goals",
+  "tabs.growthStudio": "Growth Studio",
   "growth.productName": "Growth Studio",
   "growth.productTagline": "Repository growth workspace",
   "growth.growthStudio": "Growth Studio",

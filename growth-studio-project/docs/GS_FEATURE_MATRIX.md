@@ -16,7 +16,7 @@ Authoritative inventory of Growth Studio capabilities. Statuses: `EXISTING`
 | AI provider settings and connection test | `src/components/preferences/AiIntegrationSettings.tsx`, `src/api/github.ts`, `src/server/routes/ai.ts`, `src/server/ai/client.ts`, `src/server/ai/settings.ts`, `src/server/ai/providers.ts` | EXISTING | — |
 | `/growth` client routes served by the SPA | `src/server/spa.ts`, `src/main.tsx`, `src/components/growth/GrowthStudioApp.tsx`, `tests/server/spa.test.ts` | DONE | GS-010 |
 | Growth shell: own top bar, sidebar, `mode-growth` body class, no dashboard chrome | `src/components/growth/GrowthStudioApp.tsx`, `src/components/growth/GrowthTopBar.tsx`, `src/components/growth/GrowthSidebar.tsx`, `src/styles/growth/shell.css` | DONE | GS-011 |
-| Main-menu entry opening `/growth` in a new window; `goals` tab removed; `/goals` redirect | `App.tsx` | PLANNED | GS-012 |
+| Main-menu entry opening `/growth` in a new window; `goals` tab removed; `/goals` redirect | `src/App.tsx`, `src/main.tsx`, `src/utils/dataRequirements.ts`, `src/components/SidebarControls.tsx` | DONE | GS-012 |
 | Missions panel hosting the existing goals UI | `/growth/r/:owner/:repo/missions` | PLANNED | GS-013 |
 | Growth home: repositories with profiles or goals, quick stats | `/growth` | PLANNED | GS-014 |
 | Workspace overview per repository | `/growth/r/:owner/:repo` | PLANNED | GS-015 |

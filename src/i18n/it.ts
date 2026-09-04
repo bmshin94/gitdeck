@@ -149,6 +149,7 @@ export const it: Record<keyof typeof en, string> = {
   "tabs.digest": "Digest",
   "tabs.board": "Board",
   "tabs.goals": "Obiettivi",
+  "tabs.growthStudio": "Growth Studio",
   "growth.productName": "Growth Studio",
   "growth.productTagline": "Spazio di crescita per repository",
   "growth.growthStudio": "Growth Studio",

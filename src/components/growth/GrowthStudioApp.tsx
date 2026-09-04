@@ -43,7 +43,6 @@ const DASHBOARD_BODY_CLASSES = [
   "tab-alerts",
   "tab-ci",
   "tab-digests",
-  "tab-goals",
 ];
 
 function initialTheme(): GrowthTheme {

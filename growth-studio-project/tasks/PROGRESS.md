@@ -15,7 +15,7 @@ phase-closing tasks) are appended with `PENDING` rows and matching task files.
 | GS-003 | COMPLETED | Hardened the gate with fixture-free test-placement and symmetric English/Italian locale-key guards | VALIDATION OK twice; full typecheck; 28 test files and 151 tests; production build; second-run cache hit; misplaced test and both locale mismatch directions failed as expected; clean guards passed; git diff --check | 2026-09-04 |
 | GS-010 | COMPLETED | Added extension-safe Growth Studio SPA routes and route-aware placeholder mounting without changing dashboard routes | VALIDATION OK; typecheck; 29 test files and 156 tests; production build; dev HTTP and Chromium checks for both Growth routes and repositories | 2026-09-04 |
 | GS-011 | COMPLETED | Added the authenticated Growth Studio shell with dedicated top bar, responsive sidebar, repository switching, route placeholders, and shared theme handling | VALIDATION OK; typecheck; 30 test files and 159 tests; production build; Growth route utility tests; git diff --check | 2026-09-04 |
-| GS-012 | PENDING | — | — | — |
+| GS-012 | COMPLETED | Replaced the dashboard goals tab with a new-window Growth Studio entry and added the legacy goals redirect | VALIDATION OK; typecheck; 30 test files and 159 tests; production build; acceptance grep; git diff --check | 2026-09-04 |
 | GS-013 | PENDING | — | — | — |
 | GS-014 | PENDING | — | — | — |
 | GS-015 | PENDING | — | — | — |

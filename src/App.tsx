@@ -4,7 +4,6 @@ import {
   fetchAuthStatus,
   fetchCIHealth,
   fetchDailyDigests,
-  fetchGoals,
   fetchNotifications,
   fetchRepoInsights,
   logoutAuth,
@@ -33,8 +32,6 @@ import { InsightsView } from "./components/views/InsightsView";
 import { RepoGrid } from "./components/views/RepoGrid";
 import { KanbanView } from "./components/views/KanbanView";
 import { CIHealthView } from "./components/views/CIHealthView";
-import { GoalsView } from "./components/views/GoalsView";
-import type { RepositoryGoal } from "./types/goals";
 import type {
   CIHealthData,
   DailyDigestEntry,
@@ -71,7 +68,7 @@ import { useI18n } from "./i18n/I18nProvider";
 import { useAccounts, useCapability } from "./contexts/AccountContext";
 import { useDashboardData } from "./hooks/useDashboardData";
 
-type Tab = "inbox" | "repos" | "issues" | "prs" | "kanban" | "insights" | "alerts" | "ci" | "digests" | "goals";
+type Tab = "inbox" | "repos" | "issues" | "prs" | "kanban" | "insights" | "alerts" | "ci" | "digests";
 type Theme = "dark" | "light" | "auto";
 type TextSize = "small" | "normal" | "large";
 
@@ -85,7 +82,6 @@ const TAB_ROUTES: Record<Tab, string> = {
   alerts: "/alerts",
   ci: "/ci",
   digests: "/daily",
-  goals: "/goals",
 };
 
 const PREFERENCES_ROUTE = "/preferences";
@@ -196,8 +192,6 @@ export function App() {
   const [dailyDigests, setDailyDigests] = useState<DailyDigestEntry[]>([]);
   const [digestPeriod, setDigestPeriod] = useState<DigestPeriod>(() => (localStorage.getItem("gh-dash.digestPeriod") as DigestPeriod) || "day");
   const [ciHealth, setCiHealth] = useState<RepoCIHealth[]>([]);
-  const [goals, setGoals] = useState<RepositoryGoal[]>([]);
-  const [goalsLoaded, setGoalsLoaded] = useState(false);
   const [insightsLoaded, setInsightsLoaded] = useState(false);
   const [ciLoaded, setCiLoaded] = useState(false);
   const [digestsLoaded, setDigestsLoaded] = useState(false);
@@ -240,8 +234,6 @@ export function App() {
     setRepoInsights([]);
     setDailyDigests([]);
     setCiHealth([]);
-    setGoals([]);
-    setGoalsLoaded(false);
     setInsightsLoaded(false);
     setCiLoaded(false);
     setDigestsLoaded(false);
@@ -292,24 +284,6 @@ export function App() {
     if (authState !== "authenticated" || !paletteOpen) return;
     loadAll();
   }, [authState, paletteOpen, loadAll]);
-
-  const refreshGoals = useCallback(async () => {
-    const data = await fetchGoals();
-    setGoals(data.goals);
-    setGoalsLoaded(true);
-  }, []);
-
-  useEffect(() => {
-    if (authState !== "authenticated" || tab !== "goals") return;
-    const controller = new AbortController();
-    fetchGoals(controller.signal).then((data) => {
-      if (!controller.signal.aborted) {
-        setGoals(data.goals);
-        setGoalsLoaded(true);
-      }
-    }).catch(() => { if (!controller.signal.aborted) setGoalsLoaded(true); });
-    return () => controller.abort();
-  }, [authState, activeAccountId, tab]);
 
   useEffect(() => {
     if (authState !== "authenticated") return;
@@ -372,8 +346,6 @@ export function App() {
     setRepoInsights([]);
     setDailyDigests([]);
     setCiHealth([]);
-    setGoals([]);
-    setGoalsLoaded(false);
     setInsightsLoaded(false);
     setCiLoaded(false);
     setDigestsLoaded(false);
@@ -406,7 +378,6 @@ export function App() {
     document.body.classList.toggle("tab-alerts", tab === "alerts");
     document.body.classList.toggle("tab-ci", tab === "ci");
     document.body.classList.toggle("tab-digests", tab === "digests");
-    document.body.classList.toggle("tab-goals", tab === "goals");
     document.body.classList.toggle("route-preferences", isPreferencesPage);
     document.body.classList.toggle("filters-open", filtersOpen);
   }, [tab, filtersOpen, isPreferencesPage]);
@@ -659,7 +630,7 @@ export function App() {
   const search =
     tab === "inbox"
       ? inboxSearch
-      : tab === "repos" || tab === "insights" || tab === "alerts" || tab === "digests" || tab === "goals"
+      : tab === "repos" || tab === "insights" || tab === "alerts" || tab === "digests"
         ? repoFilters.search
         : tab === "prs"
           ? prFilters.search
@@ -678,7 +649,7 @@ export function App() {
     if (tab === "inbox") {
       setInboxSearch(value);
       setInboxPage(1);
-    } else if (tab === "repos" || tab === "insights" || tab === "alerts" || tab === "digests" || tab === "goals") {
+    } else if (tab === "repos" || tab === "insights" || tab === "alerts" || tab === "digests") {
       setRepoFilters({ ...repoFilters, search: value });
       setRepoPage(1);
     } else if (tab === "prs") {
@@ -691,7 +662,7 @@ export function App() {
   }
 
   function resetFilters() {
-    if (tab === "repos" || tab === "insights" || tab === "alerts" || tab === "digests" || tab === "goals") setRepoFilters(defaultRepoFilters());
+    if (tab === "repos" || tab === "insights" || tab === "alerts" || tab === "digests") setRepoFilters(defaultRepoFilters());
     else if (tab === "prs") setPrFilters(defaultPrFilters());
     else setIssueFilters(defaultIssueFilters());
     clearFiltersCache();
@@ -735,7 +706,6 @@ export function App() {
     { key: "alerts" as const, label: t("tabs.alerts"), count: totalSecurityAlerts, ready: insightsLoaded, icon: <AlertIcon /> },
     { key: "ci" as const, label: t("tabs.ci"), count: ciHealth.length, ready: ciLoaded, icon: <CIIcon /> },
     { key: "digests" as const, label: t("tabs.digest"), count: dailyDigests.length, ready: digestsLoaded, icon: <DigestIcon /> },
-    { key: "goals" as const, label: t("tabs.goals"), count: goals.length, ready: goalsLoaded, icon: <GoalIcon /> },
     ...(projectsEnabled
       ? [{ key: "kanban" as const, label: t("tabs.board"), count: boardCount, ready: boardLoaded, icon: <BoardIcon /> }]
       : []),
@@ -811,6 +781,10 @@ export function App() {
                   ) : null}
                 </button>
               ))}
+              <a className="tab" href="/growth" target="_blank" rel="noopener">
+                <GoalIcon />
+                {t("tabs.growthStudio")}
+              </a>
             </div>
           </div>
           ) : null}
@@ -1008,8 +982,6 @@ export function App() {
               <DailyDigestView digests={dailyDigests} period={digestPeriod} onPeriodChange={setDigestPeriod} />
             </div>
           ) : null}
-
-          {view === "goals" ? <GoalsView goals={goals} repos={repos} loading={!goalsLoaded} onChange={refreshGoals} /> : null}
 
           {view === "kanban" && projectsEnabled ? <KanbanView onCountChange={(count) => { setBoardCount(count); setBoardLoaded(true); }} /> : null}
         </main>
