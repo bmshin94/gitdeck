@@ -55,6 +55,19 @@ export interface GrowthPlanSlot {
   scheduledFor: string;
 }
 
+export interface GrowthPlanAssignment {
+  slotKey: string;
+  pillarId: string;
+  angle: string;
+  sources: string[];
+  cta: string;
+}
+
+export interface GrowthPlanEvidence {
+  label: string;
+  url: string | null;
+}
+
 export interface BuildGrowthPlanSlotsInput {
   periodStart: string;
   periodEnd: string;
@@ -134,6 +147,12 @@ export interface CreateGrowthContentPlanInput {
   pillars: GrowthPillar[];
   status?: Exclude<GrowthContentPlanStatus, "archived">;
   generatedAt?: string;
+}
+
+export interface GenerateGrowthContentPlanInput {
+  repository: string;
+  periodStart: string;
+  periodEnd: string;
 }
 
 export const GROWTH_CONTENT_ITEM_STATUSES = [
@@ -310,6 +329,19 @@ export interface GrowthInterventionData {
 
 export interface GrowthGeneratedInterventionsData extends GrowthInterventionsData {
   aiEnabled: boolean;
+}
+
+export interface GrowthContentPlansData {
+  ok: true;
+  plans: GrowthContentPlan[];
+}
+
+export interface GrowthGeneratedContentPlanData {
+  ok: true;
+  plan: GrowthContentPlan;
+  contentItems: GrowthContentItem[];
+  aiEnabled: boolean;
+  usedFallback: boolean;
 }
 
 export interface GrowthContentItemsData {

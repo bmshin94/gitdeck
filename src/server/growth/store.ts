@@ -149,6 +149,13 @@ export class InvalidPublishedUrlError extends GrowthStoreValidationError {
   }
 }
 
+export class ActivePlanOverlapError extends GrowthStoreValidationError {
+  constructor() {
+    super("An active content plan already overlaps this period.");
+    this.name = "ActivePlanOverlapError";
+  }
+}
+
 export function ensureGrowthSchema(): void {
   getDatabase().exec(`
     CREATE TABLE IF NOT EXISTS growth_profiles (
@@ -512,7 +519,7 @@ function contentPlanFromRow(row: GrowthContentPlanRow): GrowthContentPlan {
   };
 }
 
-function findContentPlan(accountId: string, id: string): GrowthContentPlan | null {
+export function getContentPlan(accountId: string, id: string): GrowthContentPlan | null {
   ensureGrowthAccountMigration(accountId);
   const row = get<GrowthContentPlanRow>(
     "SELECT * FROM content_plans WHERE account_id = ? AND id = ?",
@@ -521,8 +528,44 @@ function findContentPlan(accountId: string, id: string): GrowthContentPlan | nul
   return row ? contentPlanFromRow(row) : null;
 }
 
+export function listContentPlans(accountId: string, repository?: string): GrowthContentPlan[] {
+  ensureGrowthAccountMigration(accountId);
+  const rows = repository === undefined
+    ? all<GrowthContentPlanRow>(
+      "SELECT * FROM content_plans WHERE account_id = ? ORDER BY period_start DESC, created_at DESC, id",
+      [accountId],
+    )
+    : all<GrowthContentPlanRow>(
+      `SELECT * FROM content_plans
+       WHERE account_id = ? AND repository = ?
+       ORDER BY period_start DESC, created_at DESC, id`,
+      [accountId, repository],
+    );
+  return rows.map(contentPlanFromRow);
+}
+
+export function hasOverlappingActiveContentPlan(
+  accountId: string,
+  repository: string,
+  periodStart: string,
+  periodEnd: string,
+): boolean {
+  ensureGrowthAccountMigration(accountId);
+  return Boolean(get<{ id: string }>(
+    `SELECT id FROM content_plans
+     WHERE account_id = ? AND repository = ? AND status = 'active'
+       AND period_start <= ? AND period_end >= ?
+     LIMIT 1`,
+    [accountId, repository, periodEnd, periodStart],
+  ));
+}
+
 export function createContentPlan(input: CreateGrowthContentPlanInput): GrowthContentPlan {
   ensureGrowthAccountMigration(input.accountId);
+  if (
+    (input.status ?? "draft") === "active"
+    && hasOverlappingActiveContentPlan(input.accountId, input.repository, input.periodStart, input.periodEnd)
+  ) throw new ActivePlanOverlapError();
   const id = randomUUID();
   const now = new Date().toISOString();
   run(
@@ -542,7 +585,7 @@ export function createContentPlan(input: CreateGrowthContentPlanInput): GrowthCo
       now,
     ],
   );
-  return findContentPlan(input.accountId, id)!;
+  return getContentPlan(input.accountId, id)!;
 }
 
 export function archiveContentPlan(accountId: string, id: string): GrowthContentPlan | null {
@@ -551,7 +594,7 @@ export function archiveContentPlan(accountId: string, id: string): GrowthContent
     "UPDATE content_plans SET status = 'archived' WHERE account_id = ? AND id = ?",
     [accountId, id],
   );
-  return result.changes > 0 ? findContentPlan(accountId, id) : null;
+  return result.changes > 0 ? getContentPlan(accountId, id) : null;
 }
 
 function contentItemFromRow(row: GrowthContentItemRow): GrowthContentItem {
@@ -739,6 +782,24 @@ export function createContentItem(input: CreateGrowthContentItemInput): GrowthCo
   assertContentReferences(item);
   insertContentItem(item);
   return getContentItem(input.accountId, item.id)!;
+}
+
+/** Creates a plan and all of its initial content items in one transaction. */
+export function createContentPlanWithItems(
+  planInput: CreateGrowthContentPlanInput,
+  itemInputs: Array<Omit<CreateGrowthContentItemInput, "accountId" | "repository" | "planId">>,
+): { plan: GrowthContentPlan; contentItems: GrowthContentItem[] } {
+  ensureGrowthAccountMigration(planInput.accountId);
+  return getDatabase().transaction(() => {
+    const plan = createContentPlan(planInput);
+    const contentItems = itemInputs.map((input) => createContentItem({
+      ...input,
+      accountId: planInput.accountId,
+      repository: planInput.repository,
+      planId: plan.id,
+    }));
+    return { plan, contentItems };
+  })();
 }
 
 function persistContentItem(item: GrowthContentItem): void {

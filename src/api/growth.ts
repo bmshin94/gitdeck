@@ -1,10 +1,13 @@
 import { AuthRequiredClientError } from "./github";
 import type {
   CreateGrowthContentItemInput,
+  GenerateGrowthContentPlanInput,
   GrowthContentItemData,
   GrowthContentItemFilters,
   GrowthContentItemsData,
+  GrowthContentPlansData,
   GrowthDraftContentData,
+  GrowthGeneratedContentPlanData,
   GrowthGeneratedInterventionsData,
   GrowthInterventionData,
   GrowthInterventionFilters,
@@ -144,6 +147,23 @@ export async function draftGrowthContentFromIntervention(interventionId: string,
     jsonRequest("POST", { interventionId, refresh }),
   );
   return data;
+}
+
+export async function fetchGrowthContentPlans(repository: string, signal?: AbortSignal) {
+  const data = await requestJson<GrowthContentPlansData>(addFilters("/api/growth/plans", {
+    repo: repository,
+  }), { signal });
+  return data.plans;
+}
+
+export async function generateGrowthContentPlan(
+  input: GenerateGrowthContentPlanInput,
+  signal?: AbortSignal,
+): Promise<GrowthGeneratedContentPlanData> {
+  return requestJson<GrowthGeneratedContentPlanData>(
+    "/api/growth/plans/generate",
+    jsonRequest("POST", input, signal),
+  );
 }
 
 export async function fetchGrowthContentItems(

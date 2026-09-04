@@ -13,6 +13,9 @@ const state = vi.hoisted(() => {
     tmpDir: resolve(tmpdir(), `gitdeck-growth-routes-${process.pid}-${Date.now()}`),
     generateSuggestions: vi.fn(),
     generateProposals: vi.fn(),
+    aiConfigured: false,
+    generateStructured: vi.fn(),
+    collectSignals: vi.fn(),
   };
 });
 
@@ -36,9 +39,19 @@ vi.mock("../../src/server/goals", () => ({
   refreshGoal: vi.fn(async (goal) => goal),
   SOCIAL_PROPOSALS_VERSION: 4,
 }));
+vi.mock("../../src/server/ai/settings", () => ({
+  isAiConfigured: vi.fn(() => state.aiConfigured),
+}));
+vi.mock("../../src/server/ai/client", async (importActual) => ({
+  ...await importActual<typeof import("../../src/server/ai/client")>(),
+  generateStructured: state.generateStructured,
+}));
+vi.mock("../../src/server/growth/signals", () => ({
+  collectRepositorySignals: state.collectSignals,
+}));
 
 const { registerGrowthRoutes } = await import("../../src/server/routes/growth");
-const { AiNotConfiguredError } = await import("../../src/server/ai/client");
+const { AiNotConfiguredError, AiRequestError } = await import("../../src/server/ai/client");
 const goalStore = await import("../../src/server/goalStore");
 const growthStore = await import("../../src/server/growth/store");
 const { closeDatabase } = await import("../../src/server/sqlite");
@@ -91,6 +104,22 @@ beforeEach(async () => {
   closeDatabase();
   await rm(state.tmpDir, { recursive: true, force: true });
   state.activeAccountId = "account-a";
+  state.aiConfigured = false;
+  state.collectSignals.mockReset();
+  state.collectSignals.mockResolvedValue({
+    generatedOn: "2026-09-04",
+    repository: "acme/repo",
+    repositoryMetadata: null,
+    openIssues: [],
+    openPullRequests: [],
+    releases: [],
+    readme: null,
+    additionalSources: [],
+    recentCommits: [],
+    starHistory: [],
+    goals: [],
+  });
+  state.generateStructured.mockReset();
   state.generateSuggestions.mockReset();
   state.generateSuggestions.mockResolvedValue([{
     category: "marketing",
@@ -271,6 +300,83 @@ describe("Growth API routes", () => {
 
     expect(growthStore.getGrowthIntervention("account-a", interventionId)?.status).toBe("proposed");
     expect(growthStore.getContentItem("account-a", contentId)?.title).toBe("");
+  });
+
+  it("generates and lists account-scoped editorial plans with strict validation and overlap protection", async () => {
+    const input = profileInput();
+    await dispatch("PUT", "/api/growth/profiles/acme/repo", {
+      ...input,
+      channels: { ...input.channels, linkedin: false, mastodon: false },
+      cadence: { ...input.cadence, x: 1, linkedin: 0, mastodon: 0 },
+    });
+
+    const generated = await dispatch("POST", "/api/growth/plans/generate", {
+      repository: "acme/repo",
+      periodStart: "2026-09-07",
+      periodEnd: "2026-09-13",
+    });
+    expect(generated.status).toBe(201);
+    expect(generated.body).toMatchObject({
+      ok: true,
+      aiEnabled: false,
+      usedFallback: true,
+      plan: { accountId: "account-a", repository: "acme/repo", status: "active" },
+    });
+    expect(generated.body.contentItems).toHaveLength(1);
+    expect(state.collectSignals).toHaveBeenCalledTimes(1);
+
+    const listed = await dispatch("GET", "/api/growth/plans?repo=acme%2Frepo");
+    expect(listed.status).toBe(200);
+    expect(listed.body.plans.map((plan: { id: string }) => plan.id)).toEqual([generated.body.plan.id]);
+
+    const invalidRequests: Array<[string, string, unknown?]> = [
+      ["GET", "/api/growth/plans"],
+      ["GET", "/api/growth/plans?repo=bad"],
+      ["GET", "/api/growth/plans?repo=acme%2Frepo&unknown=1"],
+      ["POST", "/api/growth/plans/generate", { repository: "bad", periodStart: "2026-09-07", periodEnd: "2026-09-13" }],
+      ["POST", "/api/growth/plans/generate", { repository: "acme/repo", periodStart: "2026-09-08", periodEnd: "2026-09-13" }],
+      ["POST", "/api/growth/plans/generate", { repository: "acme/repo", periodStart: "2026-09-07", periodEnd: "2026-09-13", extra: true }],
+    ];
+    for (const [method, path, body] of invalidRequests) {
+      expect((await dispatch(method, path, body)).status, `${method} ${path}`).toBe(400);
+    }
+
+    const overlapping = await dispatch("POST", "/api/growth/plans/generate", {
+      repository: "acme/repo",
+      periodStart: "2026-09-07",
+      periodEnd: "2026-09-20",
+    });
+    expect(overlapping.status).toBe(400);
+    expect(growthStore.listContentPlans("account-a", "acme/repo")).toHaveLength(1);
+    expect(growthStore.listContentItems("account-a", { repository: "acme/repo" })).toHaveLength(1);
+
+    state.activeAccountId = "account-b";
+    expect((await dispatch("GET", "/api/growth/plans?repo=acme%2Frepo")).body.plans).toEqual([]);
+    expect((await dispatch("POST", "/api/growth/plans/generate", {
+      repository: "acme/repo",
+      periodStart: "2026-09-07",
+      periodEnd: "2026-09-13",
+    })).status).toBe(201);
+    expect(growthStore.listContentPlans("account-a", "acme/repo")).toHaveLength(1);
+    expect(growthStore.listContentPlans("account-b", "acme/repo")).toHaveLength(1);
+  });
+
+  it("returns a typed AI request error without persisting a plan", async () => {
+    state.aiConfigured = true;
+    state.generateStructured.mockRejectedValueOnce(new AiRequestError("planner provider failed"));
+
+    const response = await dispatch("POST", "/api/growth/plans/generate", {
+      repository: "acme/failure",
+      periodStart: "2026-09-07",
+      periodEnd: "2026-09-13",
+    });
+
+    expect(response).toEqual({
+      status: 502,
+      body: { ok: false, error: "planner provider failed" },
+    });
+    expect(growthStore.listContentPlans("account-a", "acme/failure")).toEqual([]);
+    expect(growthStore.listContentItems("account-a", { repository: "acme/failure" })).toEqual([]);
   });
 
   it("generates repository or mission interventions with dedupe and preserves user status", async () => {

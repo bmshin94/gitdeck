@@ -17,6 +17,7 @@ import {
   getGrowthWorkspaceSummary,
   GrowthStoreValidationError,
   listContentItems,
+  listContentPlans,
   listGrowthInterventions,
   listPersistedGrowthProfileRepositories,
   markContentItemPublished,
@@ -25,6 +26,7 @@ import {
   upsertGrowthIntervention,
   upsertGrowthProfile,
 } from "../growth/store";
+import { generateGrowthContentPlan } from "../growth/planner";
 import { parseJsonBody, sendJson } from "../http";
 import type { AppRouter, RouteContext } from "../router";
 import {
@@ -462,6 +464,49 @@ function parseContentFilters(ctx: RouteContext): Parameters<typeof listContentIt
   return { repository: repository ?? undefined, status: statusValue ?? undefined, scheduledFrom, scheduledTo };
 }
 
+async function plans(ctx: RouteContext): Promise<void> {
+  const account = await requireAccount(ctx);
+  if (!account) return;
+  if ([...ctx.url.searchParams.keys()].some((key) => key !== "repo")) {
+    return badRequest(ctx, "unknown plan filter");
+  }
+  const repository = repositoryFromValue(ctx.url.searchParams.get("repo"));
+  if (!repository) return badRequest(ctx, "invalid repository");
+  sendJson(ctx.res, 200, { ok: true, plans: listContentPlans(account.id, repository) });
+}
+
+async function generatePlan(ctx: RouteContext): Promise<void> {
+  const account = await requireAccount(ctx);
+  if (!account) return;
+  const body = await parseJsonBody<Record<string, unknown>>(ctx.req, ctx.res);
+  if (!body) return;
+  if (!isRecord(body) || !hasOnlyKeys(body, ["repository", "periodStart", "periodEnd"])) {
+    return badRequest(ctx, "invalid plan generation body");
+  }
+  const repository = repositoryFromValue(body.repository);
+  if (
+    !repository
+    || typeof body.periodStart !== "string"
+    || typeof body.periodEnd !== "string"
+  ) return badRequest(ctx, "invalid plan generation body");
+
+  try {
+    const result = await generateGrowthContentPlan(account.id, {
+      repository,
+      periodStart: body.periodStart,
+      periodEnd: body.periodEnd,
+    });
+    sendJson(ctx.res, 201, { ok: true, ...result });
+  } catch (error) {
+    if (sendStoreError(ctx, error)) return;
+    if (error instanceof RangeError) return badRequest(ctx, error.message);
+    sendJson(ctx.res, error instanceof AiRequestError ? 502 : 500, {
+      ok: false,
+      error: (error as Error).message,
+    });
+  }
+}
+
 async function content(ctx: RouteContext): Promise<void> {
   const account = await requireAccount(ctx);
   if (!account) return;
@@ -653,6 +698,8 @@ export function registerGrowthRoutes(router: AppRouter): void {
   router.post("/api/growth/interventions", interventions);
   router.post("/api/growth/interventions/generate", generateInterventions);
   router.on("PATCH", "/api/growth/interventions/:id", patchIntervention);
+  router.get("/api/growth/plans", plans);
+  router.post("/api/growth/plans/generate", generatePlan);
   router.get("/api/growth/content", content);
   router.post("/api/growth/content", content);
   router.post("/api/growth/content/draft", draftContent);

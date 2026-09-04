@@ -28,7 +28,7 @@ phase-closing tasks) are appended with `PENDING` rows and matching task files.
 | GS-025 | COMPLETED | Added the repository Library with source management and editable validated profile, channel, cadence, pillar, and posting-window settings | VALIDATION OK; typecheck; 45 test files and 218 tests; production build; profile UI, round-trip, account-scope, and constraint tests; git diff --check | 2026-09-04 |
 | GS-026 | COMPLETED | Closed phase 2 and authored nine contract-aligned phase 3 tasks with pending ledger rows | VALIDATION OK; app checks cache hit with unchanged source; phase 2 DONE audit; task structure and no-source-change checks; git diff --check | 2026-09-04 |
 | GS-030 | COMPLETED | Added deterministic timezone-aware editorial slots with cadence distribution, channel formats, and weighted pillars | VALIDATION OK; typecheck; 46 test files and 231 tests; production build; DST, four-week cadence, fallback windows, format mapping, ordering, and invalid-period tests; git diff --check | 2026-09-04 |
-| GS-031 | PENDING | — | — | — |
+| GS-031 | COMPLETED | Added account-scoped editorial plan generation with evidence-normalized AI assignments, deterministic fallback, atomic persistence, and typed plan APIs | VALIDATION OK; typecheck; 48 test files and 239 tests; production build; planner one-call, fallback, atomicity, overlap, ordering, validation, and account-scope tests; git diff --check | 2026-09-04 |
 | GS-032 | PENDING | — | — | — |
 | GS-033 | PENDING | — | — | — |
 | GS-034 | PENDING | — | — | — |
