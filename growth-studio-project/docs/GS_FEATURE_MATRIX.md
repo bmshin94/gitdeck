@@ -36,12 +36,16 @@ Authoritative inventory of Growth Studio capabilities. Statuses: `EXISTING`
 | Calendar month and week views with drag and drop | `src/components/growth/calendar/`, `src/utils/growth/calendar.ts`, `/growth/r/:owner/:repo/calendar` | DONE | GS-033 and GS-034 |
 | Queue "this week" with timezone-local workflow groups, drafting, copy, media previews, and manual publication recording | `src/components/growth/calendar/GrowthQueue.tsx`, `src/utils/growth/calendar.ts`, `/growth/r/:owner/:repo/calendar?view=queue` | DONE | GS-035 |
 | Account-scoped ICS export for scheduled content with repository and visible-range filters | `src/utils/growth/ics.ts`, `src/server/routes/growth.ts`, `src/api/growth.ts`, `src/components/growth/calendar/GrowthCalendar.tsx`, `/api/growth/calendar.ics` | DONE | GS-036 |
-| Content plan create, regenerate, and archive management | `src/components/growth/calendar/GrowthPlanManager.tsx`, `src/server/growth/planner.ts`, `src/server/growth/store.ts`, `/api/growth/plans/:id/regenerate`, `/api/growth/plans/:id/archive` | DONE | GS-037 |
-| Assets library with uploads and imports from README and web sources | `server/growth/assets.ts` | PLANNED | Phase 4 |
-| Generated SVG cards (release, milestone, stats, quote, what's new) | `server/growth/cards.ts` | PLANNED | Phase 4 |
-| Client rasterization, copy image to clipboard, download | `utils/growth/rasterize.ts` | PLANNED | Phase 4 |
+| Content plan create, regenerate, and archive management | `src/components/growth/calendar/GrowthPlanManager.tsx`, `src/server/growth/planner.ts`, `src/server/growth/store.ts`, `src/server/routes/growth.ts`, `src/api/growth.ts`, `/api/growth/plans/:id/regenerate`, `/api/growth/plans/:id/archive` | DONE | GS-037 |
+| Phase 3 closure and phase 4 task authoring | `growth-studio-project/tasks/GS-040.md` through `GS-047.md`, `growth-studio-project/tasks/PROGRESS.md`, `growth-studio-project/docs/GS_DECISIONS.md` | DONE | GS-038 |
+| Account-scoped asset persistence, uploads, and authenticated file serving | `src/server/growth/assets.ts`, `src/server/growth/store.ts`, `src/server/routes/growth.ts`, `src/api/growth.ts`, `/api/growth/assets` | PLANNED | GS-040 |
+| Library asset list and uploads | `src/components/growth/GrowthAssetLibrary.tsx`, `src/components/growth/GrowthLibrary.tsx`, `src/styles/growth/library.css` | PLANNED | GS-041 |
+| README and SSRF-guarded website media imports | `src/utils/growth/importCandidates.ts`, `src/server/growth/assets.ts`, `src/server/growth/signals.ts`, `src/components/growth/GrowthAssetLibrary.tsx` | PLANNED | GS-042 |
+| Generated SVG cards (release, milestone, stats, quote, what's new) | `src/server/growth/cards.ts`, `src/components/growth/GrowthAssetLibrary.tsx`, `/api/growth/assets/cards` | PLANNED | GS-043 |
+| Browser canvas rasterization at 2x | `src/utils/growth/rasterize.ts`, `tests/utils/growth/rasterize.test.ts` | PLANNED | GS-044 |
+| Image clipboard copy with download fallback | `src/components/growth/GrowthMediaActions.tsx`, `src/components/growth/calendar/GrowthQueue.tsx`, `src/components/growth/ContentItemDrawer.tsx` | PLANNED | GS-045 |
 | Media gate: `ready`, `scheduled`, and `published` require media | `src/server/growth/store.ts`, `src/components/growth/ContentItemDrawer.tsx`, `tests/server/growthStore.test.ts`, `tests/server/growthRoutes.test.ts` | DONE | GS-020 and GS-024 |
-| Media attachment and removal UI | `src/components/growth/ContentItemDrawer.tsx`, asset library | PLANNED | Phase 4 |
+| Media attachment and removal UI with asset ownership validation | `src/components/growth/GrowthMediaPicker.tsx`, `src/components/growth/ContentItemDrawer.tsx`, `src/utils/growth/contentMedia.ts`, `src/server/routes/growth.ts` | PLANNED | GS-046 |
 | Opportunity rules producing interventions | `utils/growth/opportunityRules.ts`, `server/growth/rules.ts` | PLANNED | Phase 5 |
 | Attribution of published items to metric deltas (48h, 7d) | `server/growth/attribution.ts` | PLANNED | Phase 5 |
 | Weekly Growth Review | `server/growth/review.ts`, `/growth/review` | PLANNED | Phase 5 |

@@ -35,4 +35,12 @@ phase-closing tasks) are appended with `PENDING` rows and matching task files.
 | GS-035 | COMPLETED | Added the timezone-aware weekly editorial queue with workflow groups, drafting, copy actions, media previews, drawer editing, and manual publication recording | VALIDATION OK; typecheck; 54 test files and 276 tests; production build; timezone boundaries, copy, publication, media gate, drawer updates, localized states, and account cancellation tests; git diff --check | 2026-09-04 |
 | GS-036 | COMPLETED | Added account-scoped standards-compliant ICS downloads for scheduled content with validated repository and visible-range filters | VALIDATION OK; typecheck; 55 test files and 280 tests; production build; UTF-8 folding, escaping, range, account-scope, and calendar-link tests; git diff --check | 2026-09-04 |
 | GS-037 | COMPLETED | Added editorial plan creation, account-scoped atomic regeneration and archive lifecycle actions, and calendar-integrated plan management | VALIDATION OK; typecheck; 56 test files and 287 tests; production build; lifecycle atomicity, overlap, account scope, protected content, fallback, validation, confirmation, and refresh tests; git diff --check | 2026-09-04 |
-| GS-038 | PENDING | — | — | — |
+| GS-038 | COMPLETED | Closed phase 3 and authored eight contract-aligned phase 4 media tasks with pending ledger rows | VALIDATION OK; typecheck; 56 test files and 287 tests; production build; 18-screen Chromium audit at 1440, 1024, and 390 in dark and light themes with no page overflow or alerts; keyboard, Escape, ICS, locale parity, outbound-posting, task-structure, and no-source-change checks; git diff --check | 2026-09-04 |
+| GS-040 | PENDING | — | — | — |
+| GS-041 | PENDING | — | — | — |
+| GS-042 | PENDING | — | — | — |
+| GS-043 | PENDING | — | — | — |
+| GS-044 | PENDING | — | — | — |
+| GS-045 | PENDING | — | — | — |
+| GS-046 | PENDING | — | — | — |
+| GS-047 | PENDING | — | — | — |
