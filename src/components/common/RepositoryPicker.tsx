@@ -1,4 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useI18n } from "../../i18n/I18nProvider";
 import type { GhRepo } from "../../types/github";
 import { formatNumber } from "../../utils/format";
 import { BookIcon } from "./Icons";
@@ -11,6 +12,7 @@ interface RepositoryPickerProps {
 }
 
 export function RepositoryPicker({ repos, value, placeholder, onChange }: RepositoryPickerProps) {
+  const { t } = useI18n();
   const rootRef = useRef<HTMLDivElement>(null);
   const optionsId = useId();
   const [query, setQuery] = useState(value);
@@ -70,7 +72,9 @@ export function RepositoryPicker({ repos, value, placeholder, onChange }: Reposi
       </div>
       {open ? (
         <div className="repository-picker-menu" id={optionsId} role="listbox">
-          <div className="repository-picker-summary">{matches.length ? `${matches.length} repositories` : "No repositories found"}</div>
+          <div className="repository-picker-summary">
+            {matches.length ? t("growth.repositoriesFound", { count: matches.length }) : t("growth.noRepositoriesFound")}
+          </div>
           {matches.map((repo, index) => (
             <button
               type="button"
@@ -83,7 +87,7 @@ export function RepositoryPicker({ repos, value, placeholder, onChange }: Reposi
               onClick={() => select(repo)}
             >
               <span className="repository-picker-avatar" aria-hidden="true"><BookIcon /></span>
-              <span className="repository-picker-copy"><strong>{repo.nameWithOwner}</strong><small>{repo.description || "No description"}</small></span>
+              <span className="repository-picker-copy"><strong>{repo.nameWithOwner}</strong><small>{repo.description || t("growth.noRepositoryDescription")}</small></span>
               <span className="repository-picker-stats">★ {formatNumber(repo.stargazerCount)}{repo.primaryLanguage ? <small>{repo.primaryLanguage.name}</small> : null}</span>
             </button>
           ))}
