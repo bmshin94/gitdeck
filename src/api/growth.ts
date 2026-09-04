@@ -29,6 +29,8 @@ import type {
   GrowthProfileData,
   GrowthProfileInput,
   GrowthRegeneratedContentPlanData,
+  GrowthReviewData,
+  GrowthReviewFilters,
   GrowthScannedInterventionsData,
   GrowthWorkspaceData,
   GrowthWorkspacesData,
@@ -250,6 +252,19 @@ export async function scanGrowthOpportunities(repository: string, signal?: Abort
 }
 
 export const scanGrowthInterventions = scanGrowthOpportunities;
+
+export async function fetchGrowthReview(
+  filters: GrowthReviewFilters = {},
+  signal?: AbortSignal,
+) {
+  if (filters.repository !== undefined && !parseRepositoryName(filters.repository)) {
+    throw new Error("invalid repository");
+  }
+  const data = await requestJson<GrowthReviewData>(addFilters("/api/growth/review", {
+    repo: filters.repository,
+  }), { signal });
+  return data.review;
+}
 
 export async function fetchGrowthPerformanceSummary(
   filters: GrowthPerformanceSummaryFilters = {},

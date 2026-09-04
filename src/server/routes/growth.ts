@@ -54,6 +54,7 @@ import {
 import { scanRepositoryGrowthOpportunities } from "../growth/rules";
 import { refreshContentPerformance } from "../growth/attribution";
 import { getGrowthPerformanceSummary } from "../growth/performance";
+import { getGrowthWeeklyReview } from "../growth/review";
 import { parseJsonBody, send, sendJson } from "../http";
 import type { AppRouter, RouteContext } from "../router";
 import {
@@ -67,6 +68,7 @@ import {
   type GrowthContentItemStatus,
   type GrowthContentPerformanceFilters,
   type GrowthPerformanceSummaryFilters,
+  type GrowthReviewFilters,
   type GrowthInterventionCategory,
   type GrowthInterventionStatus,
   type UpdateGrowthContentItemInput,
@@ -1145,6 +1147,29 @@ async function performanceSummary(ctx: RouteContext): Promise<void> {
   });
 }
 
+function parseReviewFilters(ctx: RouteContext): GrowthReviewFilters | null {
+  if (!hasStrictQueryFields(ctx, ["repo"], [])) {
+    badRequest(ctx, "invalid review filter");
+    return null;
+  }
+  const repositoryValue = ctx.url.searchParams.get("repo");
+  const repository = repositoryValue === null ? undefined : repositoryFromValue(repositoryValue);
+  if (repositoryValue !== null && !repository) {
+    badRequest(ctx, "invalid repository");
+    return null;
+  }
+  return { repository: repository ?? undefined };
+}
+
+async function review(ctx: RouteContext): Promise<void> {
+  const account = await requireAccount(ctx);
+  if (!account) return;
+  const filters = parseReviewFilters(ctx);
+  if (!filters) return;
+  const growthReview = await getGrowthWeeklyReview(account.id, filters);
+  sendJson(ctx.res, 200, { ok: true, review: growthReview });
+}
+
 async function refreshPerformance(ctx: RouteContext): Promise<void> {
   const account = await requireAccount(ctx);
   if (!account) return;
@@ -1187,6 +1212,7 @@ export function registerGrowthRoutes(router: AppRouter): void {
   router.post("/api/growth/plans/:id/regenerate", regeneratePlan);
   router.post("/api/growth/plans/:id/archive", archivePlan);
   router.get("/api/growth/calendar.ics", exportCalendar);
+  router.get("/api/growth/review", review);
   router.get("/api/growth/performance/summary", performanceSummary);
   router.get("/api/growth/performance", performance);
   router.post("/api/growth/performance/refresh", refreshPerformance);

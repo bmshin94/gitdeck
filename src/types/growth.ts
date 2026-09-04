@@ -506,6 +506,84 @@ export interface GrowthPerformanceSummaryData {
   summary: GrowthPerformanceSummary;
 }
 
+export interface GrowthReviewPeriod {
+  start: string;
+  end: string;
+}
+
+export interface GrowthReviewContentItem {
+  id: string;
+  repository: string;
+  title: string;
+  channel: GrowthContentChannel;
+  pillar: string;
+  status: GrowthContentItemStatus;
+  scheduledFor: string | null;
+  publishedAt: string | null;
+  publishedUrl: string | null;
+}
+
+export interface GrowthReviewPublishedItem extends GrowthReviewContentItem {
+  performance: Array<{
+    window: GrowthPerformanceWindow;
+    measuredAt: string;
+    metrics: GrowthPerformanceMetricTotals;
+  }>;
+}
+
+export interface GrowthReviewFinding {
+  dimension: "channel" | "pillar";
+  window: GrowthPerformanceWindow;
+  key: string;
+  measuredItems: number;
+  metrics: GrowthPerformanceMetricTotals;
+  direction: "positive" | "neutral" | "negative";
+}
+
+export type GrowthReviewRecommendationKind =
+  | "recover-missed"
+  | "repeat-channel"
+  | "reinforce-pillar"
+  | "prepare-upcoming"
+  | "advance-intervention"
+  | "measure-results"
+  | "build-baseline";
+
+export interface GrowthReviewRecommendation {
+  id: string;
+  kind: GrowthReviewRecommendationKind;
+  title: string;
+  action: string;
+  repository: string | null;
+}
+
+export interface GrowthWeeklyReview {
+  generatedAt: string;
+  repository: string | null;
+  reviewPeriod: GrowthReviewPeriod;
+  upcomingPeriod: GrowthReviewPeriod;
+  publishedItems: GrowthReviewPublishedItem[];
+  missedItems: GrowthReviewContentItem[];
+  upcomingItems: GrowthReviewContentItem[];
+  performance: GrowthPerformanceSummary;
+  channelFindings: GrowthReviewFinding[];
+  pillarFindings: GrowthReviewFinding[];
+  recommendations: GrowthReviewRecommendation[];
+  narrative: string;
+  empty: boolean;
+  aiEnabled: boolean;
+  usedFallback: boolean;
+}
+
+export interface GrowthReviewFilters {
+  repository?: string;
+}
+
+export interface GrowthReviewData {
+  ok: true;
+  review: GrowthWeeklyReview;
+}
+
 export interface GrowthWorkspaceSummary {
   repository: string;
   interventionsByStatus: Record<GrowthInterventionStatus, number>;

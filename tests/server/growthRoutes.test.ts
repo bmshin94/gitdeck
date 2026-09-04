@@ -5,6 +5,7 @@ import { mkdir, readdir, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { AppRouter } from "../../src/server/router";
 import type { Account } from "../../src/server/providers/types";
+import { buildUtcIsoReviewWeekRanges } from "../../src/utils/growth/weeklyReview";
 
 const state = vi.hoisted(() => {
   const { tmpdir } = require("node:os") as typeof import("node:os");
@@ -1123,6 +1124,89 @@ describe("Growth API routes", () => {
 
     state.activeAccountId = null;
     expect((await dispatch("GET", "/api/growth/performance/summary")).status).toBe(401);
+  });
+
+  it("returns strict read-only repository and global weekly reviews", async () => {
+    const ranges = buildUtcIsoReviewWeekRanges(() => new Date());
+    const publishedAt = new Date(Date.parse(ranges.reviewPeriod.start) + 10 * 60 * 60 * 1_000).toISOString();
+    const repositoryItem = growthStore.createContentItem({
+      accountId: "account-a",
+      repository: "acme/repo",
+      channel: "x",
+      format: "x-thread",
+      pillar: "product",
+      title: "Repository result",
+      status: "published",
+      scheduledFor: publishedAt,
+      publishedAt,
+      media: [{ kind: "image", url: "https://example.com/result.png", alt: "Result" }],
+    });
+    growthStore.createContentItem({
+      accountId: "account-a",
+      repository: "acme/other",
+      channel: "linkedin",
+      format: "linkedin-post",
+      pillar: "community",
+      title: "Other result",
+      status: "published",
+      scheduledFor: publishedAt,
+      publishedAt,
+      media: [{ kind: "image", url: "https://example.com/other-result.png", alt: "Result" }],
+    });
+    growthStore.createContentItem({
+      accountId: "account-b",
+      repository: "acme/repo",
+      channel: "mastodon",
+      format: "mastodon-post",
+      title: "Private result",
+      status: "published",
+      scheduledFor: publishedAt,
+      publishedAt,
+      media: [{ kind: "image", url: "https://example.com/private.png", alt: "Private" }],
+    });
+    growthStore.upsertContentPerformance("account-a", {
+      contentId: repositoryItem.id,
+      window: "48h",
+      measuredAt: new Date().toISOString(),
+      metrics: { starsDelta: 6 },
+    });
+
+    const repositoryReview = await dispatch("GET", "/api/growth/review?repo=acme%2Frepo");
+    expect(repositoryReview.status).toBe(200);
+    expect(repositoryReview.body.review).toMatchObject({
+      repository: "acme/repo",
+      aiEnabled: false,
+      usedFallback: true,
+      publishedItems: [expect.objectContaining({ id: repositoryItem.id, repository: "acme/repo" })],
+    });
+    expect(repositoryReview.body.review.performance.windows[0]).toMatchObject({
+      window: "48h",
+      measuredItems: 1,
+      metrics: { starsDelta: 6 },
+    });
+    expect(repositoryReview.body.review.recommendations).toHaveLength(3);
+
+    const globalReview = await dispatch("GET", "/api/growth/review");
+    expect(globalReview.body.review.repository).toBeNull();
+    expect(globalReview.body.review.publishedItems.map((item: { title: string }) => item.title))
+      .toEqual(["Other result", "Repository result"]);
+    expect(state.refreshContentPerformance).not.toHaveBeenCalled();
+    expect(state.collectSignals).not.toHaveBeenCalled();
+    expect(state.generateStructured).not.toHaveBeenCalled();
+
+    for (const path of [
+      "/api/growth/review?repo=invalid",
+      "/api/growth/review?unknown=1",
+      "/api/growth/review?repo=acme%2Frepo&repo=acme%2Fother",
+    ]) {
+      expect((await dispatch("GET", path)).status, path).toBe(400);
+    }
+
+    state.activeAccountId = "account-b";
+    expect((await dispatch("GET", "/api/growth/review?repo=acme%2Frepo")).body.review.publishedItems)
+      .toEqual([expect.objectContaining({ title: "Private result" })]);
+    state.activeAccountId = null;
+    expect((await dispatch("GET", "/api/growth/review")).status).toBe(401);
   });
 
   it("deduplicates repeated manual interventions without resetting their status", async () => {

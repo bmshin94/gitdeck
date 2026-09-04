@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { fetchGrowthPerformanceSummary } from "../../src/api/growth";
+import { fetchGrowthPerformanceSummary, fetchGrowthReview } from "../../src/api/growth";
 
 const ZERO_SUMMARY = {
   windows: [
@@ -50,6 +50,27 @@ describe("Growth performance summary client", () => {
       "/api/growth/performance/summary?repo=acme%2Frocket&from=2026-09-01T00%3A00%3A00.000Z&to=2026-09-07T23%3A59%3A59.999Z",
       { cache: "no-store", signal: controller.signal },
     );
+  });
+
+  it("requests repository-scoped weekly reviews and validates the repository before fetching", async () => {
+    const review = { repository: "acme/rocket", recommendations: [] };
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: vi.fn(async () => ({ ok: true, review })),
+    } as unknown as Response);
+    const controller = new AbortController();
+
+    await expect(fetchGrowthReview({ repository: "acme/rocket" }, controller.signal))
+      .resolves.toEqual(review);
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      "/api/growth/review?repo=acme%2Frocket",
+      { cache: "no-store", signal: controller.signal },
+    );
+
+    fetchMock.mockClear();
+    await expect(fetchGrowthReview({ repository: "invalid" })).rejects.toThrow("invalid repository");
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("rejects invalid client filters before issuing a request", async () => {

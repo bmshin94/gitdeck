@@ -21,6 +21,7 @@ import { GoalsView } from "../views/GoalsView";
 import { GrowthHome } from "./GrowthHome";
 import { GrowthInterventions } from "./GrowthInterventions";
 import { GrowthLibrary } from "./GrowthLibrary";
+import { GrowthReview } from "./GrowthReview";
 import { GrowthSidebar } from "./GrowthSidebar";
 import { GrowthTopBar, type GrowthTheme } from "./GrowthTopBar";
 import { GrowthWorkspaceOverview } from "./GrowthWorkspaceOverview";
@@ -244,7 +245,16 @@ export function GrowthStudioApp() {
               )}
             />
             <Route path="/growth/calendar" element={<GrowthPlaceholder titleKey="growth.unifiedCalendar" />} />
-            <Route path="/growth/review" element={<GrowthPlaceholder titleKey="growth.review" />} />
+            <Route
+              path="/growth/review"
+              element={(
+                <GrowthReview
+                  key={`${activeAccount?.id ?? "authenticated"}:global`}
+                  accountId={activeAccount?.id ?? null}
+                  enabled={!accountsLoading}
+                />
+              )}
+            />
             <Route path="/growth/settings" element={<GrowthPlaceholder titleKey="growth.settings" />} />
             <Route
               path="/growth/r/:owner/:repo"
@@ -304,7 +314,17 @@ export function GrowthStudioApp() {
                 />
               ) : <Navigate to="/growth" replace />}
             />
-            <Route path="/growth/r/:owner/:repo/review" element={<WorkspacePlaceholder titleKey="growth.review" />} />
+            <Route
+              path="/growth/r/:owner/:repo/review"
+              element={selectedRepository ? (
+                <GrowthReview
+                  key={`${activeAccount?.id ?? "authenticated"}:${selectedRepository}`}
+                  accountId={activeAccount?.id ?? null}
+                  enabled={!accountsLoading}
+                  repository={selectedRepository}
+                />
+              ) : <Navigate to="/growth" replace />}
+            />
             <Route path="*" element={<Navigate to="/growth" replace />} />
           </Routes>
         </main>
@@ -340,13 +360,6 @@ function WorkspaceMissions({ accountId, enabled, repository, repos }: WorkspaceM
       onChange={refresh}
     />
   );
-}
-
-function WorkspacePlaceholder({ titleKey }: { titleKey: GrowthPanelKey }) {
-  const location = useLocation();
-  const route = parseGrowthWorkspacePath(location.pathname);
-  if (!route) return <Navigate to="/growth" replace />;
-  return <GrowthPlaceholder titleKey={titleKey} repository={route.repository} />;
 }
 
 function GrowthPlaceholder({ titleKey, repository }: { titleKey: GrowthPanelKey; repository?: string }) {
