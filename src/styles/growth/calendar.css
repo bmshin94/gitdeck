@@ -75,6 +75,73 @@
   font-weight: 700;
 }
 
+.mode-growth .growth-unified-calendar-count {
+  flex: 0 0 auto;
+  padding: 8px 10px;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--panel-2) 82%, transparent);
+  border: 1px solid var(--border-soft);
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.mode-growth .growth-unified-calendar-filters {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) auto;
+  align-items: end;
+  gap: 9px;
+  min-width: 0;
+  padding: 13px;
+  background: var(--panel);
+  border: 1px solid var(--border-soft);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+}
+
+.mode-growth .growth-unified-calendar-filters label {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+}
+
+.mode-growth .growth-unified-calendar-filters label > span {
+  color: var(--muted);
+  font-size: 8.5px;
+  font-weight: 800;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+}
+
+.mode-growth .growth-unified-calendar-filters select {
+  width: 100%;
+  min-width: 0;
+  height: 34px;
+  padding: 0 28px 0 9px;
+  color: var(--text);
+  color-scheme: dark;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font: inherit;
+  font-size: 10.5px;
+}
+
+:root[data-theme="light"] .mode-growth .growth-unified-calendar-filters select {
+  color-scheme: light;
+}
+
+.mode-growth .growth-unified-calendar-filters select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: var(--ring);
+}
+
+.mode-growth .growth-unified-calendar-filters .btn {
+  min-height: 34px;
+  white-space: nowrap;
+}
+
 .mode-growth .growth-calendar-toolbar {
   display: flex;
   align-items: center;
@@ -481,6 +548,24 @@
 .mode-growth .growth-calendar-item-indicators .growth-calendar-item-channel {
   color: var(--text);
   font-weight: 800;
+}
+
+.mode-growth .growth-calendar-item-indicators .growth-calendar-item-repository {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--text);
+  background: color-mix(in srgb, var(--growth-calendar-color) 13%, var(--panel-3));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--growth-calendar-color) 32%, transparent);
+  font-weight: 800;
+}
+
+.mode-growth .growth-calendar-item-repository i {
+  flex: 0 0 auto;
+  width: 5px;
+  height: 5px;
+  background: var(--growth-calendar-color);
+  border-radius: 50%;
 }
 
 .mode-growth .growth-calendar-week-head,
@@ -900,6 +985,16 @@
   font-size: 10px;
 }
 
+@media (max-width: 1100px) {
+  .mode-growth .growth-unified-calendar-filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .mode-growth .growth-unified-calendar-filters .btn {
+    justify-content: center;
+  }
+}
+
 @media (max-width: 700px) {
   .mode-growth .growth-calendar-hero {
     align-items: flex-start;
@@ -910,6 +1005,10 @@
   .mode-growth .growth-calendar-toolbar {
     align-items: flex-start;
     flex-direction: column-reverse;
+  }
+
+  .mode-growth .growth-unified-calendar-filters {
+    grid-template-columns: 1fr;
   }
 
   .mode-growth .growth-plan-create {

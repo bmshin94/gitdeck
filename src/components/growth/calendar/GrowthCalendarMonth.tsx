@@ -3,6 +3,7 @@ import { useI18n } from "../../../i18n/I18nProvider";
 import type { TranslationKey } from "../../../i18n/translations";
 import type { GrowthContentItem } from "../../../types/growth";
 import type { GrowthCalendarMonthGrid } from "../../../utils/growth/calendar";
+import type { GrowthUnifiedCalendarItemPresentation } from "../../../utils/growth/unifiedCalendar";
 import { GROWTH_CALENDAR_DRAG_TYPE, GrowthCalendarItem } from "./GrowthCalendarItem";
 
 interface GrowthCalendarMonthProps {
@@ -11,6 +12,7 @@ interface GrowthCalendarMonthProps {
   timezone: string;
   color: string;
   pillarLabels: ReadonlyMap<string, string>;
+  itemPresentations?: ReadonlyMap<string, GrowthUnifiedCalendarItemPresentation>;
   reschedulingIds: ReadonlySet<string>;
   onOpenItem: (item: GrowthContentItem) => void;
   onRescheduleItem: (item: GrowthContentItem, targetDate: string) => void;
@@ -23,6 +25,7 @@ export function GrowthCalendarMonth({
   timezone,
   color,
   pillarLabels,
+  itemPresentations,
   reschedulingIds,
   onOpenItem,
   onRescheduleItem,
@@ -70,20 +73,24 @@ export function GrowthCalendarMonth({
                   <time dateTime={day.date}>{day.dayOfMonth}</time>
                 </header>
                 <div className="growth-calendar-day-items">
-                  {dayItems.map((item) => (
-                    <GrowthCalendarItem
-                      key={item.id}
-                      item={item}
-                      date={day.date}
-                      formattedDate={formattedDate}
-                      timezone={timezone}
-                      color={color}
-                      pillarLabel={item.pillar ? pillarLabels.get(item.pillar) ?? item.pillar : ""}
-                      rescheduling={reschedulingIds.has(item.id)}
-                      onOpen={onOpenItem}
-                      onReschedule={onRescheduleItem}
-                    />
-                  ))}
+                  {dayItems.map((item) => {
+                    const presentation = itemPresentations?.get(item.id);
+                    return (
+                      <GrowthCalendarItem
+                        key={item.id}
+                        item={item}
+                        date={day.date}
+                        formattedDate={formattedDate}
+                        timezone={presentation?.timezone ?? timezone}
+                        color={presentation?.color ?? color}
+                        pillarLabel={presentation?.pillarLabel ?? (item.pillar ? pillarLabels.get(item.pillar) ?? item.pillar : "")}
+                        repository={presentation?.repository}
+                        rescheduling={reschedulingIds.has(item.id)}
+                        onOpen={onOpenItem}
+                        onReschedule={onRescheduleItem}
+                      />
+                    );
+                  })}
                 </div>
               </section>
             );

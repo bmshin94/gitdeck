@@ -26,6 +26,7 @@ import { GrowthSidebar } from "./GrowthSidebar";
 import { GrowthTopBar, type GrowthTheme } from "./GrowthTopBar";
 import { GrowthWorkspaceOverview } from "./GrowthWorkspaceOverview";
 import { GrowthCalendar } from "./calendar/GrowthCalendar";
+import { GrowthUnifiedCalendar } from "./calendar/GrowthUnifiedCalendar";
 
 type AuthState = "checking" | "anonymous" | "authenticated";
 type GrowthPanelKey =
@@ -244,7 +245,15 @@ export function GrowthStudioApp() {
                 />
               )}
             />
-            <Route path="/growth/calendar" element={<GrowthPlaceholder titleKey="growth.unifiedCalendar" />} />
+            <Route
+              path="/growth/calendar"
+              element={(
+                <GrowthUnifiedCalendar
+                  accountId={activeAccount?.id ?? null}
+                  enabled={!accountsLoading}
+                />
+              )}
+            />
             <Route
               path="/growth/review"
               element={(

@@ -1,7 +1,15 @@
 import { describe, expect, it } from "vitest";
 import type { GrowthContentItem, GrowthProfile } from "../../../src/types/growth";
 import { createDefaultGrowthProfile } from "../../../src/utils/growth/profileDefaults";
-import { buildGrowthUnifiedCalendar } from "../../../src/utils/growth/unifiedCalendar";
+import {
+  buildGrowthUnifiedCalendar,
+  filterGrowthUnifiedCalendar,
+  growthUnifiedCalendarFilterOptions,
+  growthUnifiedCalendarUtcRange,
+  growthUnifiedPillarFilterValue,
+  readGrowthUnifiedCalendarFilters,
+  writeGrowthUnifiedCalendarFilters,
+} from "../../../src/utils/growth/unifiedCalendar";
 
 function contentItem(overrides: Partial<GrowthContentItem> = {}): GrowthContentItem {
   return {
@@ -137,5 +145,124 @@ describe("unified Growth calendar read model", () => {
       "visible-draft",
       "visible-idea",
     ]);
+  });
+
+  it("builds stable filter choices and keeps equal pillar IDs repository-qualified", () => {
+    const calendar = buildGrowthUnifiedCalendar("account-a", [
+      contentItem({ id: "rome-product", repository: "acme/rome", channel: "x", status: "draft" }),
+      contentItem({ id: "tokyo-product", repository: "acme/tokyo", channel: "linkedin", status: "ready" }),
+    ], [
+      profile("acme/rome", {
+        pillars: [{ id: "product", label: "Rome product", weight: 100, description: "" }],
+      }),
+      profile("acme/tokyo", {
+        pillars: [{ id: "product", label: "Tokyo product", weight: 100, description: "" }],
+      }),
+    ]);
+
+    const options = growthUnifiedCalendarFilterOptions(calendar);
+    expect(options.repositories).toEqual(["acme/rome", "acme/tokyo"]);
+    expect(options.channels).toEqual(["x", "linkedin"]);
+    expect(options.statuses).toEqual(["draft", "ready"]);
+    expect(options.pillars).toEqual([
+      {
+        value: "acme/rome::product",
+        repository: "acme/rome",
+        id: "product",
+        label: "Rome product",
+      },
+      {
+        value: "acme/tokyo::product",
+        repository: "acme/tokyo",
+        id: "product",
+        label: "Tokyo product",
+      },
+    ]);
+  });
+
+  it("combines repository, channel, pillar, and status filters without changing source choices", () => {
+    const rome = contentItem({
+      id: "rome-product",
+      repository: "acme/rome",
+      channel: "x",
+      pillar: "product",
+      status: "draft",
+      scheduledFor: "2026-10-14T22:30:00.000Z",
+    });
+    const tokyo = contentItem({
+      id: "tokyo-product",
+      repository: "acme/tokyo",
+      channel: "x",
+      pillar: "product",
+      status: "draft",
+      scheduledFor: "2026-10-14T15:30:00.000Z",
+    });
+    const calendar = buildGrowthUnifiedCalendar("account-a", [rome, tokyo], [
+      profile("acme/rome", { timezone: "Europe/Rome", color: "#BE123C" }),
+      profile("acme/tokyo", { timezone: "Asia/Tokyo", color: "#047857" }),
+    ]);
+
+    const filtered = filterGrowthUnifiedCalendar(calendar, {
+      repository: "acme/tokyo",
+      channel: "x",
+      pillar: growthUnifiedPillarFilterValue("acme/tokyo", "product"),
+      status: "draft",
+    }, { rangeStart: "2026-10-15", rangeEnd: "2026-10-15" });
+
+    expect(filtered.itemCount).toBe(1);
+    expect(filtered.itemsByDate.get("2026-10-15")?.map(({ id }) => id)).toEqual(["tokyo-product"]);
+    expect(filtered.itemPresentations.get("tokyo-product")).toEqual({
+      repository: "acme/tokyo",
+      color: "#047857",
+      timezone: "Asia/Tokyo",
+      pillarLabel: "Product value",
+    });
+    expect(filtered.itemPresentations.has("rome-product")).toBe(false);
+    expect(growthUnifiedCalendarFilterOptions(calendar).repositories).toHaveLength(2);
+  });
+
+  it("groups timezone date edges and builds UTC bounds for every possible profile offset", () => {
+    const calendar = buildGrowthUnifiedCalendar("account-a", [
+      contentItem({ id: "tokyo-edge", repository: "acme/tokyo", scheduledFor: "2026-09-30T15:30:00.000Z" }),
+      contentItem({ id: "la-edge", repository: "acme/la", scheduledFor: "2026-10-02T06:30:00.000Z" }),
+    ], [
+      profile("acme/tokyo", { timezone: "Asia/Tokyo" }),
+      profile("acme/la", { timezone: "America/Los_Angeles" }),
+    ]);
+    const visible = filterGrowthUnifiedCalendar(calendar, {
+      repository: "",
+      channel: "",
+      pillar: "",
+      status: "",
+    }, { rangeStart: "2026-10-01", rangeEnd: "2026-10-01" });
+
+    expect(visible.itemsByDate.get("2026-10-01")?.map(({ id }) => id).sort()).toEqual([
+      "la-edge",
+      "tokyo-edge",
+    ]);
+    expect(growthUnifiedCalendarUtcRange({ rangeStart: "2026-10-01", rangeEnd: "2026-10-01" })).toEqual({
+      scheduledFrom: "2026-09-30T10:00:00.000Z",
+      scheduledTo: "2026-10-02T11:59:59.999Z",
+    });
+  });
+
+  it("restores supported URL filters and serializes explicit All values by omission", () => {
+    const filters = readGrowthUnifiedCalendarFilters(
+      "?view=week&repository=acme%2Frome&channel=x&pillar=acme%2Frome%3A%3Aproduct&status=draft",
+    );
+    expect(filters).toEqual({
+      repository: "acme/rome",
+      channel: "x",
+      pillar: "acme/rome::product",
+      status: "draft",
+    });
+    expect(writeGrowthUnifiedCalendarFilters(new URLSearchParams("view=week&date=2026-10-15"), filters).toString())
+      .toBe("view=week&date=2026-10-15&repository=acme%2Frome&channel=x&pillar=acme%2Frome%3A%3Aproduct&status=draft");
+    expect(readGrowthUnifiedCalendarFilters("?channel=invalid&status=invalid")).toEqual({
+      repository: "",
+      channel: "",
+      pillar: "",
+      status: "",
+    });
   });
 });

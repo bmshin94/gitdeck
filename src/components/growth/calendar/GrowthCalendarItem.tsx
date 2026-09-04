@@ -13,6 +13,7 @@ interface GrowthCalendarItemProps {
   timezone: string;
   color: string;
   pillarLabel: string;
+  repository?: string;
   rescheduling: boolean;
   onOpen: (item: GrowthContentItem) => void;
   onReschedule: (item: GrowthContentItem, targetDate: string) => void;
@@ -29,6 +30,7 @@ export function GrowthCalendarItem({
   timezone,
   color,
   pillarLabel,
+  repository,
   rescheduling,
   onOpen,
   onReschedule,
@@ -67,13 +69,21 @@ export function GrowthCalendarItem({
       onClick={() => onOpen(item)}
       onDragStart={startDrag}
       onKeyDown={handleKeyboardMove}
-      aria-label={t("growth.calendarOpenItem", { title, date: formattedDate })}
+      aria-label={repository
+        ? t("growth.unifiedCalendarOpenItem", { title, repository, date: formattedDate })
+        : t("growth.calendarOpenItem", { title, date: formattedDate })}
     >
       <span className="growth-calendar-item-time">
         {timeFormatter.format(new Date(item.scheduledFor!))}
       </span>
       <strong>{title}</strong>
       <span className="growth-calendar-item-indicators">
+        {repository ? (
+          <small className="growth-calendar-item-repository" title={repository}>
+            <i aria-hidden="true" />
+            {repository}
+          </small>
+        ) : null}
         <small className="growth-calendar-item-channel">
           {t(`growth.channel.${item.channel}` as TranslationKey)}
         </small>
