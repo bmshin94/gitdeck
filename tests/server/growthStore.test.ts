@@ -166,6 +166,63 @@ describe("Growth Studio store", () => {
     expect(store.listGrowthInterventions("account-a", { status: "accepted" })).toHaveLength(2);
   });
 
+  it("creates, reads, and stably lists assets in one account and repository", () => {
+    const first = store.createGrowthAsset({
+      accountId: "account-a",
+      repository: "owner/repo",
+      kind: "image",
+      origin: "upload",
+      path: "first.png",
+      title: "First image",
+      alt: "First image alt",
+      width: 1200,
+      height: 630,
+    });
+    const second = store.createGrowthAsset({
+      accountId: "account-a",
+      repository: "owner/repo",
+      kind: "video",
+      origin: "website",
+      url: "https://example.com/demo.webm",
+      title: "Demo",
+      alt: "Demo video",
+    });
+    store.createGrowthAsset({
+      accountId: "account-a",
+      repository: "owner/other",
+      kind: "image",
+      origin: "readme",
+      url: "https://example.com/other.png",
+      title: "Other",
+      alt: "Other repository image",
+    });
+    store.createGrowthAsset({
+      accountId: "account-b",
+      repository: "owner/repo",
+      kind: "image",
+      origin: "upload",
+      path: "private.png",
+      title: "Private",
+      alt: "Private image",
+    });
+
+    const listed = store.listGrowthAssets("account-a", "owner/repo");
+    expect(listed).toHaveLength(2);
+    expect(listed).toEqual([...listed].sort((left, right) => (
+      left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id)
+    )));
+    expect(new Set(listed.map(({ id }) => id))).toEqual(new Set([first.id, second.id]));
+    expect(store.getGrowthAsset("account-a", first.id)).toEqual(first);
+    expect(store.getGrowthAsset("account-b", first.id)).toBeNull();
+    expect(store.listGrowthAssets("account-a", "owner/other")).toHaveLength(1);
+    expect(store.listGrowthAssets("account-b", "owner/repo")).toHaveLength(1);
+
+    const tables = getDatabase().prepare(
+      "SELECT COUNT(*) AS count FROM sqlite_master WHERE type = 'table' AND name = 'growth_assets'",
+    ).get() as { count: number };
+    expect(tables.count).toBe(1);
+  });
+
   it("creates and archives account-scoped content plans", () => {
     const input = profileInput();
     const plan = store.createContentPlan({

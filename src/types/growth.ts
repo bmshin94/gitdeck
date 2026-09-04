@@ -259,6 +259,16 @@ export interface GrowthContentItemFilters {
 
 export type GrowthAssetKind = "image" | "video";
 export type GrowthAssetOrigin = "upload" | "readme" | "website" | "generated";
+export const MAX_GROWTH_ASSET_BYTES = 25 * 1024 * 1024;
+export const GROWTH_ASSET_MIME_TYPES = [
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+  "image/gif",
+  "video/mp4",
+  "video/webm",
+] as const;
+export type GrowthAssetMimeType = (typeof GROWTH_ASSET_MIME_TYPES)[number];
 
 export interface GrowthAsset {
   id: string;
@@ -275,6 +285,44 @@ export interface GrowthAsset {
   cardTemplate: string | null;
   cardData: Record<string, unknown> | null;
   createdAt: string;
+}
+
+export interface CreateGrowthAssetInput {
+  accountId: string;
+  repository: string;
+  kind: GrowthAssetKind;
+  origin: GrowthAssetOrigin;
+  path?: string | null;
+  url?: string | null;
+  title: string;
+  alt: string;
+  width?: number | null;
+  height?: number | null;
+  cardTemplate?: string | null;
+  cardData?: Record<string, unknown> | null;
+}
+
+/** Asset metadata safe to return to a browser. Stored filesystem paths are omitted. */
+export type GrowthAssetMetadata = Omit<GrowthAsset, "path">;
+
+export interface GrowthAssetsData {
+  ok: true;
+  assets: GrowthAssetMetadata[];
+}
+
+export interface GrowthAssetData {
+  ok: true;
+  asset: GrowthAssetMetadata;
+}
+
+export interface UploadGrowthAssetInput {
+  repository: string;
+  file: Blob;
+  filename: string;
+  title: string;
+  alt: string;
+  width?: number;
+  height?: number;
 }
 
 export type GrowthPerformanceWindow = "48h" | "7d";

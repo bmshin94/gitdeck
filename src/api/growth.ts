@@ -3,6 +3,8 @@ import type {
   CreateGrowthContentItemInput,
   GenerateGrowthContentPlanInput,
   GrowthArchivedContentPlanData,
+  GrowthAssetData,
+  GrowthAssetsData,
   GrowthContentItemData,
   GrowthContentItemFilters,
   GrowthContentItemsData,
@@ -23,6 +25,7 @@ import type {
   GrowthWorkspaceSummary,
   UpdateGrowthContentItemInput,
   UpdateGrowthInterventionInput,
+  UploadGrowthAssetInput,
 } from "../types/growth";
 import { parseRepositoryName } from "../utils/repository";
 
@@ -92,6 +95,56 @@ function addFilters(path: string, filters: Record<string, string | null | undefi
   }
   const serialized = query.toString();
   return serialized ? `${path}?${serialized}` : path;
+}
+
+export function buildGrowthAssetFileUrl(id: string): string {
+  const normalized = id.trim();
+  if (!normalized) throw new Error("invalid asset ID");
+  return `/api/growth/assets/${encodeURIComponent(normalized)}/file`;
+}
+
+export async function fetchGrowthAssets(repository: string, signal?: AbortSignal) {
+  if (!parseRepositoryName(repository)) throw new Error("invalid repository");
+  const data = await requestJson<GrowthAssetsData>(addFilters("/api/growth/assets", {
+    repo: repository,
+  }), { signal });
+  return data.assets;
+}
+
+export async function uploadGrowthAsset(input: UploadGrowthAssetInput, signal?: AbortSignal) {
+  if (!parseRepositoryName(input.repository)) throw new Error("invalid repository");
+  const query = new URLSearchParams({
+    repo: input.repository,
+    filename: input.filename,
+    title: input.title,
+    alt: input.alt,
+  });
+  if (input.width !== undefined) query.set("width", String(input.width));
+  if (input.height !== undefined) query.set("height", String(input.height));
+  const data = await requestJson<GrowthAssetData>(`/api/growth/assets?${query.toString()}`, {
+    method: "POST",
+    headers: { "Content-Type": input.file.type },
+    body: input.file,
+    signal,
+  });
+  return data.asset;
+}
+
+export async function fetchGrowthAssetFile(id: string, signal?: AbortSignal): Promise<Blob> {
+  const response = await fetch(buildGrowthAssetFileUrl(id), { cache: "no-store", signal });
+  if (!response.ok) {
+    let body: { needsAuth?: boolean; error?: string } = {};
+    try {
+      body = await response.json() as typeof body;
+    } catch {
+      // Preserve the HTTP fallback when an intermediary returns a non-JSON error.
+    }
+    if (response.status === 401 || body.needsAuth) {
+      throw new AuthRequiredClientError(body.error || "authentication required");
+    }
+    throw new Error(body.error || `Request failed: ${response.status}`);
+  }
+  return response.blob();
 }
 
 export function buildGrowthCalendarExportUrl(filters: {

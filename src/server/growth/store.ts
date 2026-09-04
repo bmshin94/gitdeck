@@ -4,6 +4,7 @@ import {
   GROWTH_INTERVENTION_STATUSES,
 } from "../../types/growth";
 import type {
+  CreateGrowthAssetInput,
   CreateGrowthContentItemInput,
   CreateGrowthContentPlanInput,
   CreateGrowthInterventionInput,
@@ -638,6 +639,15 @@ function growthAssetFromRow(row: GrowthAssetRow): GrowthAsset {
   };
 }
 
+export function getGrowthAsset(accountId: string, id: string): GrowthAsset | null {
+  ensureGrowthAccountMigration(accountId);
+  const row = get<GrowthAssetRow>(
+    "SELECT * FROM growth_assets WHERE account_id = ? AND id = ?",
+    [accountId, id],
+  );
+  return row ? growthAssetFromRow(row) : null;
+}
+
 /** Lists the stored media library for exactly one account and repository. */
 export function listGrowthAssets(accountId: string, repository: string): GrowthAsset[] {
   ensureGrowthAccountMigration(accountId);
@@ -647,6 +657,33 @@ export function listGrowthAssets(accountId: string, repository: string): GrowthA
      ORDER BY created_at, id`,
     [accountId, repository],
   ).map(growthAssetFromRow);
+}
+
+export function createGrowthAsset(input: CreateGrowthAssetInput): GrowthAsset {
+  ensureGrowthAccountMigration(input.accountId);
+  const id = randomUUID();
+  run(
+    `INSERT INTO growth_assets
+      (id, account_id, repository, kind, origin, path, url, title, alt, width, height, card_template, card_data, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      id,
+      input.accountId,
+      input.repository,
+      input.kind,
+      input.origin,
+      input.path ?? null,
+      input.url ?? null,
+      input.title,
+      input.alt,
+      input.width ?? null,
+      input.height ?? null,
+      input.cardTemplate ?? null,
+      input.cardData === undefined || input.cardData === null ? null : JSON.stringify(input.cardData),
+      new Date().toISOString(),
+    ],
+  );
+  return getGrowthAsset(input.accountId, id)!;
 }
 
 function contentItemFromRow(row: GrowthContentItemRow): GrowthContentItem {

@@ -20,6 +20,7 @@ import {
   GrowthStoreValidationError,
   listContentItems,
   listContentPlans,
+  listGrowthAssets,
   listGrowthInterventions,
   listPersistedGrowthProfileRepositories,
   markContentItemPublished,
@@ -32,6 +33,14 @@ import {
   generateGrowthContentPlan,
   regenerateGrowthContentPlan,
 } from "../growth/planner";
+import {
+  GrowthAssetTooLargeError,
+  GrowthAssetValidationError,
+  persistUploadedGrowthAsset,
+  readGrowthAssetFile,
+  toGrowthAssetMetadata,
+  UnsupportedGrowthAssetTypeError,
+} from "../growth/assets";
 import {
   draftGrowthContentItem,
   GrowthContentDraftConflictError,
@@ -540,6 +549,99 @@ function parseContentFilters(ctx: RouteContext): Parameters<typeof listContentIt
   return { repository: repository ?? undefined, status: statusValue ?? undefined, scheduledFrom, scheduledTo };
 }
 
+function hasStrictQueryFields(ctx: RouteContext, allowed: readonly string[], required: readonly string[]): boolean {
+  const allowedSet = new Set(allowed);
+  const keys = [...ctx.url.searchParams.keys()];
+  return keys.every((key) => allowedSet.has(key))
+    && allowed.every((key) => ctx.url.searchParams.getAll(key).length <= 1)
+    && required.every((key) => ctx.url.searchParams.getAll(key).length === 1);
+}
+
+function parsePositiveDimension(value: string | null): number | undefined | null {
+  if (value === null) return undefined;
+  if (!/^[1-9]\d*$/.test(value)) return null;
+  const dimension = Number(value);
+  return Number.isSafeInteger(dimension) && dimension <= 100_000 ? dimension : null;
+}
+
+function requestContentLength(ctx: RouteContext): number | undefined | null {
+  const value = ctx.req.headers["content-length"];
+  if (value === undefined) return undefined;
+  if (Array.isArray(value) || !/^\d+$/.test(value)) return null;
+  const length = Number(value);
+  return Number.isSafeInteger(length) ? length : null;
+}
+
+async function assets(ctx: RouteContext): Promise<void> {
+  const account = await requireAccount(ctx);
+  if (!account) return;
+  if (ctx.req.method === "GET") {
+    if (!hasStrictQueryFields(ctx, ["repo"], ["repo"])) return badRequest(ctx, "invalid asset filter");
+    const repository = repositoryFromValue(ctx.url.searchParams.get("repo"));
+    if (!repository) return badRequest(ctx, "invalid repository");
+    return sendJson(ctx.res, 200, {
+      ok: true,
+      assets: listGrowthAssets(account.id, repository).map(toGrowthAssetMetadata),
+    });
+  }
+
+  const fields = ["repo", "filename", "title", "alt", "width", "height"] as const;
+  if (!hasStrictQueryFields(ctx, fields, ["repo", "filename", "title", "alt"])) {
+    return badRequest(ctx, "invalid asset metadata");
+  }
+  const repository = repositoryFromValue(ctx.url.searchParams.get("repo"));
+  const filename = ctx.url.searchParams.get("filename") ?? "";
+  const title = ctx.url.searchParams.get("title") ?? "";
+  const alt = ctx.url.searchParams.get("alt") ?? "";
+  const width = parsePositiveDimension(ctx.url.searchParams.get("width"));
+  const height = parsePositiveDimension(ctx.url.searchParams.get("height"));
+  const contentLength = requestContentLength(ctx);
+  if (!repository) return badRequest(ctx, "invalid repository");
+  if (width === null || height === null) return badRequest(ctx, "invalid asset dimensions");
+  if (contentLength === null) return badRequest(ctx, "invalid content length");
+  const contentType = ctx.req.headers["content-type"];
+  if (Array.isArray(contentType)) return badRequest(ctx, "invalid content type");
+
+  try {
+    const asset = await persistUploadedGrowthAsset({
+      accountId: account.id,
+      repository,
+      filename,
+      title,
+      alt,
+      width,
+      height,
+      contentType,
+      contentLength,
+      body: ctx.req,
+    });
+    sendJson(ctx.res, 201, { ok: true, asset: toGrowthAssetMetadata(asset) });
+  } catch (error) {
+    if (error instanceof GrowthAssetTooLargeError) {
+      return sendJson(ctx.res, 413, { ok: false, error: error.message });
+    }
+    if (error instanceof UnsupportedGrowthAssetTypeError) {
+      return sendJson(ctx.res, 415, { ok: false, error: error.message });
+    }
+    if (error instanceof GrowthAssetValidationError) return badRequest(ctx, error.message);
+    return sendJson(ctx.res, 500, { ok: false, error: "asset upload failed" });
+  }
+}
+
+async function assetFile(ctx: RouteContext): Promise<void> {
+  const account = await requireAccount(ctx);
+  if (!account) return;
+  const file = await readGrowthAssetFile(account.id, ctx.params.id ?? "");
+  if (!file) return sendJson(ctx.res, 404, { ok: false, error: "asset not found" });
+  ctx.res.writeHead(200, {
+    "Content-Type": file.contentType,
+    "Content-Length": file.length,
+    "Cache-Control": "private, no-store",
+    "X-Content-Type-Options": "nosniff",
+  });
+  ctx.res.end(file.body);
+}
+
 async function plans(ctx: RouteContext): Promise<void> {
   const account = await requireAccount(ctx);
   if (!account) return;
@@ -850,6 +952,9 @@ export function registerGrowthRoutes(router: AppRouter): void {
   router.post("/api/growth/interventions", interventions);
   router.post("/api/growth/interventions/generate", generateInterventions);
   router.on("PATCH", "/api/growth/interventions/:id", patchIntervention);
+  router.get("/api/growth/assets", assets);
+  router.post("/api/growth/assets", assets);
+  router.get("/api/growth/assets/:id/file", assetFile);
   router.get("/api/growth/plans", plans);
   router.post("/api/growth/plans/generate", generatePlan);
   router.post("/api/growth/plans/:id/regenerate", regeneratePlan);

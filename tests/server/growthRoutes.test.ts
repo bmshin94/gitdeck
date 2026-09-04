@@ -1,7 +1,8 @@
 import { Readable } from "node:stream";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { rm } from "node:fs/promises";
+import { mkdir, readdir, rm, writeFile } from "node:fs/promises";
+import { resolve } from "node:path";
 import { AppRouter } from "../../src/server/router";
 import type { Account } from "../../src/server/providers/types";
 
@@ -64,36 +65,53 @@ interface TestResponse {
 interface RawTestResponse {
   status: number;
   body: string;
+  buffer: Buffer;
   headers: Record<string, string>;
 }
 
-function request(method: string, path: string, body?: unknown): IncomingMessage {
-  const input = body === undefined ? [] : [JSON.stringify(body)];
+function request(
+  method: string,
+  path: string,
+  body?: unknown,
+  headers: Record<string, string> = {},
+): IncomingMessage {
+  const rawBody = Buffer.isBuffer(body) || typeof body === "string";
+  const input = body === undefined ? [] : [rawBody ? body : JSON.stringify(body)];
   const req = Readable.from(input) as IncomingMessage;
   req.method = method;
   req.url = path;
-  req.headers = body === undefined ? {} : { "content-type": "application/json" };
+  req.headers = {
+    ...(body === undefined || rawBody ? {} : { "content-type": "application/json" }),
+    ...headers,
+  };
   return req;
 }
 
-async function dispatchRaw(method: string, path: string, body?: unknown): Promise<RawTestResponse> {
+async function dispatchRaw(
+  method: string,
+  path: string,
+  body?: unknown,
+  requestHeaders: Record<string, string> = {},
+): Promise<RawTestResponse> {
   let status = 0;
-  let responseBody = "";
+  let responseBuffer = Buffer.alloc(0);
   const headers: Record<string, string> = {};
   const res = {
     writeHead(code: number, values: Record<string, string | number> = {}) {
       status = code;
       for (const [name, value] of Object.entries(values)) headers[name.toLowerCase()] = String(value);
     },
-    end(chunk?: Buffer | string) { responseBody = chunk?.toString() ?? ""; },
+    end(chunk?: Buffer | string | Uint8Array) {
+      responseBuffer = chunk === undefined ? Buffer.alloc(0) : Buffer.from(chunk);
+    },
     setHeader(name: string, value: string | number | readonly string[]) {
       headers[name.toLowerCase()] = Array.isArray(value) ? value.join(", ") : String(value);
     },
   } as unknown as ServerResponse;
   const router = new AppRouter();
   registerGrowthRoutes(router);
-  await router.dispatch(request(method, path, body), res, new URL(path, "http://localhost"));
-  return { status, body: responseBody, headers };
+  await router.dispatch(request(method, path, body, requestHeaders), res, new URL(path, "http://localhost"));
+  return { status, body: responseBuffer.toString(), buffer: responseBuffer, headers };
 }
 
 async function dispatch(method: string, path: string, body?: unknown): Promise<TestResponse> {
@@ -185,6 +203,119 @@ describe("Growth API routes", () => {
       status: 401,
       body: { ok: false, needsAuth: true, error: "authentication required" },
     });
+  });
+
+  it("uploads, lists, and serves private asset bytes without exposing stored paths", async () => {
+    const bytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x00, 0xff]);
+    const query = new URLSearchParams({
+      repo: "acme/rocket",
+      filename: "release.png",
+      title: "Release image",
+      alt: "Release dashboard",
+      width: "1200",
+      height: "630",
+    });
+    const uploaded = await dispatchRaw("POST", `/api/growth/assets?${query}`, bytes, {
+      "content-type": "image/png",
+      "content-length": String(bytes.byteLength),
+    });
+    expect(uploaded.status).toBe(201);
+    const uploadBody = JSON.parse(uploaded.body) as Record<string, any>;
+    expect(uploadBody.asset).toMatchObject({
+      accountId: "account-a",
+      repository: "acme/rocket",
+      kind: "image",
+      origin: "upload",
+      title: "Release image",
+      alt: "Release dashboard",
+      width: 1200,
+      height: 630,
+    });
+    expect(uploadBody.asset).not.toHaveProperty("path");
+    const id = uploadBody.asset.id as string;
+
+    const listed = await dispatch("GET", "/api/growth/assets?repo=acme%2Frocket");
+    expect(listed.status).toBe(200);
+    expect(listed.body.assets).toEqual([uploadBody.asset]);
+    expect(listed.body.assets[0]).not.toHaveProperty("path");
+
+    const downloaded = await dispatchRaw("GET", `/api/growth/assets/${id}/file`);
+    expect(downloaded.status).toBe(200);
+    expect(downloaded.buffer).toEqual(bytes);
+    expect(downloaded.headers).toMatchObject({
+      "content-type": "image/png",
+      "content-length": String(bytes.byteLength),
+      "cache-control": "private, no-store",
+      "x-content-type-options": "nosniff",
+    });
+
+    state.activeAccountId = "account-b";
+    expect((await dispatch("GET", "/api/growth/assets?repo=acme%2Frocket")).body.assets).toEqual([]);
+    expect((await dispatch("GET", `/api/growth/assets/${id}/file`)).status).toBe(404);
+    state.activeAccountId = null;
+    expect((await dispatch("GET", `/api/growth/assets/${id}/file`)).status).toBe(401);
+  });
+
+  it("rejects malformed asset requests without creating rows or files", async () => {
+    const validQuery = "repo=acme%2Frepo&filename=release.png&title=Release&alt=Release";
+    const invalidRequests: Array<[string, string, Buffer | undefined, Record<string, string> | undefined, number]> = [
+      ["GET", "/api/growth/assets", undefined, undefined, 400],
+      ["GET", "/api/growth/assets?repo=acme%2Frepo&repo=acme%2Fother", undefined, undefined, 400],
+      ["GET", "/api/growth/assets?repo=bad", undefined, undefined, 400],
+      ["GET", "/api/growth/assets?repo=acme%2Frepo&unknown=1", undefined, undefined, 400],
+      ["POST", `/api/growth/assets?${validQuery}&title=Duplicate`, Buffer.from("x"), { "content-type": "image/png" }, 400],
+      ["POST", `/api/growth/assets?${validQuery}&unknown=1`, Buffer.from("x"), { "content-type": "image/png" }, 400],
+      ["POST", `/api/growth/assets?${validQuery.replace("acme%2Frepo", "bad")}`, Buffer.from("x"), { "content-type": "image/png" }, 400],
+      ["POST", `/api/growth/assets?${validQuery}&width=0`, Buffer.from("x"), { "content-type": "image/png" }, 400],
+      ["POST", `/api/growth/assets?${validQuery}`, Buffer.from("x"), { "content-type": "image/svg+xml" }, 415],
+      ["POST", `/api/growth/assets?${validQuery}`, Buffer.from("x"), { "content-type": "image/png", "content-length": String(25 * 1024 * 1024 + 1) }, 413],
+    ];
+    for (const [method, path, requestBody, headers, expectedStatus] of invalidRequests) {
+      const response = await dispatchRaw(method, path, requestBody, headers);
+      expect(response.status, `${method} ${path}`).toBe(expectedStatus);
+    }
+    expect(growthStore.listGrowthAssets("account-a", "acme/repo")).toEqual([]);
+    const assetRoot = resolve(state.tmpDir, "growth-assets");
+    const files = await readdir(assetRoot).catch(() => [] as string[]);
+    expect(files).toEqual([]);
+  });
+
+  it("returns a generic not-found response for missing, traversing, and non-upload asset files", async () => {
+    await mkdir(state.tmpDir, { recursive: true });
+    await writeFile(resolve(state.tmpDir, "secret.png"), "secret");
+    const traversal = growthStore.createGrowthAsset({
+      accountId: "account-a",
+      repository: "acme/repo",
+      kind: "image",
+      origin: "upload",
+      path: "../secret.png",
+      title: "Secret",
+      alt: "Secret",
+    });
+    const missing = growthStore.createGrowthAsset({
+      accountId: "account-a",
+      repository: "acme/repo",
+      kind: "image",
+      origin: "upload",
+      path: "missing.png",
+      title: "Missing",
+      alt: "Missing",
+    });
+    const remote = growthStore.createGrowthAsset({
+      accountId: "account-a",
+      repository: "acme/repo",
+      kind: "image",
+      origin: "website",
+      url: "https://example.com/remote.png",
+      title: "Remote",
+      alt: "Remote",
+    });
+
+    for (const id of [traversal.id, missing.id, remote.id, "unknown-id"]) {
+      const response = await dispatch("GET", `/api/growth/assets/${id}/file`);
+      expect(response).toEqual({ status: 404, body: { ok: false, error: "asset not found" } });
+      expect(JSON.stringify(response.body)).not.toContain("secret");
+    }
   });
 
   it("round-trips normalized profiles and rejects invalid planning constraints", async () => {
