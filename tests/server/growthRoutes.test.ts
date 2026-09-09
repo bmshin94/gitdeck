@@ -244,6 +244,29 @@ describe("Growth API routes", () => {
     });
   });
 
+  it("rejects unknown and duplicate query input across Growth endpoints", async () => {
+    const invalidRequests: Array<[string, string, unknown?]> = [
+      ["GET", "/api/growth/workspaces?unknown=1"],
+      ["GET", "/api/growth/workspace/acme/repo?unknown=1"],
+      ["GET", "/api/growth/profiles/acme/repo?unknown=1"],
+      ["PUT", "/api/growth/profiles/acme/repo?unknown=1", profileInput()],
+      ["GET", "/api/growth/interventions?repo=acme/repo&repo=acme/other"],
+      ["POST", "/api/growth/interventions/scan?unknown=1", { repository: "acme/repo" }],
+      ["GET", "/api/growth/assets/example/file?unknown=1"],
+      ["POST", "/api/growth/assets/cards?unknown=1", {}],
+      ["GET", "/api/growth/plans?repo=acme/repo&repo=acme/other"],
+      ["POST", "/api/growth/plans/generate?unknown=1", {}],
+      ["GET", "/api/growth/content?status=draft&status=ready"],
+      ["POST", "/api/growth/content/example/published?unknown=1", {}],
+    ];
+
+    for (const [method, path, body] of invalidRequests) {
+      const response = await dispatch(method, path, body);
+      expect(response.status, `${method} ${path}`).toBe(400);
+      expect(response.body.ok).toBe(false);
+    }
+  });
+
   it("round-trips, isolates, and resets growth-wide settings", async () => {
     const defaults = await dispatch("GET", "/api/growth/settings");
     expect(defaults.status).toBe(200);

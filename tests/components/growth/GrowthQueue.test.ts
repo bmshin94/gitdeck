@@ -228,6 +228,8 @@ describe("GrowthQueue", () => {
       .toContain("/api/growth/assets/asset-image/file");
     expect(container.querySelector<HTMLVideoElement>("video")?.src)
       .toContain("/api/growth/assets/asset-video/file");
+    expect(container.querySelector<HTMLVideoElement>("video")?.getAttribute("aria-label"))
+      .toBe("Private queue video");
     expect([...container.querySelectorAll("button")].filter((entry) => entry.textContent === "Copy image"))
       .toHaveLength(1);
     expect([...container.querySelectorAll("button")].filter((entry) => entry.textContent === "Download image"))

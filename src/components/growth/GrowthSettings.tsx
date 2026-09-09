@@ -40,6 +40,8 @@ export function GrowthSettings({ accountId, enabled }: GrowthSettingsProps) {
   const [resetComplete, setResetComplete] = useState(false);
   const [resetArmed, setResetArmed] = useState(false);
   const actionController = useRef<AbortController | null>(null);
+  const resetButtonRef = useRef<HTMLButtonElement>(null);
+  const resetCancelRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     actionController.current?.abort();
@@ -75,6 +77,19 @@ export function GrowthSettings({ accountId, enabled }: GrowthSettingsProps) {
       actionController.current?.abort();
     };
   }, [accountId, enabled, t]);
+
+  useEffect(() => {
+    if (!resetArmed) return;
+    resetCancelRef.current?.focus();
+    function cancelOnEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") setResetArmed(false);
+    }
+    window.addEventListener("keydown", cancelOnEscape);
+    return () => {
+      window.removeEventListener("keydown", cancelOnEscape);
+      if (resetButtonRef.current?.isConnected) resetButtonRef.current.focus();
+    };
+  }, [resetArmed]);
 
   function clearFeedback() {
     setError("");
@@ -298,7 +313,7 @@ export function GrowthSettings({ accountId, enabled }: GrowthSettingsProps) {
                 <p>{t("growth.settingsResetConfirmDescription")}</p>
               </div>
               <div>
-                <button className="btn ghost" type="button" disabled={busy} onClick={() => setResetArmed(false)}>
+                <button ref={resetCancelRef} className="btn ghost" type="button" disabled={busy} onClick={() => setResetArmed(false)}>
                   {t("common.cancel")}
                 </button>
                 <button className="btn danger" type="button" disabled={busy} onClick={() => void confirmReset()}>
@@ -315,7 +330,7 @@ export function GrowthSettings({ accountId, enabled }: GrowthSettingsProps) {
             <span role="status">
               {saved ? t("growth.settingsSaved") : resetComplete ? t("growth.settingsResetComplete") : ""}
             </span>
-            <button className="btn ghost danger" type="button" disabled={busy} onClick={() => { setResetArmed(true); setSaved(false); setResetComplete(false); setError(""); }}>
+            <button ref={resetButtonRef} className="btn ghost danger" type="button" disabled={busy} onClick={() => { setResetArmed(true); setSaved(false); setResetComplete(false); setError(""); }}>
               {t("growth.settingsReset")}
             </button>
             <button className="btn primary" type="submit" disabled={busy}>

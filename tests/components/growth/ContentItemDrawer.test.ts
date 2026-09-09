@@ -116,6 +116,7 @@ describe("ContentItemDrawer", () => {
   it("renders content details, copies the thread, and persists inline edits", async () => {
     await renderDrawer();
 
+    expect(document.activeElement).toBe(document.body.querySelector(".growth-content-drawer .modal-close"));
     expect(document.body.textContent).toContain("Release thread");
     expect(document.body.textContent).toContain("First post");
     expect(document.body.textContent).toContain("10/280");
@@ -252,6 +253,8 @@ describe("ContentItemDrawer", () => {
       .toContain("/api/growth/assets/asset-image/file");
     expect(document.body.querySelector<HTMLVideoElement>("video")?.src)
       .toContain("/api/growth/assets/asset-video/file");
+    expect(document.body.querySelector<HTMLVideoElement>("video")?.getAttribute("aria-label"))
+      .toBe("Private video");
     expect([...document.body.querySelectorAll("button")].filter((entry) => entry.textContent === "Copy image"))
       .toHaveLength(1);
     expect([...document.body.querySelectorAll("button")].filter((entry) => entry.textContent === "Download image"))

@@ -208,6 +208,7 @@ function sendStoreError(ctx: RouteContext, error: unknown): boolean {
 async function listWorkspaces(ctx: RouteContext): Promise<void> {
   const account = await requireAccount(ctx);
   if (!account) return;
+  if (!hasStrictQueryFields(ctx, [], [])) return badRequest(ctx, "workspaces do not accept query parameters");
   const repositories = new Set([
     ...listPersistedGrowthProfileRepositories(account.id),
     ...listGoalRepositories(account.id),
@@ -221,6 +222,7 @@ async function listWorkspaces(ctx: RouteContext): Promise<void> {
 async function readWorkspace(ctx: RouteContext): Promise<void> {
   const account = await requireAccount(ctx);
   if (!account) return;
+  if (!hasStrictQueryFields(ctx, [], [])) return badRequest(ctx, "workspace does not accept query parameters");
   const repository = decodeRepositoryParams(ctx);
   if (!repository) return;
   sendJson(ctx.res, 200, { ok: true, workspace: getGrowthWorkspaceSummary(account.id, repository) });
@@ -265,6 +267,7 @@ async function settings(ctx: RouteContext): Promise<void> {
 async function profile(ctx: RouteContext): Promise<void> {
   const account = await requireAccount(ctx);
   if (!account) return;
+  if (!hasStrictQueryFields(ctx, [], [])) return badRequest(ctx, "profile does not accept query parameters");
   const repository = decodeRepositoryParams(ctx);
   if (!repository) return;
   if (ctx.req.method === "GET") {
@@ -281,8 +284,8 @@ async function profile(ctx: RouteContext): Promise<void> {
 }
 
 function parseInterventionFilters(ctx: RouteContext): { repository?: string; status?: GrowthInterventionStatus; goalId?: string | null } | null {
-  const allowed = new Set(["repo", "status", "goalId"]);
-  if ([...ctx.url.searchParams.keys()].some((key) => !allowed.has(key))) {
+  const allowed = ["repo", "status", "goalId"] as const;
+  if (!hasStrictQueryFields(ctx, allowed, [])) {
     badRequest(ctx, "unknown intervention filter");
     return null;
   }
@@ -317,6 +320,7 @@ async function interventions(ctx: RouteContext): Promise<void> {
     });
   }
 
+  if (!hasStrictQueryFields(ctx, [], [])) return badRequest(ctx, "intervention creation does not accept query parameters");
   const body = await parseJsonBody<Record<string, unknown>>(ctx.req, ctx.res);
   if (!body) return;
   const allowed = ["repository", "goalId", "category", "title", "action"];
@@ -346,6 +350,7 @@ async function interventions(ctx: RouteContext): Promise<void> {
 async function generateInterventions(ctx: RouteContext): Promise<void> {
   const account = await requireAccount(ctx);
   if (!account) return;
+  if (!hasStrictQueryFields(ctx, [], [])) return badRequest(ctx, "intervention generation does not accept query parameters");
   const body = await parseJsonBody<Record<string, unknown>>(ctx.req, ctx.res);
   if (!body) return;
   if (!isRecord(body) || !hasOnlyKeys(body, ["repository", "goalId"])) {
@@ -390,6 +395,7 @@ async function generateInterventions(ctx: RouteContext): Promise<void> {
 async function scanInterventions(ctx: RouteContext): Promise<void> {
   const account = await requireAccount(ctx);
   if (!account) return;
+  if (!hasStrictQueryFields(ctx, [], [])) return badRequest(ctx, "intervention scan does not accept query parameters");
   const body = await parseJsonBody<Record<string, unknown>>(ctx.req, ctx.res);
   if (!body) return;
   if (!isRecord(body) || !hasOnlyKeys(body, ["repository"])) {
@@ -409,6 +415,7 @@ async function scanInterventions(ctx: RouteContext): Promise<void> {
 async function recycleIntervention(ctx: RouteContext): Promise<void> {
   const account = await requireAccount(ctx);
   if (!account) return;
+  if (!hasStrictQueryFields(ctx, [], [])) return badRequest(ctx, "evergreen recycling does not accept query parameters");
   const body = await parseJsonBody<Record<string, unknown>>(ctx.req, ctx.res);
   if (!body) return;
   if (!isRecord(body) || Object.keys(body).length > 0) {
@@ -429,6 +436,7 @@ async function recycleIntervention(ctx: RouteContext): Promise<void> {
 async function patchIntervention(ctx: RouteContext): Promise<void> {
   const account = await requireAccount(ctx);
   if (!account) return;
+  if (!hasStrictQueryFields(ctx, [], [])) return badRequest(ctx, "intervention patch does not accept query parameters");
   const current = getGrowthIntervention(account.id, ctx.params.id ?? "");
   if (!current) return sendJson(ctx.res, 404, { ok: false, error: "intervention not found" });
   const body = await parseJsonBody<Record<string, unknown>>(ctx.req, ctx.res);
@@ -647,8 +655,8 @@ async function exportCalendar(ctx: RouteContext): Promise<void> {
 }
 
 function parseContentFilters(ctx: RouteContext): Parameters<typeof listContentItems>[1] | null {
-  const allowed = new Set(["repo", "status", "scheduledFrom", "scheduledTo"]);
-  if ([...ctx.url.searchParams.keys()].some((key) => !allowed.has(key))) {
+  const allowed = ["repo", "status", "scheduledFrom", "scheduledTo"] as const;
+  if (!hasStrictQueryFields(ctx, allowed, [])) {
     badRequest(ctx, "unknown content filter");
     return null;
   }
@@ -768,6 +776,7 @@ async function assetImportCandidates(ctx: RouteContext): Promise<void> {
 async function importAsset(ctx: RouteContext): Promise<void> {
   const account = await requireAccount(ctx);
   if (!account) return;
+  if (!hasStrictQueryFields(ctx, [], [])) return badRequest(ctx, "asset import does not accept query parameters");
   const body = await parseJsonBody<Record<string, unknown>>(ctx.req, ctx.res);
   if (!body) return;
   const fields = ["repository", "origin", "url", "title", "alt"] as const;
@@ -810,6 +819,7 @@ async function importAsset(ctx: RouteContext): Promise<void> {
 async function createCardAsset(ctx: RouteContext): Promise<void> {
   const account = await requireAccount(ctx);
   if (!account) return;
+  if (!hasStrictQueryFields(ctx, [], [])) return badRequest(ctx, "card creation does not accept query parameters");
   const body = await parseJsonBody<Record<string, unknown>>(ctx.req, ctx.res);
   if (!body) return;
   const fields = ["repository", "template", "title", "alt", "data"] as const;
@@ -846,6 +856,7 @@ async function createCardAsset(ctx: RouteContext): Promise<void> {
 async function assetFile(ctx: RouteContext): Promise<void> {
   const account = await requireAccount(ctx);
   if (!account) return;
+  if (!hasStrictQueryFields(ctx, [], [])) return badRequest(ctx, "asset files do not accept query parameters");
   const file = await readGrowthAssetFile(account.id, ctx.params.id ?? "");
   if (!file) return sendJson(ctx.res, 404, { ok: false, error: "asset not found" });
   ctx.res.writeHead(200, {
@@ -860,8 +871,8 @@ async function assetFile(ctx: RouteContext): Promise<void> {
 async function plans(ctx: RouteContext): Promise<void> {
   const account = await requireAccount(ctx);
   if (!account) return;
-  if ([...ctx.url.searchParams.keys()].some((key) => key !== "repo")) {
-    return badRequest(ctx, "unknown plan filter");
+  if (!hasStrictQueryFields(ctx, ["repo"], ["repo"])) {
+    return badRequest(ctx, "invalid plan filter");
   }
   const repository = repositoryFromValue(ctx.url.searchParams.get("repo"));
   if (!repository) return badRequest(ctx, "invalid repository");
@@ -871,6 +882,7 @@ async function plans(ctx: RouteContext): Promise<void> {
 async function generatePlan(ctx: RouteContext): Promise<void> {
   const account = await requireAccount(ctx);
   if (!account) return;
+  if (!hasStrictQueryFields(ctx, [], [])) return badRequest(ctx, "plan generation does not accept query parameters");
   const body = await parseJsonBody<Record<string, unknown>>(ctx.req, ctx.res);
   if (!body) return;
   if (!isRecord(body) || !hasOnlyKeys(body, ["repository", "periodStart", "periodEnd"])) {
@@ -903,6 +915,7 @@ async function generatePlan(ctx: RouteContext): Promise<void> {
 async function generateMultiplePlans(ctx: RouteContext): Promise<void> {
   const account = await requireAccount(ctx);
   if (!account) return;
+  if (!hasStrictQueryFields(ctx, [], [])) return badRequest(ctx, "multi-plan generation does not accept query parameters");
   const body = await parseJsonBody<Record<string, unknown>>(ctx.req, ctx.res);
   if (!body) return;
   if (
@@ -945,6 +958,7 @@ async function generateMultiplePlans(ctx: RouteContext): Promise<void> {
 async function regeneratePlan(ctx: RouteContext): Promise<void> {
   const account = await requireAccount(ctx);
   if (!account) return;
+  if (!hasStrictQueryFields(ctx, [], [])) return badRequest(ctx, "plan regeneration does not accept query parameters");
   const id = ctx.params.id ?? "";
   if (!getContentPlan(account.id, id)) {
     return sendJson(ctx.res, 404, { ok: false, error: "content plan not found" });
@@ -972,6 +986,7 @@ async function regeneratePlan(ctx: RouteContext): Promise<void> {
 async function archivePlan(ctx: RouteContext): Promise<void> {
   const account = await requireAccount(ctx);
   if (!account) return;
+  if (!hasStrictQueryFields(ctx, [], [])) return badRequest(ctx, "plan archive does not accept query parameters");
   const id = ctx.params.id ?? "";
   if (!getContentPlan(account.id, id)) {
     return sendJson(ctx.res, 404, { ok: false, error: "content plan not found" });
@@ -996,6 +1011,7 @@ async function content(ctx: RouteContext): Promise<void> {
     return sendJson(ctx.res, 200, { ok: true, contentItems: listContentItems(account.id, filters) });
   }
 
+  if (!hasStrictQueryFields(ctx, [], [])) return badRequest(ctx, "content creation does not accept query parameters");
   const body = await parseJsonBody<Record<string, unknown>>(ctx.req, ctx.res);
   if (!body) return;
   const repository = repositoryFromValue(body.repository);
@@ -1072,6 +1088,7 @@ function reconcileDraftedContent(
 async function draftContent(ctx: RouteContext): Promise<void> {
   const account = await requireAccount(ctx);
   if (!account) return;
+  if (!hasStrictQueryFields(ctx, [], [])) return badRequest(ctx, "content drafting does not accept query parameters");
   const body = await parseJsonBody<Record<string, unknown>>(ctx.req, ctx.res);
   if (!body) return;
   if (
@@ -1120,6 +1137,7 @@ async function draftContent(ctx: RouteContext): Promise<void> {
 async function draftContentItem(ctx: RouteContext): Promise<void> {
   const account = await requireAccount(ctx);
   if (!account) return;
+  if (!hasStrictQueryFields(ctx, [], [])) return badRequest(ctx, "content drafting does not accept query parameters");
   if (!getContentItem(account.id, ctx.params.id ?? "")) {
     return sendJson(ctx.res, 404, { ok: false, error: "content item not found" });
   }
@@ -1151,6 +1169,7 @@ async function draftContentItem(ctx: RouteContext): Promise<void> {
 async function patchContent(ctx: RouteContext): Promise<void> {
   const account = await requireAccount(ctx);
   if (!account) return;
+  if (!hasStrictQueryFields(ctx, [], [])) return badRequest(ctx, "content patch does not accept query parameters");
   const current = getContentItem(account.id, ctx.params.id ?? "");
   if (!current) return sendJson(ctx.res, 404, { ok: false, error: "content item not found" });
   const body = await parseJsonBody<Record<string, unknown>>(ctx.req, ctx.res);
@@ -1177,6 +1196,7 @@ async function patchContent(ctx: RouteContext): Promise<void> {
 async function publishContent(ctx: RouteContext): Promise<void> {
   const account = await requireAccount(ctx);
   if (!account) return;
+  if (!hasStrictQueryFields(ctx, [], [])) return badRequest(ctx, "content publication does not accept query parameters");
   if (!getContentItem(account.id, ctx.params.id ?? "")) {
     return sendJson(ctx.res, 404, { ok: false, error: "content item not found" });
   }
@@ -1196,6 +1216,7 @@ async function publishContent(ctx: RouteContext): Promise<void> {
 async function removeContent(ctx: RouteContext): Promise<void> {
   const account = await requireAccount(ctx);
   if (!account) return;
+  if (!hasStrictQueryFields(ctx, [], [])) return badRequest(ctx, "content deletion does not accept query parameters");
   if (!deleteContentItem(account.id, ctx.params.id ?? "")) {
     return sendJson(ctx.res, 404, { ok: false, error: "content item not found" });
   }

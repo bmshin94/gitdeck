@@ -185,7 +185,13 @@ describe("GrowthSettings", () => {
     await act(async () => buttonFor("Reset defaults").click());
     expect(mocks.resetGrowthSettings).not.toHaveBeenCalled();
     expect(container.querySelector('[role="alertdialog"]')?.textContent).toContain("Reset to built-in defaults?");
+    expect(document.activeElement).toBe(buttonFor("Cancel"));
 
+    await act(async () => window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })));
+    expect(container.querySelector('[role="alertdialog"]')).toBeNull();
+    expect(document.activeElement).toBe(buttonFor("Reset defaults"));
+
+    await act(async () => buttonFor("Reset defaults").click());
     await act(async () => {
       buttonFor("Confirm reset").click();
       await flush();

@@ -22,6 +22,8 @@ export function RepositoryContentSources({ repository, repos }: RepositoryConten
   const [error, setError] = useState("");
   const saveQueue = useRef<Promise<void>>(Promise.resolve());
   const saveVersion = useRef(0);
+  const openButtonRef = useRef<HTMLButtonElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -39,11 +41,15 @@ export function RepositoryContentSources({ repository, repos }: RepositoryConten
 
   useEffect(() => {
     if (!open) return;
+    closeButtonRef.current?.focus();
     function closeOnEscape(event: KeyboardEvent) {
       if (event.key === "Escape") setOpen(false);
     }
     window.addEventListener("keydown", closeOnEscape);
-    return () => window.removeEventListener("keydown", closeOnEscape);
+    return () => {
+      window.removeEventListener("keydown", closeOnEscape);
+      if (openButtonRef.current?.isConnected) openButtonRef.current.focus();
+    };
   }, [open]);
 
   function changeSources(next: GoalContentSource[]) {
@@ -64,7 +70,7 @@ export function RepositoryContentSources({ repository, repos }: RepositoryConten
 
   return (
     <>
-      <button className="btn ghost goal-sources-open" type="button" onClick={() => setOpen(true)}>
+      <button ref={openButtonRef} className="btn ghost goal-sources-open" type="button" onClick={() => setOpen(true)}>
         <BookIcon /> {t("goals.sourcesTitle")}
       </button>
       {open ? createPortal(
@@ -79,7 +85,7 @@ export function RepositoryContentSources({ repository, repos }: RepositoryConten
                   <h3 id="goal-sources-modal-title">{t("goals.sourcesTitle")}</h3>
                 </div>
               </div>
-              <button className="modal-close" type="button" aria-label={t("common.close")} onClick={() => setOpen(false)}><CloseIcon /></button>
+              <button ref={closeButtonRef} className="modal-close" type="button" aria-label={t("common.close")} onClick={() => setOpen(false)}><CloseIcon /></button>
             </header>
             <div className="modal-body goal-sources-body">
               {loading ? <div className="goal-proposals-loading" role="status">{t("common.loading")}</div> : (

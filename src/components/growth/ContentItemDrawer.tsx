@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   buildGrowthAssetFileUrl,
@@ -71,6 +71,9 @@ export function ContentItemDrawer({ item, onClose, onUpdate }: ContentItemDrawer
   const [evergreen, setEvergreen] = useState(item.evergreen === 1);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
   useEffect(() => {
     setTitle(item.title);
@@ -83,12 +86,17 @@ export function ContentItemDrawer({ item, onClose, onUpdate }: ContentItemDrawer
   }, [item]);
 
   useEffect(() => {
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    closeButtonRef.current?.focus();
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") onClose();
+      if (event.key === "Escape") onCloseRef.current();
     }
     window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onClose]);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      if (opener?.isConnected) opener.focus();
+    };
+  }, []);
 
   async function persist(action: string, operation: () => Promise<GrowthContentItem>) {
     setBusy(action);
@@ -167,7 +175,7 @@ export function ContentItemDrawer({ item, onClose, onUpdate }: ContentItemDrawer
             <span>{t("growth.contentDrawerEyebrow")}</span>
             <h2 id="growth-content-drawer-title">{item.title || t(`goals.proposalFormat.${item.format}` as TranslationKey)}</h2>
           </div>
-          <button className="modal-close" type="button" aria-label={t("common.close")} onClick={onClose}><CloseIcon /></button>
+          <button ref={closeButtonRef} className="modal-close" type="button" aria-label={t("common.close")} onClick={onClose}><CloseIcon /></button>
         </header>
 
         <div className="growth-content-drawer-body">
@@ -235,7 +243,7 @@ export function ContentItemDrawer({ item, onClose, onUpdate }: ContentItemDrawer
               return (
                 <article key={`${media.assetId ?? media.url ?? index}`}>
                   {previewUrl && media.kind === "image" ? <img src={previewUrl} alt={media.alt} loading="lazy" referrerPolicy="no-referrer" /> : null}
-                  {previewUrl && media.kind === "video" ? <video src={previewUrl} controls preload="metadata" /> : null}
+                  {previewUrl && media.kind === "video" ? <video src={previewUrl} aria-label={media.alt} controls preload="metadata" /> : null}
                   <div>
                     <strong>{media.alt}</strong>
                     <span>{media.kind}</span>

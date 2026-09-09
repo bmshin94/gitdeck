@@ -167,7 +167,7 @@ function GrowthQueueItem({ item, timezone, pillarLabel, onOpen, onUpdate }: Grow
             return (
               <figure key={`${media.assetId ?? media.url ?? "media"}-${index}`}>
                 {previewUrl && media.kind === "image" ? <img src={previewUrl} alt={media.alt} loading="lazy" referrerPolicy="no-referrer" /> : null}
-                {previewUrl && media.kind === "video" ? <video src={previewUrl} controls preload="metadata" /> : null}
+                {previewUrl && media.kind === "video" ? <video src={previewUrl} aria-label={media.alt} controls preload="metadata" /> : null}
                 {!previewUrl ? <span aria-hidden="true">{media.kind === "image" ? "▧" : "▶"}</span> : null}
                 <figcaption>{media.alt}</figcaption>
                 <GrowthMediaActions media={media} filename={`${title}-${index + 1}`} />

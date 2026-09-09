@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { fetchAiSettings, fetchGoalProposals } from "../../api/github";
 import { useI18n } from "../../i18n/I18nProvider";
@@ -57,6 +57,9 @@ export function GoalProposalsModal({ goal, suggestion, suggestionIndex, onClose,
   const [state, setState] = useState<LoadState>(initialState);
   const [refreshing, setRefreshing] = useState(false);
   const [modelLabel, setModelLabel] = useState("");
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
   async function load(refresh: boolean) {
     if (refresh && state.kind === "ready") setRefreshing(true);
@@ -94,12 +97,17 @@ export function GoalProposalsModal({ goal, suggestion, suggestionIndex, onClose,
   }, [goal.aiEnabled]);
 
   useEffect(() => {
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    closeButtonRef.current?.focus();
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") onClose();
+      if (event.key === "Escape") onCloseRef.current();
     }
     window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onClose]);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      if (opener?.isConnected) opener.focus();
+    };
+  }, []);
 
   return createPortal(
     <div className="modal-root">
@@ -116,7 +124,7 @@ export function GoalProposalsModal({ goal, suggestion, suggestionIndex, onClose,
               <h3 id="goal-proposals-title">{suggestion.title}</h3>
             </div>
           </div>
-          <button className="modal-close" type="button" aria-label={t("common.close")} onClick={onClose}><CloseIcon /></button>
+          <button ref={closeButtonRef} className="modal-close" type="button" aria-label={t("common.close")} onClick={onClose}><CloseIcon /></button>
         </header>
 
         <div className="modal-body goal-proposals-body">
@@ -193,7 +201,7 @@ export function GoalProposalsModal({ goal, suggestion, suggestionIndex, onClose,
                                 <img src={media.sourceUrl} alt={media.title} loading="lazy" referrerPolicy="no-referrer" />
                               </a>
                             ) : (
-                              <video className="goal-proposal-media-preview" src={media.sourceUrl} controls preload="metadata">{t("goals.mediaVideo")}</video>
+                              <video className="goal-proposal-media-preview" src={media.sourceUrl} aria-label={media.title} controls preload="metadata">{t("goals.mediaVideo")}</video>
                             )}
                             <a className="goal-proposal-media-info" href={media.sourceUrl} target="_blank" rel="noreferrer">
                               <span>{media.kind === "image" ? t("goals.mediaImage") : t("goals.mediaVideo")}</span>
