@@ -21,7 +21,7 @@ Authoritative inventory of Growth Studio capabilities. Statuses: `EXISTING`
 | Growth home: repositories with profiles or goals, profile colours, mission and workflow totals, and global shortcuts | `src/components/growth/GrowthHome.tsx`, `src/utils/growthHome.ts`, `/api/growth/workspaces`, `/growth` | DONE | GS-014, GS-022, and GS-065 |
 | Workspace overview per repository | `src/components/growth/GrowthWorkspaceOverview.tsx`, `src/types/growth.ts`, `src/api/growth.ts`, `/api/growth/workspace/:owner/:repo`, `/growth/r/:owner/:repo` | DONE | GS-015 and GS-022 |
 | Shell i18n, responsive layout, theme parity, and keyboard dismissal | `src/components/growth/`, `src/components/common/RepositoryPicker.tsx`, `src/styles/growth/`, `src/i18n/en.ts`, `src/i18n/it.ts` | DONE | GS-016 |
-| Growth Studio introduction and screenshot placeholder | `README.md` | DONE | GS-016 |
+| Growth Studio release guide, operations notes, and anonymized screenshot gallery | `README.md`, `docs/images/` | DONE | GS-016 and GS-066 |
 | Growth store schema (profiles, interventions, plans, items, assets, performance) | `src/server/growth/store.ts`, `src/types/growth.ts`, `src/utils/growth/profileDefaults.ts`, `tests/server/growthStore.test.ts` | DONE | GS-020 |
 | One-shot migration of legacy suggestions and proposals | `src/server/growth/store.ts`, `src/utils/growth/legacySuggestions.ts`, `tests/server/growthStore.test.ts` | DONE | GS-021 |
 | Growth API routes and account-wide workspace summaries with effective profile colours | `src/server/routes/growth.ts`, `src/server/growth/store.ts`, `src/api/growth.ts`, `tests/server/growthRoutes.test.ts` | DONE | GS-022 and GS-065 |
@@ -59,5 +59,5 @@ Authoritative inventory of Growth Studio capabilities. Statuses: `EXISTING`
 | Growth-wide settings persistence and account-scoped API | `src/utils/growth/settings.ts`, `src/server/growth/settings.ts`, `src/types/growth.ts`, `src/api/growth.ts`, `/api/growth/settings` | DONE | GS-063 |
 | Growth settings UI and repository default inheritance | `src/components/growth/GrowthSettings.tsx`, `src/utils/growth/profileDefaults.ts`, `src/server/growth/store.ts`, `src/styles/growth/library.css`, `/growth/settings` | DONE | GS-064 |
 | Global Home summaries and explicit Review measurement refresh | `src/components/growth/GrowthHome.tsx`, `src/components/growth/GrowthReview.tsx`, `/growth`, `/growth/review` | DONE | GS-065 |
-| Release documentation, CHANGELOG and final screenshots | `README.md`, `CHANGELOG.md`, `docs/images/` | PLANNED | GS-066 |
+| Release documentation, CHANGELOG and final screenshots | `README.md`, `CHANGELOG.md`, `docs/images/` | DONE | GS-066 |
 | Final responsive, accessibility, security, migration, and release QA | Growth Studio routes, APIs, stores, tests, and documentation | PLANNED | GS-067 |

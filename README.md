@@ -28,15 +28,67 @@ The dashboard pulls data from the GitHub REST and GraphQL APIs and organizes it 
 - **Alerts** — dedicated security-alert view for Dependabot and code scanning findings, so you can jump straight to the repos that need attention.
 - **Daily digest** — short per-repo summary of the day's movement (stars, forks, issues), with an executive summary you can copy as Markdown. Optionally augmented by an AI-generated narrative when an [AI provider](#ai-integration) is configured.
 - **Board** — Kanban-style view that groups issues into columns (Backlog, To-do, In progress, Ready, In review, etc.).
-- **Growth Studio** — repository-focused missions for stars, forks, closed PRs, and release downloads, with progress tracking and activity-aware AI action plans.
+- **Growth Studio** — a dedicated, repository-centric workspace for missions, opportunity scans, editorial plans, mandatory media, manual publishing, attribution, weekly reviews, and coordinated multi-repository calendars.
 
 ## Growth Studio
 
-Growth Studio is Gitdeck's focused workspace for turning repository goals and signals into measurable growth work. It organizes each repository around missions today, with interventions, editorial planning, and review workflows being added within the same dedicated shell.
+Growth Studio turns repository signals into a complete, measurable editorial workflow. Open **Growth Studio** from the main dashboard navigation: `/growth` launches in a separate window with its own top bar, repository switcher, and navigation, without the dashboard filters, tab strip, or footer.
 
-Open **Growth Studio** from the main dashboard navigation. It launches `/growth` in a new browser window so the growth workspace can stay open alongside the dashboard.
+### Repository workflow
 
-> **Screenshot placeholder:** Growth Studio home and repository workspace preview will be added before release.
+Start on **Home**, where saved growth profiles and active missions are summarized across the account. Each repository then has one focused workspace:
+
+1. **Missions** track targets for stars, forks, closed pull requests, and release downloads.
+2. **Interventions** collect AI, manual, and deterministic rule-based opportunities. An explicit opportunity scan can detect unpromoted releases or large merged pull requests, approaching star milestones, aging good-first issues, goals falling behind pace, and evergreen content ready to recycle.
+3. **Library** holds the repository voice, audience, channels, cadence, content pillars, posting windows, sources, uploaded media, imported README or website media, and generated release, milestone, stats, quote, and what's-new cards.
+4. **Calendar** builds one-to-four-week editorial plans from cadence and weighted pillars. Review and reschedule work in month or week view, or use **Queue** to draft, copy, and finish this week's items.
+5. **Review** attributes published work to retained star and fork snapshots at 48 hours and 7 days. The weekly Growth Review reports measured outcomes, missed and upcoming work, and three next actions; later plans can apply bounded performance-based pillar re-weighting without changing the saved profile.
+
+Content progresses from idea to draft, ready, scheduled, and published. At least one repository-owned media attachment is required before an item can become ready, scheduled, or published. Images—including generated SVG cards—are rasterized to PNG at 2x in the browser, copied with the Clipboard API when supported, and downloaded as a fallback.
+
+Publishing is always manual: copy the text and image, publish them yourself, then record the publication time and optional URL in Gitdeck. Growth Studio stores no social credentials and never posts to a social network.
+
+The **Unified calendar** combines repositories while retaining each profile's colour, local date, and timezone. It supports month and week views, repository, channel, pillar, and status filters, account-wide ICS export, and coordinated planning for two through ten repositories. Coordinated plans move matching pillar dates when space is available so the portfolio does not compete with itself. **Settings** supplies account-scoped default timezone, cadence, and pillars for repositories that do not yet have a saved profile, and links to the existing optional AI configuration.
+
+### Screenshots
+
+These screenshots were captured from deterministic, anonymized fixture repositories. They contain no real account, token, email address, private repository, filesystem path, or user-supplied content.
+
+#### Home portfolio
+
+[![Growth Studio Home in dark theme on a desktop fixture portfolio](docs/images/growth-studio-home-dark-desktop.webp)](docs/images/growth-studio-home-dark-desktop.webp)
+
+[![Growth Studio Home in light theme at a mobile-representative width](docs/images/growth-studio-home-light-mobile.webp)](docs/images/growth-studio-home-light-mobile.webp)
+
+#### Repository Queue
+
+[![Growth Studio repository Queue in light theme on a desktop fixture workspace](docs/images/growth-studio-queue-light-desktop.webp)](docs/images/growth-studio-queue-light-desktop.webp)
+
+[![Growth Studio repository Queue in dark theme at a mobile-representative width](docs/images/growth-studio-queue-dark-mobile.webp)](docs/images/growth-studio-queue-dark-mobile.webp)
+
+#### Account-wide planning and Review
+
+[![Growth Studio unified calendar in dark theme with anonymized repository plans](docs/images/growth-studio-unified-calendar-dark-desktop.webp)](docs/images/growth-studio-unified-calendar-dark-desktop.webp)
+
+[![Growth Studio global weekly Review in light theme at a mobile-representative width](docs/images/growth-studio-review-light-mobile.webp)](docs/images/growth-studio-review-light-mobile.webp)
+
+### Upgrade, data, and operations
+
+Growth Studio initializes its SQLite schema automatically on first store access. Initialization is additive and idempotent, so restarting the same build or upgrading an existing installation preserves existing `repository_goals` and `repository_content_sources` rows.
+
+For each account, the first Growth Studio access runs a one-shot transactional migration of legacy goal suggestions: suggestions become interventions and their saved proposals become linked content drafts. The legacy JSON remains in place for compatibility but is not written again; an account-scoped migration marker prevents duplicate rows on later starts.
+
+Persistent data stays under `~/.gitdeck/`:
+
+- `~/.gitdeck/gitdeck.sqlite` stores missions, growth profiles, interventions, plans, content, asset metadata, attribution, and preferences.
+- `~/.gitdeck/growth-assets/` stores private uploaded asset bytes; generated cards remain validated metadata and are rendered on request.
+- Tokens, repository snapshots, and digest files remain in the same private data directory.
+
+Before an upgrade or storage migration, stop Gitdeck and back up the complete `~/.gitdeck/` directory so the database and asset files remain consistent. Docker users should back up the volume mounted at `/home/node/.gitdeck`.
+
+Asset metadata and bytes are served only through authenticated, account-scoped endpoints; stored filesystem paths are never returned to the browser. Uploaded assets are bounded and validated, while remote README or website media is revalidated through the server's SSRF guards whenever it is proxied. Forge API calls and raw snapshot reads also remain server-side, so access tokens and snapshot files are not exposed to browser code.
+
+AI is optional. When no provider is configured, deterministic planning, drafting, opportunity, and Review fallbacks keep the core workflow usable; provider failures are surfaced without partially persisting a coordinated plan. No native image package is required: generated cards are safe server-rendered SVG, and all rasterization and clipboard preparation happens in the browser.
 
 ### Per-repository view
 
@@ -81,7 +133,7 @@ UI translations live in `src/i18n/`, with one dictionary file per language. See 
 
 - **Node.js 20+** (anything that supports native `fetch` and ESM is fine).
 - A **GitHub OAuth App** with **Device Flow enabled** (see next section).
-- (Optional) An API key for **OpenAI, Anthropic, Google Gemini, OpenRouter or any OpenAI-compatible endpoint** if you want AI-generated digest summaries and Goals action plans (see [AI integration](#ai-integration)).
+- (Optional) An API key for **OpenAI, Anthropic, Google Gemini, OpenRouter or any OpenAI-compatible endpoint** if you want AI-generated digest narratives and Growth Studio plans, drafts, or Review narratives (see [AI integration](#ai-integration)).
 
 ## Configure GitHub
 
@@ -153,7 +205,7 @@ The server reads its configuration from environment variables:
 
 ### AI integration
 
-Digest narratives and Goals action plans are generated by a pluggable AI provider. Supported providers and their default models:
+Digest narratives and Growth Studio planning, drafting, interventions, and optional Review narratives use a pluggable AI provider. Supported providers and their default models:
 
 | Provider     | `AI_PROVIDER` | Key variable          | Default model         | Default endpoint |
 | ------------ | ------------- | --------------------- | --------------------- | ---------------- |
@@ -181,9 +233,9 @@ The dashboard can obtain a GitHub token in three different ways. Pick the one th
 
 In `gh-cli` and `token` modes the device-flow sign-in screen is hidden; the server treats the configured source as authoritative.
 
-Tokens and snapshots are persisted under `~/.gitdeck/`. Goals and server-side preferences are stored in `~/.gitdeck/gitdeck.sqlite`. If you previously ran an older build that stored data in `~/.gh-issues-dashboard/`, the server migrates it automatically on first start.
+Tokens and snapshots are persisted under `~/.gitdeck/`. Mission goals, Growth Studio data, and server-side preferences are stored in `~/.gitdeck/gitdeck.sqlite`. If you previously ran an older build that stored data in `~/.gh-issues-dashboard/`, the server migrates it automatically on first start.
 
-### Extending persisted preferences and Goals
+### Extending persisted preferences and mission metrics
 
 Use `setPreference(scope, key, value)` and `getPreference(scope, key, fallback)` from `src/server/preferenceStore.ts` to persist any JSON-serialisable preference without creating a new schema. Low-level parameterised SQLite helpers are in `src/server/sqlite.ts`.
 
@@ -260,7 +312,7 @@ With Docker Compose (recommended):
 ```bash
 cat > .env <<'EOF'
 GITHUB_CLIENT_ID=Iv1.xxxxxxxxxxxxxxxx
-# Optional — enables AI-generated digest narratives and Goals plans (any one provider)
+# Optional — enables AI-generated digest and Growth Studio narratives (any one provider)
 OPENAI_API_KEY=sk-...
 # ANTHROPIC_API_KEY=...
 # GEMINI_API_KEY=...
