@@ -171,6 +171,21 @@ describe("Growth Studio store", () => {
     expect(store.getGrowthProfile("account-a", "owner/saved")).toEqual(persisted);
   });
 
+  it("returns effective workspace colours for persisted, default, and account-isolated profiles", () => {
+    store.upsertGrowthProfile("account-a", "owner/profile-only", profileInput({ color: "#BE123C" }));
+    store.upsertGrowthProfile("account-b", "owner/shared", profileInput({ color: "#ABCDEF" }));
+
+    const profileOnly = store.getGrowthWorkspaceSummary("account-a", "owner/profile-only");
+    const goalOnly = store.getGrowthWorkspaceSummary("account-a", "owner/goal-only");
+    const isolated = store.getGrowthWorkspaceSummary("account-a", "owner/shared");
+
+    expect(profileOnly).toMatchObject({ repository: "owner/profile-only", color: "#BE123C" });
+    expect(goalOnly.color).toBe(store.getGrowthProfile("account-a", "owner/goal-only").color);
+    expect(isolated.color).toBe(store.getGrowthProfile("account-a", "owner/shared").color);
+    expect(isolated.color).not.toBe("#ABCDEF");
+    expect(store.listPersistedGrowthProfileRepositories("account-a")).toEqual(["owner/profile-only"]);
+  });
+
   it("creates, lists, and updates interventions without crossing accounts", () => {
     const intervention = store.createGrowthIntervention({
       accountId: "account-a",

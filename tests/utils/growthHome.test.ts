@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { GhRepo } from "../../src/types/github";
+import type { GrowthContentItem, GrowthWorkspaceSummary } from "../../src/types/growth";
 import type { RepositoryGoal } from "../../src/types/goals";
+import { growthProfileColor } from "../../src/utils/growth/profileDefaults";
 import { buildGrowthHomeSummary } from "../../src/utils/growthHome";
 
 function repo(nameWithOwner: string): GhRepo {
@@ -40,26 +42,69 @@ function goal(id: string, repository: string, currentValue: number, targetValue 
   };
 }
 
+function workspace(
+  repository: string,
+  overrides: Partial<GrowthWorkspaceSummary> = {},
+): GrowthWorkspaceSummary {
+  return {
+    repository,
+    color: "#2563EB",
+    interventionsByStatus: { proposed: 0, accepted: 0, dismissed: 0, done: 0 },
+    contentItemsByStatus: { idea: 0, draft: 0, ready: 0, scheduled: 0, published: 0, skipped: 0 },
+    nextSevenDays: [],
+    ...overrides,
+  };
+}
+
 describe("buildGrowthHomeSummary", () => {
-  it("groups mission counts and excludes represented repositories from the starter list", () => {
+  it("retains workspace summaries, totals account workflow, and excludes represented repositories", () => {
     const active = repo("acme/active");
+    const profileOnly = repo("acme/profile-only");
     const starter = repo("acme/starter");
+    const upcoming = [{} as GrowthContentItem, {} as GrowthContentItem];
     const summary = buildGrowthHomeSummary([
       goal("complete", active.nameWithOwner, 10),
       goal("open", active.nameWithOwner, 4),
-    ], [active, starter]);
+    ], [active, profileOnly, starter], [
+      workspace(active.nameWithOwner, {
+        color: "#BE123C",
+        interventionsByStatus: { proposed: 2, accepted: 1, dismissed: 1, done: 0 },
+        contentItemsByStatus: { idea: 1, draft: 3, ready: 2, scheduled: 1, published: 4, skipped: 0 },
+        nextSevenDays: upcoming,
+      }),
+      workspace(profileOnly.nameWithOwner, {
+        color: "#047857",
+        interventionsByStatus: { proposed: 1, accepted: 2, dismissed: 0, done: 0 },
+        contentItemsByStatus: { idea: 0, draft: 1, ready: 4, scheduled: 0, published: 0, skipped: 0 },
+      }),
+    ]);
 
-    expect(summary).toMatchObject({ totalGoals: 2, completedGoals: 1 });
-    expect(summary.workspaces).toHaveLength(1);
+    expect(summary).toMatchObject({
+      totalGoals: 2,
+      completedGoals: 1,
+      workflowTotals: {
+        proposedInterventions: 3,
+        acceptedInterventions: 3,
+        draftContent: 4,
+        readyContent: 6,
+        nextSevenDays: 2,
+      },
+    });
+    expect(summary.workspaces.map(({ repository }) => repository)).toEqual([
+      "acme/active",
+      "acme/profile-only",
+    ]);
     expect(summary.workspaces[0]).toMatchObject({
       repository: "acme/active",
+      color: "#BE123C",
       repo: active,
       completedGoals: 1,
+      contentItemsByStatus: { draft: 3, ready: 2 },
     });
-    expect(summary.starterRepositories.map((entry) => entry.nameWithOwner)).toEqual(["acme/starter"]);
+    expect(summary.starterRepositories).toEqual([starter]);
   });
 
-  it("keeps a fallback workspace when repository metadata is unavailable", () => {
+  it("keeps a complete fallback workspace when repository metadata or API data is unavailable", () => {
     const summary = buildGrowthHomeSummary(
       [goal("legacy", "legacy/missing", 1)],
       [repo("acme/starter")],
@@ -67,23 +112,37 @@ describe("buildGrowthHomeSummary", () => {
 
     expect(summary.workspaces[0]).toMatchObject({
       repository: "legacy/missing",
+      color: growthProfileColor("legacy/missing"),
       repo: null,
       completedGoals: 0,
+      interventionsByStatus: { proposed: 0, accepted: 0, dismissed: 0, done: 0 },
+      contentItemsByStatus: { idea: 0, draft: 0, ready: 0, scheduled: 0, published: 0, skipped: 0 },
+      nextSevenDays: [],
     });
     expect(summary.starterRepositories).toHaveLength(1);
   });
 
-  it("includes profile-only repositories supplied by the workspace API", () => {
+  it("includes profile-only repositories and returns deterministic zero totals when empty", () => {
     const profileOnly = repo("acme/profile-only");
     const starter = repo("acme/starter");
-    const summary = buildGrowthHomeSummary([], [profileOnly, starter], [profileOnly.nameWithOwner]);
+    const profileSummary = workspace(profileOnly.nameWithOwner, { color: "#7C3AED" });
+    const summary = buildGrowthHomeSummary([], [profileOnly, starter], [profileSummary]);
 
     expect(summary.workspaces).toEqual([{
-      repository: profileOnly.nameWithOwner,
+      ...profileSummary,
       repo: profileOnly,
       goals: [],
       completedGoals: 0,
     }]);
+    expect(summary.workflowTotals).toEqual({
+      proposedInterventions: 0,
+      acceptedInterventions: 0,
+      draftContent: 0,
+      readyContent: 0,
+      nextSevenDays: 0,
+    });
     expect(summary.starterRepositories).toEqual([starter]);
+
+    expect(buildGrowthHomeSummary([], [], []).workflowTotals).toEqual(summary.workflowTotals);
   });
 });

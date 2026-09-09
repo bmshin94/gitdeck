@@ -1360,7 +1360,13 @@ export function getGrowthWorkspaceSummary(
     return scheduled >= start && scheduled <= end;
   });
 
-  return { repository, interventionsByStatus, contentItemsByStatus, nextSevenDays };
+  return {
+    repository,
+    color: getGrowthProfile(accountId, repository).color,
+    interventionsByStatus,
+    contentItemsByStatus,
+    nextSevenDays,
+  };
 }
 
 interface LegacyGoalRow {

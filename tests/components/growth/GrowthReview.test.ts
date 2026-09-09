@@ -4,10 +4,19 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { GrowthReview } from "../../../src/components/growth/GrowthReview";
 import { I18nProvider } from "../../../src/i18n/I18nProvider";
-import type { GrowthWeeklyReview } from "../../../src/types/growth";
+import type {
+  GrowthContentPerformanceRefreshData,
+  GrowthWeeklyReview,
+} from "../../../src/types/growth";
 
-const mocks = vi.hoisted(() => ({ fetchGrowthReview: vi.fn() }));
-vi.mock("../../../src/api/growth", () => ({ fetchGrowthReview: mocks.fetchGrowthReview }));
+const mocks = vi.hoisted(() => ({
+  fetchGrowthReview: vi.fn(),
+  refreshGrowthContentPerformance: vi.fn(),
+}));
+vi.mock("../../../src/api/growth", () => ({
+  fetchGrowthReview: mocks.fetchGrowthReview,
+  refreshGrowthContentPerformance: mocks.refreshGrowthContentPerformance,
+}));
 
 const ZERO_METRICS = {
   starsDelta: 0,
@@ -119,6 +128,12 @@ let root: Root;
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.refreshGrowthContentPerformance.mockResolvedValue({
+    ok: true,
+    performance: [],
+    pending: [],
+    refreshedAt: "2026-09-16T12:00:00.000Z",
+  });
   localStorage.clear();
   container = document.createElement("div");
   document.body.append(container);
@@ -218,10 +233,123 @@ describe("GrowthReview", () => {
     expect(container.querySelectorAll(".growth-review-repository-chip")).toHaveLength(0);
   });
 
+  it("refreshes account-wide measurements, reports server-returned pending windows, and reloads the review", async () => {
+    const updated = review({ narrative: "Updated only after measurements were refreshed." });
+    mocks.fetchGrowthReview
+      .mockResolvedValueOnce(review({ narrative: "Original review remains visible." }))
+      .mockResolvedValueOnce(updated);
+    const refreshData: GrowthContentPerformanceRefreshData = {
+      ok: true,
+      performance: [
+        { accountId: "account-a", contentId: "published-1", window: "48h", measuredAt: "2026-09-16T12:00:00.000Z", metrics: { starsDelta: 4 } },
+      ],
+      pending: [
+        { contentId: "published-1", window: "7d", dueAt: "2026-09-16T10:30:00.000Z", reason: "snapshot-unavailable" },
+        { contentId: "published-2", window: "48h", dueAt: "2026-09-18T10:30:00.000Z", reason: "not-due" },
+        { contentId: "published-3", window: "7d", dueAt: null, reason: "missing-publication" },
+      ],
+      refreshedAt: "2026-09-16T12:00:00.000Z",
+    };
+    mocks.refreshGrowthContentPerformance.mockResolvedValue(refreshData);
+    await renderReview();
+
+    const button = [...container.querySelectorAll<HTMLButtonElement>("button")]
+      .find((entry) => entry.textContent === "Refresh measurements");
+    expect(button).toBeDefined();
+    await act(async () => {
+      button?.click();
+      await flush();
+    });
+
+    expect(mocks.refreshGrowthContentPerformance).toHaveBeenCalledWith({}, expect.any(AbortSignal));
+    expect(mocks.fetchGrowthReview).toHaveBeenNthCalledWith(2, {}, expect.any(AbortSignal));
+    expect(container.textContent).toContain("Updated only after measurements were refreshed.");
+    expect(container.textContent).toContain("Measurements returned: 1");
+    expect(container.textContent).toContain("Pending windows: 2");
+    expect(container.textContent).toContain("Required snapshots are unavailable");
+    expect(container.textContent).toContain("Attribution window is not due");
+    expect(container.textContent).toContain("Publication time is missing");
+    expect(container.textContent).toContain("Missing deltas are not estimated");
+    expect(button?.disabled).toBe(false);
+  });
+
+  it("uses repository scope, disables duplicate refreshes, and preserves the review when refresh fails", async () => {
+    let rejectRefresh: ((reason: Error) => void) | undefined;
+    mocks.fetchGrowthReview.mockResolvedValue(review({
+      repository: "acme/rocket",
+      narrative: "Keep this repository review.",
+    }));
+    mocks.refreshGrowthContentPerformance.mockImplementation(() => new Promise((_resolve, reject) => {
+      rejectRefresh = reject;
+    }));
+    await renderReview({ repository: "acme/rocket" });
+    const button = [...container.querySelectorAll<HTMLButtonElement>("button")]
+      .find((entry) => entry.textContent === "Refresh measurements")!;
+
+    await act(async () => {
+      button.click();
+      button.click();
+      await Promise.resolve();
+    });
+    expect(button.disabled).toBe(true);
+    expect(mocks.refreshGrowthContentPerformance).toHaveBeenCalledTimes(1);
+    expect(mocks.refreshGrowthContentPerformance).toHaveBeenCalledWith(
+      { repository: "acme/rocket" },
+      expect.any(AbortSignal),
+    );
+
+    await act(async () => {
+      rejectRefresh?.(new Error("snapshots unavailable"));
+      await flush();
+    });
+    expect(container.textContent).toContain("Keep this repository review.");
+    expect(container.textContent).toContain("Could not refresh measurements: snapshots unavailable");
+    expect(mocks.fetchGrowthReview).toHaveBeenCalledTimes(1);
+    expect(button.disabled).toBe(false);
+  });
+
   it("renders load errors", async () => {
     mocks.fetchGrowthReview.mockRejectedValue(new Error("review unavailable"));
     await renderReview();
     expect(container.querySelector('[role="alert"]')?.textContent).toContain("review unavailable");
+  });
+
+  it("aborts an in-flight measurement refresh when the active account changes", async () => {
+    mocks.fetchGrowthReview
+      .mockResolvedValueOnce(review({ narrative: "First account review." }))
+      .mockResolvedValueOnce(review({ narrative: "Second account review." }));
+    mocks.refreshGrowthContentPerformance.mockImplementation((_filters, signal: AbortSignal) => (
+      new Promise((_resolve, reject) => {
+        signal.addEventListener("abort", () => {
+          reject(Object.assign(new Error("aborted"), { name: "AbortError" }));
+        }, { once: true });
+      })
+    ));
+    await renderReview({ accountId: "account-a" });
+    const button = [...container.querySelectorAll<HTMLButtonElement>("button")]
+      .find((entry) => entry.textContent === "Refresh measurements")!;
+    await act(async () => {
+      button.click();
+      await Promise.resolve();
+    });
+    const refreshSignal = mocks.refreshGrowthContentPerformance.mock.calls[0][1] as AbortSignal;
+
+    await act(async () => {
+      root.render(createElement(
+        I18nProvider,
+        null,
+        createElement(
+          MemoryRouter,
+          null,
+          createElement(GrowthReview, { accountId: "account-b", enabled: true }),
+        ),
+      ));
+      await flush();
+    });
+
+    expect(refreshSignal.aborted).toBe(true);
+    expect(container.textContent).toContain("Second account review.");
+    expect(container.textContent).not.toContain("Measurements refreshed");
   });
 
   it("aborts and ignores stale loads when the account or repository changes", async () => {

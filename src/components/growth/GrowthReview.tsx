@@ -1,10 +1,12 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { fetchGrowthReview } from "../../api/growth";
+import { fetchGrowthReview, refreshGrowthContentPerformance } from "../../api/growth";
 import { useI18n } from "../../i18n/I18nProvider";
 import type { TranslationKey } from "../../i18n/translations";
 import {
   GROWTH_UNASSIGNED_PILLAR_KEY,
+  GROWTH_PERFORMANCE_WINDOWS,
+  type GrowthContentPerformanceRefreshData,
   type GrowthPerformanceMetricTotals,
   type GrowthReviewContentItem,
   type GrowthReviewFinding,
@@ -31,10 +33,22 @@ export function GrowthReview({ accountId, enabled, repository }: GrowthReviewPro
   const [review, setReview] = useState<GrowthWeeklyReview | null>(null);
   const [loading, setLoading] = useState(enabled);
   const [error, setError] = useState("");
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshError, setRefreshError] = useState("");
+  const [refreshData, setRefreshData] = useState<GrowthContentPerformanceRefreshData | null>(null);
+  const refreshControllerRef = useRef<AbortController | null>(null);
+  const requestOwner = `${accountId ?? ""}:${repository ?? "*"}`;
+  const requestOwnerRef = useRef(requestOwner);
+  requestOwnerRef.current = requestOwner;
 
   useEffect(() => {
+    refreshControllerRef.current?.abort();
+    refreshControllerRef.current = null;
     setReview(null);
     setError("");
+    setRefreshError("");
+    setRefreshData(null);
+    setRefreshing(false);
     if (!enabled || !accountId) {
       setLoading(false);
       return;
@@ -53,8 +67,46 @@ export function GrowthReview({ accountId, enabled, repository }: GrowthReviewPro
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false);
       });
-    return () => controller.abort();
+    return () => {
+      controller.abort();
+      refreshControllerRef.current?.abort();
+      refreshControllerRef.current = null;
+    };
   }, [accountId, enabled, repository]);
+
+  async function handleRefreshMeasurements() {
+    if (!enabled || !accountId || refreshing || refreshControllerRef.current) return;
+    const controller = new AbortController();
+    const owner = requestOwner;
+    refreshControllerRef.current = controller;
+    setRefreshing(true);
+    setRefreshError("");
+    setRefreshData(null);
+
+    try {
+      const refreshed = await refreshGrowthContentPerformance(
+        repository ? { repository } : {},
+        controller.signal,
+      );
+      if (controller.signal.aborted || requestOwnerRef.current !== owner) return;
+      const updatedReview = await fetchGrowthReview(
+        repository ? { repository } : {},
+        controller.signal,
+      );
+      if (controller.signal.aborted || requestOwnerRef.current !== owner) return;
+      setRefreshData(refreshed);
+      setReview(updatedReview);
+    } catch (reason) {
+      if (!controller.signal.aborted && (reason as Error).name !== "AbortError" && requestOwnerRef.current === owner) {
+        setRefreshError((reason as Error).message);
+      }
+    } finally {
+      if (refreshControllerRef.current === controller) {
+        refreshControllerRef.current = null;
+        setRefreshing(false);
+      }
+    }
+  }
 
   if (loading) {
     return <section className="growth-review-state" aria-busy="true">{t("growth.reviewLoading")}</section>;
@@ -88,12 +140,62 @@ export function GrowthReview({ accountId, enabled, repository }: GrowthReviewPro
             ? t("growth.reviewGlobalDescription")
             : t("growth.reviewRepositoryDescription", { repository: repository ?? "" })}</p>
         </div>
-        <div className="growth-review-period">
-          <span>{t("growth.reviewPeriod")}</span>
-          <strong>{range}</strong>
-          <small>{t("growth.reviewUtcNote")}</small>
+        <div className="growth-review-controls">
+          <div className="growth-review-period">
+            <span>{t("growth.reviewPeriod")}</span>
+            <strong>{range}</strong>
+            <small>{t("growth.reviewUtcNote")}</small>
+          </div>
+          <button
+            className="btn primary"
+            type="button"
+            disabled={refreshing}
+            onClick={() => void handleRefreshMeasurements()}
+          >
+            {refreshing ? t("growth.reviewRefreshing") : t("growth.reviewRefresh")}
+          </button>
         </div>
       </header>
+
+      {refreshError ? (
+        <div className="growth-review-refresh-error" role="alert">
+          {t("growth.reviewRefreshError", { message: refreshError })}
+        </div>
+      ) : null}
+
+      {refreshData ? (
+        <section className="growth-review-refresh-report" role="status">
+          <header>
+            <div>
+              <strong>{t("growth.reviewRefreshComplete")}</strong>
+              <span>{dateTimeFormatter.format(new Date(refreshData.refreshedAt))}</span>
+            </div>
+            <small>{t("growth.reviewRefreshNoEstimates")}</small>
+          </header>
+          <div className="growth-review-refresh-windows">
+            {GROWTH_PERFORMANCE_WINDOWS.map((window) => {
+              const measuredCount = refreshData.performance.filter((item) => item.window === window).length;
+              const pending = refreshData.pending.filter((item) => item.window === window);
+              return (
+                <article key={window} tabIndex={0}>
+                  <strong>{t("growth.reviewWindow", { window })}</strong>
+                  <span>{t("growth.reviewRefreshReturned", { count: measuredCount })}</span>
+                  <span>{t("growth.reviewRefreshPending", { count: pending.length })}</span>
+                  {pending.length ? (
+                    <ul>
+                      {pending.map((item) => (
+                        <li key={`${item.contentId}:${item.window}`}>
+                          {t(`growth.reviewPendingReason.${item.reason}` as TranslationKey)}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </article>
+              );
+            })}
+          </div>
+        </section>
+      ) : null}
 
       {review.usedFallback ? (
         <div className="growth-review-fallback" role="status">

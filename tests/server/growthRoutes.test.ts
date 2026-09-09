@@ -681,10 +681,19 @@ describe("Growth API routes", () => {
     expect(workspaces.status).toBe(200);
     expect(workspaces.body.workspaces.map((workspace: { repository: string }) => workspace.repository))
       .toEqual(["acme/goal-only", "acme/profile-only"]);
+    const goalOnly = workspaces.body.workspaces.find(
+      (workspace: { repository: string }) => workspace.repository === "acme/goal-only",
+    );
+    const profileOnly = workspaces.body.workspaces.find(
+      (workspace: { repository: string }) => workspace.repository === "acme/profile-only",
+    );
+    expect(goalOnly.color).toBe(growthStore.getGrowthProfile("account-a", "acme/goal-only").color);
+    expect(profileOnly.color).toBe("#2563EB");
 
     const overview = await dispatch("GET", "/api/growth/workspace/acme/profile-only");
     expect(overview.body.workspace).toMatchObject({
       repository: "acme/profile-only",
+      color: "#2563EB",
       interventionsByStatus: { proposed: 1, accepted: 0, dismissed: 0, done: 0 },
       contentItemsByStatus: { idea: 0, draft: 0, ready: 0, scheduled: 1, published: 0, skipped: 0 },
     });
@@ -723,7 +732,10 @@ describe("Growth API routes", () => {
   });
 
   it("scopes lists, reads, mutations, and deletes to the active account", async () => {
-    await dispatch("PUT", "/api/growth/profiles/acme/private", profileInput());
+    await dispatch("PUT", "/api/growth/profiles/acme/private", {
+      ...profileInput(),
+      color: "#ABCDEF",
+    });
     const interventionResponse = await dispatch("POST", "/api/growth/interventions", {
       repository: "acme/private",
       category: "engineering",
@@ -741,6 +753,18 @@ describe("Growth API routes", () => {
 
     state.activeAccountId = "account-b";
     expect((await dispatch("GET", "/api/growth/workspaces")).body.workspaces).toEqual([]);
+    goalStore.createGoal({
+      accountId: "account-b",
+      repository: "acme/private",
+      metric: "stars",
+      targetValue: 10,
+      deadline: "2099-12-31",
+    });
+    const isolatedWorkspaces = (await dispatch("GET", "/api/growth/workspaces")).body.workspaces;
+    expect(isolatedWorkspaces).toHaveLength(1);
+    expect(isolatedWorkspaces[0]).toMatchObject({ repository: "acme/private" });
+    expect(isolatedWorkspaces[0].color).toBe(growthStore.getGrowthProfile("account-b", "acme/private").color);
+    expect(isolatedWorkspaces[0].color).not.toBe("#ABCDEF");
     expect((await dispatch("GET", "/api/growth/interventions?repo=acme%2Fprivate")).body.interventions).toEqual([]);
     expect((await dispatch("GET", "/api/growth/content?repo=acme%2Fprivate")).body.contentItems).toEqual([]);
     expect((await dispatch("PATCH", `/api/growth/interventions/${interventionId}`, { status: "done" })).status).toBe(404);

@@ -631,6 +631,7 @@ export interface GrowthReviewData {
 
 export interface GrowthWorkspaceSummary {
   repository: string;
+  color: string;
   interventionsByStatus: Record<GrowthInterventionStatus, number>;
   contentItemsByStatus: Record<GrowthContentItemStatus, number>;
   nextSevenDays: GrowthContentItem[];

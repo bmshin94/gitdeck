@@ -4,6 +4,8 @@ import {
   fetchGrowthReview,
   fetchGrowthSettings,
   fetchGrowthUnifiedCalendar,
+  fetchGrowthWorkspaces,
+  fetchGrowthWorkspaceSummary,
   generateGrowthContentPlan,
   generateMultipleGrowthContentPlans,
   resetGrowthSettings,
@@ -94,6 +96,47 @@ describe("Growth settings client", () => {
     const staleLoad = fetchGrowthSettings(controller.signal);
     controller.abort();
     await expect(staleLoad).rejects.toMatchObject({ name: "AbortError" });
+  });
+});
+
+describe("Growth workspace client", () => {
+  it("preserves effective profile colours in list and detail envelopes", async () => {
+    const summaries = [
+      {
+        repository: "acme/profile-only",
+        color: "#BE123C",
+        interventionsByStatus: { proposed: 0, accepted: 0, dismissed: 0, done: 0 },
+        contentItemsByStatus: { idea: 0, draft: 0, ready: 0, scheduled: 0, published: 0, skipped: 0 },
+        nextSevenDays: [],
+      },
+      {
+        repository: "acme/goal-only",
+        color: "#047857",
+        interventionsByStatus: { proposed: 0, accepted: 0, dismissed: 0, done: 0 },
+        contentItemsByStatus: { idea: 0, draft: 0, ready: 0, scheduled: 0, published: 0, skipped: 0 },
+        nextSevenDays: [],
+      },
+    ];
+    fetchMock
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: vi.fn(async () => ({ ok: true, workspaces: summaries })),
+      } as unknown as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: vi.fn(async () => ({ ok: true, workspace: summaries[0] })),
+      } as unknown as Response);
+    const controller = new AbortController();
+
+    await expect(fetchGrowthWorkspaces(controller.signal)).resolves.toEqual(summaries);
+    await expect(fetchGrowthWorkspaceSummary("acme/profile-only", controller.signal))
+      .resolves.toEqual(summaries[0]);
+    expect(fetchMock.mock.calls).toEqual([
+      ["/api/growth/workspaces", { cache: "no-store", signal: controller.signal }],
+      ["/api/growth/workspace/acme/profile-only", { cache: "no-store", signal: controller.signal }],
+    ]);
   });
 });
 

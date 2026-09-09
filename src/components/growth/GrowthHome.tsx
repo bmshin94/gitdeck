@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { Link } from "react-router-dom";
 import { fetchGrowthWorkspaces } from "../../api/growth";
 import { useI18n } from "../../i18n/I18nProvider";
 import { useGoals } from "../../hooks/useGoals";
 import type { GhRepo } from "../../types/github";
+import type { GrowthWorkspaceSummary } from "../../types/growth";
 import { buildGrowthHomeSummary } from "../../utils/growthHome";
 import { growthRepositoryPath } from "../../utils/growthRoutes";
 import { Avatar } from "../common/Avatar";
@@ -27,12 +28,12 @@ export function GrowthHome({
 }: GrowthHomeProps) {
   const { t } = useI18n();
   const { goals, loading: goalsLoading, error: goalsError } = useGoals({ accountId, enabled });
-  const [workspaceRepositories, setWorkspaceRepositories] = useState<string[]>([]);
+  const [workspaceSummaries, setWorkspaceSummaries] = useState<GrowthWorkspaceSummary[]>([]);
   const [workspacesLoading, setWorkspacesLoading] = useState(enabled);
   const [workspacesError, setWorkspacesError] = useState("");
 
   useEffect(() => {
-    setWorkspaceRepositories([]);
+    setWorkspaceSummaries([]);
     setWorkspacesError("");
     if (!enabled || !accountId) {
       setWorkspacesLoading(false);
@@ -43,7 +44,7 @@ export function GrowthHome({
     void fetchGrowthWorkspaces(controller.signal)
       .then((workspaces) => {
         if (!controller.signal.aborted) {
-          setWorkspaceRepositories(workspaces.map(({ repository }) => repository));
+          setWorkspaceSummaries(workspaces);
         }
       })
       .catch((error: unknown) => {
@@ -58,8 +59,8 @@ export function GrowthHome({
   }, [accountId, enabled]);
 
   const summary = useMemo(
-    () => buildGrowthHomeSummary(goals, repos, workspaceRepositories),
-    [goals, repos, workspaceRepositories],
+    () => buildGrowthHomeSummary(goals, repos, workspaceSummaries),
+    [goals, repos, workspaceSummaries],
   );
   const loading = repositoriesLoading || goalsLoading || workspacesLoading;
 
@@ -76,9 +77,20 @@ export function GrowthHome({
             <div><dt>{t("growth.homeWorkspaces")}</dt><dd>{summary.workspaces.length}</dd></div>
             <div><dt>{t("growth.homeMissions")}</dt><dd>{summary.totalGoals}</dd></div>
             <div><dt>{t("growth.homeCompleted")}</dt><dd>{summary.completedGoals}</dd></div>
+            <div><dt>{t("growth.homeProposed")}</dt><dd>{summary.workflowTotals.proposedInterventions}</dd></div>
+            <div><dt>{t("growth.homeAccepted")}</dt><dd>{summary.workflowTotals.acceptedInterventions}</dd></div>
+            <div><dt>{t("growth.homeDrafts")}</dt><dd>{summary.workflowTotals.draftContent}</dd></div>
+            <div><dt>{t("growth.homeReady")}</dt><dd>{summary.workflowTotals.readyContent}</dd></div>
+            <div><dt>{t("growth.homeNextSevenDays")}</dt><dd>{summary.workflowTotals.nextSevenDays}</dd></div>
           </dl>
         ) : null}
       </header>
+
+      <nav className="growth-home-shortcuts" aria-label={t("growth.homeShortcuts")}>
+        <Link className="btn primary" to="/growth/calendar">{t("growth.unifiedCalendar")}</Link>
+        <Link className="btn" to="/growth/review">{t("growth.review")}</Link>
+        <Link className="btn" to="/growth/settings">{t("growth.settings")}</Link>
+      </nav>
 
       {loading ? (
         <div className="growth-home-loading">
@@ -104,8 +116,13 @@ export function GrowthHome({
                   const workspacePath = growthRepositoryPath(workspace.repository) ?? "/growth";
                   const missionsPath = growthRepositoryPath(workspace.repository, "missions") ?? "/growth";
                   return (
-                    <article className="growth-home-card" key={workspace.repository}>
+                    <article
+                      className="growth-home-card"
+                      key={workspace.repository}
+                      style={{ "--workspace-color": workspace.color } as CSSProperties}
+                    >
                       <div className="growth-home-card-identity">
+                        <span className="growth-home-card-color" aria-hidden="true" />
                         <Avatar login={owner} avatarUrl={workspace.repo?.owner.avatarUrl} size={46} />
                         <div>
                           <h3>{workspace.repository}</h3>
@@ -117,6 +134,13 @@ export function GrowthHome({
                         <strong>{workspace.completedGoals}<small>/{workspace.goals.length}</small></strong>
                         <span>{t("growth.completedMissionsCount")}</span>
                       </div>
+                      <dl className="growth-home-card-workflow">
+                        <div><dt>{t("growth.homeProposed")}</dt><dd>{workspace.interventionsByStatus.proposed}</dd></div>
+                        <div><dt>{t("growth.homeAccepted")}</dt><dd>{workspace.interventionsByStatus.accepted}</dd></div>
+                        <div><dt>{t("growth.homeDrafts")}</dt><dd>{workspace.contentItemsByStatus.draft}</dd></div>
+                        <div><dt>{t("growth.homeReady")}</dt><dd>{workspace.contentItemsByStatus.ready}</dd></div>
+                        <div><dt>{t("growth.homeNextSevenDays")}</dt><dd>{workspace.nextSevenDays.length}</dd></div>
+                      </dl>
                       <div className="growth-home-card-actions">
                         <Link className="btn primary" to={workspacePath}>{t("growth.openWorkspace")}</Link>
                         <Link className="btn" to={missionsPath}>{t("growth.openMissions")}</Link>
