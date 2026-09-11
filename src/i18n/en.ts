@@ -716,7 +716,7 @@ export const en = {
   "goals.deadline": "Deadline",
   "goals.add": "Add goal",
   "goals.emptyTitle": "No goals yet",
-  "goals.emptyText": "Create your first measurable repository goal above.",
+  "goals.emptyText": "Add your first measurable repository goal to get started.",
   "goals.deleteConfirm": "Delete this goal?",
   "goals.deleteTitle": "Remove goal?",
   "goals.deleteMessage": "The {metric} goal for {repo} will be permanently removed. Other goals for this repository will not be affected.",

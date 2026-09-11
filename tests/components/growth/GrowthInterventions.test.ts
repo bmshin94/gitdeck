@@ -206,6 +206,44 @@ describe("GrowthInterventions", () => {
     expect(container.querySelector<HTMLAnchorElement>('a[href="/preferences#preferences-ai"]')?.target).toBe("_blank");
   });
 
+  it("creates a manual intervention in a dedicated modal", async () => {
+    mocks.createGrowthIntervention.mockResolvedValueOnce(intervention("manual", "proposed", { origin: "manual" }));
+    await renderPanel();
+
+    expect(container.querySelector(".growth-interventions-manual input")).toBeNull();
+    await act(async () => button("Add an intervention").click());
+
+    const dialog = document.body.querySelector<HTMLElement>('[role="dialog"]');
+    const title = dialog?.querySelector<HTMLInputElement>('input');
+    const action = dialog?.querySelector<HTMLTextAreaElement>('textarea');
+    expect(dialog?.textContent).toContain("Manual action");
+    expect(title).toBe(document.activeElement);
+
+    await act(async () => {
+      if (title) {
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(title, "Improve onboarding");
+        title.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+      if (action) {
+        Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set?.call(action, "Publish a guided setup flow.");
+        action.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+    });
+    await act(async () => {
+      const submit = [...dialog!.querySelectorAll("button")].find((entry) => entry.textContent?.trim() === "Add to backlog");
+      submit?.click();
+      await flush();
+    });
+
+    expect(mocks.createGrowthIntervention).toHaveBeenCalledWith({
+      repository: "acme/rocket",
+      category: "product",
+      title: "Improve onboarding",
+      action: "Publish a guided setup flow.",
+    });
+    expect(document.body.querySelector('[role="dialog"]')).toBeNull();
+  });
+
   it("updates an intervention status through the account-scoped API", async () => {
     await renderPanel();
     const accept = [...container.querySelectorAll("button")]
@@ -496,7 +534,11 @@ describe("GrowthInterventions", () => {
     expect(scan.closest(".growth-interventions-scan")).not.toBeNull();
     expect(button("Generate interventions")).not.toBeNull();
     expect(container.querySelectorAll(".growth-interventions-filters select")).toHaveLength(2);
-    expect(container.querySelector(".growth-interventions-manual input")).not.toBeNull();
-    expect(container.querySelector(".growth-interventions-manual textarea")).not.toBeNull();
+    expect(container.querySelector(".growth-interventions-manual-launcher")).not.toBeNull();
+
+    await act(async () => button("Add an intervention").click());
+    const dialog = document.body.querySelector('[role="dialog"]');
+    expect(dialog?.querySelector("input")).not.toBeNull();
+    expect(dialog?.querySelector("textarea")).not.toBeNull();
   });
 });

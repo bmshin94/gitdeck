@@ -8,10 +8,11 @@ interface RepositoryPickerProps {
   repos: GhRepo[];
   value: string;
   placeholder: string;
+  autoFocus?: boolean;
   onChange: (repository: string) => void;
 }
 
-export function RepositoryPicker({ repos, value, placeholder, onChange }: RepositoryPickerProps) {
+export function RepositoryPicker({ repos, value, placeholder, autoFocus = false, onChange }: RepositoryPickerProps) {
   const { t } = useI18n();
   const rootRef = useRef<HTMLDivElement>(null);
   const optionsId = useId();
@@ -52,6 +53,7 @@ export function RepositoryPicker({ repos, value, placeholder, onChange }: Reposi
           aria-controls={optionsId}
           aria-activedescendant={open && matches[activeIndex] ? `${optionsId}-option-${activeIndex}` : undefined}
           autoComplete="off"
+          autoFocus={autoFocus}
           placeholder={placeholder}
           value={query}
           onFocus={() => setOpen(true)}

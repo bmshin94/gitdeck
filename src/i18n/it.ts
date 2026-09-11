@@ -718,7 +718,7 @@ export const it: Record<keyof typeof en, string> = {
   "goals.deadline": "Scadenza",
   "goals.add": "Aggiungi obiettivo",
   "goals.emptyTitle": "Nessun obiettivo",
-  "goals.emptyText": "Crea qui sopra il tuo primo obiettivo misurabile.",
+  "goals.emptyText": "Aggiungi il tuo primo obiettivo misurabile per iniziare.",
   "goals.deleteConfirm": "Eliminare questo obiettivo?",
   "goals.deleteTitle": "Rimuovere il goal?",
   "goals.deleteMessage": "Il goal {metric} di {repo} verrà rimosso definitivamente. Gli altri goal della repository non saranno modificati.",

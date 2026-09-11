@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fetchAiSettings } from "../../api/github";
 import {
   createGrowthIntervention,
@@ -28,6 +28,7 @@ import {
   isEvergreenContentEligible,
 } from "../../utils/growth/evergreen";
 import { ContentItemDrawer } from "./ContentItemDrawer";
+import { GrowthInterventionCreateModal } from "./GrowthInterventionCreateModal";
 
 interface GrowthInterventionsProps {
   accountId: string | null;
@@ -81,9 +82,7 @@ export function GrowthInterventions({ accountId, enabled, repository }: GrowthIn
   const [categoryFilter, setCategoryFilter] = useState<"all" | GrowthInterventionCategory>("all");
   const [originFilter, setOriginFilter] = useState<"all" | GrowthInterventionOrigin>("all");
   const [generationGoalId, setGenerationGoalId] = useState("");
-  const [manualCategory, setManualCategory] = useState<GrowthInterventionCategory>("product");
-  const [manualTitle, setManualTitle] = useState("");
-  const [manualAction, setManualAction] = useState("");
+  const [manualModalOpen, setManualModalOpen] = useState(false);
   const [dismissedOpen, setDismissedOpen] = useState(false);
   const [aiEnabled, setAiEnabled] = useState<boolean | null>(null);
   const [selectedContentItem, setSelectedContentItem] = useState<GrowthContentItem | null>(null);
@@ -135,6 +134,7 @@ export function GrowthInterventions({ accountId, enabled, repository }: GrowthIn
     setInterventions([]);
     setContentItems([]);
     setNotice("");
+    setManualModalOpen(false);
     setDismissedOpen(false);
     setSelectedContentItem(null);
     setDraftErrors({});
@@ -301,23 +301,13 @@ export function GrowthInterventions({ accountId, enabled, repository }: GrowthIn
     setSelectedContentItem(updated);
   }
 
-  async function createManual(event: FormEvent) {
-    event.preventDefault();
+  async function createManual(input: { category: GrowthInterventionCategory; title: string; action: string }) {
     setBusy("manual");
     setError("");
     setNotice("");
     try {
-      await createGrowthIntervention({
-        repository,
-        category: manualCategory,
-        title: manualTitle,
-        action: manualAction,
-      });
-      setManualTitle("");
-      setManualAction("");
+      await createGrowthIntervention({ repository, ...input });
       await load();
-    } catch (cause) {
-      setError((cause as Error).message);
     } finally {
       setBusy("");
     }
@@ -484,29 +474,15 @@ export function GrowthInterventions({ accountId, enabled, repository }: GrowthIn
             </select>
           </label>
         </div>
-        <form className="growth-interventions-manual" onSubmit={(event) => void createManual(event)}>
+        <div className="growth-interventions-manual-launcher">
           <div>
             <span>{t("growth.interventionsManualEyebrow")}</span>
             <h2>{t("growth.interventionsManualTitle")}</h2>
           </div>
-          <label>
-            {t("growth.interventionsCategoryLabel")}
-            <select value={manualCategory} onChange={(event) => setManualCategory(event.target.value as GrowthInterventionCategory)}>
-              {CATEGORIES.map((category) => <option key={category} value={category}>{t(categoryKeys[category])}</option>)}
-            </select>
-          </label>
-          <label>
-            {t("growth.interventionsTitleLabel")}
-            <input value={manualTitle} onChange={(event) => setManualTitle(event.target.value)} required maxLength={160} />
-          </label>
-          <label className="growth-interventions-action-field">
-            {t("growth.interventionsActionLabel")}
-            <textarea value={manualAction} onChange={(event) => setManualAction(event.target.value)} required maxLength={1200} rows={3} />
-          </label>
-          <button className="btn" type="submit" disabled={busy !== "" || scanState === "scanning" || !manualTitle.trim() || !manualAction.trim()}>
-            {busy === "manual" ? t("growth.interventionsCreating") : t("growth.interventionsCreate")}
+          <button className="btn primary" type="button" disabled={busy !== "" || scanState === "scanning"} onClick={() => setManualModalOpen(true)}>
+            {t("growth.interventionsManualTitle")}
           </button>
-        </form>
+        </div>
       </section>
 
       {loading && !interventions.length ? <p className="growth-interventions-loading">{t("growth.interventionsLoading")}</p> : null}
@@ -539,6 +515,11 @@ export function GrowthInterventions({ accountId, enabled, repository }: GrowthIn
           );
         })()}
       </div>
+      <GrowthInterventionCreateModal
+        open={manualModalOpen}
+        onClose={() => setManualModalOpen(false)}
+        onSubmit={createManual}
+      />
       {selectedContentItem ? (
         <ContentItemDrawer
           item={selectedContentItem}

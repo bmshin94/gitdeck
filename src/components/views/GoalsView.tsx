@@ -1,16 +1,16 @@
-import { useMemo, useState, type FormEvent } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { createGoal, deleteGoal } from "../../api/github";
+import { deleteGoal } from "../../api/github";
 import { useI18n } from "../../i18n/I18nProvider";
 import { Avatar } from "../common/Avatar";
 import { ConfirmDialog } from "../common/ConfirmDialog";
-import { RepositoryPicker } from "../common/RepositoryPicker";
 import { GoalIcon } from "../common/Icons";
 import { GOAL_METRIC_DEFINITIONS, type GoalMetric, type RepositoryGoal } from "../../types/goals";
 import type { GhRepo } from "../../types/github";
 import { calculateGoalProgress, groupGoalsByRepository } from "../../utils/goals";
 import { formatNumber } from "../../utils/format";
 import { growthRepositoryPath } from "../../utils/growthRoutes";
+import { GoalCreateModal } from "../modals/GoalCreateModal";
 import { GoalsLoadingState } from "./GoalsLoadingState";
 
 interface GoalsViewProps {
@@ -24,22 +24,11 @@ interface GoalsViewProps {
 
 const metricLabels = new Map<GoalMetric, string>(GOAL_METRIC_DEFINITIONS.map((metric) => [metric.id, metric.label]));
 
-function currentRepoValue(repo: GhRepo | undefined, metric: GoalMetric): number {
-  if (metric === "stars") return repo?.stargazerCount ?? 0;
-  if (metric === "forks") return repo?.forkCount ?? 0;
-  return 0;
-}
-
 export function GoalsView({ goals, repos, loading, onChange, fixedRepository, loadError = "" }: GoalsViewProps) {
   const { t } = useI18n();
-  const [repository, setRepository] = useState("");
-  const [metric, setMetric] = useState<GoalMetric>("stars");
-  const [targetValue, setTargetValue] = useState("");
-  const [deadline, setDeadline] = useState("");
-  const [saving, setSaving] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
   const [error, setError] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<RepositoryGoal | null>(null);
-  const activeRepository = fixedRepository ?? repository;
   const scopedRepos = useMemo(
     () => fixedRepository ? repos.filter((repo) => repo.nameWithOwner === fixedRepository) : repos,
     [fixedRepository, repos],
@@ -50,28 +39,6 @@ export function GoalsView({ goals, repos, loading, onChange, fixedRepository, lo
   );
   const reposByName = useMemo(() => new Map(scopedRepos.map((repo) => [repo.nameWithOwner, repo])), [scopedRepos]);
   const groupedGoals = useMemo(() => groupGoalsByRepository(scopedGoals), [scopedGoals]);
-
-  async function submit(event: FormEvent) {
-    event.preventDefault();
-    setError("");
-    setSaving(true);
-    try {
-      await createGoal({
-        repository: activeRepository,
-        metric,
-        targetValue: Number(targetValue),
-        currentValue: currentRepoValue(reposByName.get(activeRepository), metric),
-        deadline,
-      });
-      setTargetValue("");
-      setDeadline("");
-      await onChange();
-    } catch (cause) {
-      setError((cause as Error).message);
-    } finally {
-      setSaving(false);
-    }
-  }
 
   async function remove(id: string) {
     try {
@@ -92,31 +59,10 @@ export function GoalsView({ goals, repos, loading, onChange, fixedRepository, lo
             <p>{t("goals.createDescription")}</p>
           </div>
         </div>
-        <form className="goal-form" onSubmit={(event) => void submit(event)}>
-          <label>
-            {t("goals.repository")}
-            {fixedRepository ? (
-              <input type="text" value={fixedRepository} readOnly aria-readonly="true" />
-            ) : (
-              <RepositoryPicker repos={scopedRepos} value={repository} placeholder={t("goals.searchRepository")} onChange={setRepository} />
-            )}
-          </label>
-          <label>
-            {t("goals.metric")}
-            <select value={metric} onChange={(event) => setMetric(event.target.value as GoalMetric)}>
-              {GOAL_METRIC_DEFINITIONS.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
-            </select>
-          </label>
-          <label>
-            {t("goals.target")}
-            <input type="number" min="1" step="1" value={targetValue} onChange={(event) => setTargetValue(event.target.value)} required />
-          </label>
-          <label>
-            {t("goals.deadline")}
-            <input type="date" min={new Date().toISOString().slice(0, 10)} value={deadline} onChange={(event) => setDeadline(event.target.value)} required />
-          </label>
-          <button className="btn primary" type="submit" disabled={saving || !activeRepository || !scopedRepos.length}>{saving ? t("common.loading") : t("goals.add")}</button>
-        </form>
+        <button className="btn primary goal-create-button" type="button" disabled={!scopedRepos.length} onClick={() => setCreateOpen(true)}>
+          <GoalIcon />
+          {t("goals.add")}
+        </button>
       </section>
 
       {error || loadError ? <div className="error" role="alert">{error || loadError}</div> : null}
@@ -193,6 +139,13 @@ export function GoalsView({ goals, repos, loading, onChange, fixedRepository, lo
           );
         })}
       </div>
+      <GoalCreateModal
+        open={createOpen}
+        repos={scopedRepos}
+        fixedRepository={fixedRepository}
+        onClose={() => setCreateOpen(false)}
+        onCreated={onChange}
+      />
       <ConfirmDialog
         open={deleteTarget !== null}
         kind={t("tabs.goals")}
