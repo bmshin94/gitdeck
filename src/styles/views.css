@@ -422,16 +422,16 @@
   }
   .repo-card:hover { border-color: var(--button-hover-border); }
   .repo-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-  .repo-card .rc-head { display: flex; align-items: center; gap: 10px; }
+  .repo-card .rc-head { display: flex; align-items: flex-start; gap: 10px; }
   .repo-card .rc-head .avatar { flex-shrink: 0; }
   .repo-card .rc-title {
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; font-weight: 600;
-    overflow: hidden; text-overflow: ellipsis; min-width: 0;
+    min-width: 0; overflow-wrap: anywhere;
     flex: 1;
   }
   .repo-card .rc-title .owner { color: var(--muted); }
   .repo-card .rc-title .slash { color: var(--muted-2); margin: 0 2px; }
-  .repo-card .rc-title a { color: var(--text); display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .repo-card .rc-title a { color: var(--text); display: inline; }
   .repo-card .rc-title a:hover { color: var(--accent-2); text-decoration: none; }
   .repo-badges { display: flex; gap: 4px; flex-wrap: wrap; flex: 0 0 auto; }
   .rb {
